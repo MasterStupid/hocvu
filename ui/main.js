@@ -68,8 +68,19 @@
     dom.thread.appendChild(item); scrollBottom();
   }
   const removeTyping = () => document.getElementById('typing-indicator')?.remove();
+  const citeLabel = (ref) => `${ref.aid || 'Nguồn'}, ${ref.clause_ids?.length ? `Khoản ${ref.clause_ids.join(', ')}` : 'nội dung liên quan'}`;
+  const sourceCard = (ref, index, place) => `<article class="evidence-card source-card" id="${place}-src-${index + 1}" data-source-index="${index + 1}" tabindex="0"><div class="evidence-title">[${index + 1}] ${escapeHTML(citeLabel(ref))}</div><div class="evidence-meta">${escapeHTML(ref.reg_title)}</div><div class="source-heading">${escapeHTML(ref.art_heading)}</div><p class="evidence-excerpt">${escapeHTML(ref.excerpt)}</p></article>`;
+  function flashSource(index) {
+    document.querySelectorAll(`[data-source-index="${index}"]`).forEach((card) => { card.classList.add('flash'); setTimeout(() => card.classList.remove('flash'), 2000); });
+    document.querySelectorAll(`[data-citation="${index}"]`).forEach((chip) => chip.classList.add('active'));
+    setTimeout(() => document.querySelectorAll(`[data-citation="${index}"]`).forEach((chip) => chip.classList.remove('active')), 2000);
+  }
   function updateEvidence(refs = []) {
-    dom.evidence.innerHTML = refs.length ? refs.map((ref, index) => `<article class="evidence-card" id="evidence-${index + 1}"><div class="evidence-title">[${index + 1}] ${escapeHTML(ref.reg_title)}</div><div class="evidence-meta">${escapeHTML(ref.art_heading)}</div><p class="evidence-excerpt">${escapeHTML(ref.excerpt)}</p></article>`).join('') : '<div class="empty-state"><p>Không có trích dẫn cho phản hồi này.</p></div>';
+    dom.evidence.innerHTML = refs.length ? refs.map((ref, index) => sourceCard(ref, index, 'evidence')).join('') : '<div class="empty-state"><p>Các căn cứ được dùng để trả lời sẽ hiển thị tại đây.</p></div>';
+    dom.evidence.querySelectorAll('[data-source-index]').forEach((card) => card.addEventListener('click', () => flashSource(card.dataset.sourceIndex)));
+  }
+  function renderSuggestionTopics(topics = []) {
+    dom.suggestions.innerHTML = topics.length ? topics.map((topic, index) => `<section class="topic-card"><button class="topic-toggle" data-topic="${index}" aria-expanded="false"><span>${escapeHTML(topic.topic)}</span><small>${topic.questions.length} câu hỏi</small></button><div class="topic-questions" data-topic-questions="${index}" hidden>${topic.questions.map((question) => `<button class="suggestion-chip">${escapeHTML(question)}</button>`).join('')}</div></section>`).join('') : '<span class="loading-pulse">Chưa có câu hỏi gợi ý.</span>';
   }
   function scheduleListening() {
     clearTimeout(state.listenTimer);
@@ -127,17 +138,27 @@
     if (navigator.clipboard?.writeText) navigator.clipboard.writeText(answer).then(copied).catch(() => window.prompt('Sao chép câu trả lời:', answer));
     else window.prompt('Sao chép câu trả lời:', answer);
   }
+  const meter = (grounding = {}) => `<span class="grounding-meter ${escapeHTML(grounding.label || 'yếu')}">${[1, 2, 3, 4, 5].map((step) => `<i class="${step <= (grounding.level || 0) ? 'on' : ''}"></i>`).join('')}<b>Căn cứ ${escapeHTML(grounding.label || 'yếu')} · ${grounding.source_count || 0} nguồn</b></span>`;
+  const noteIcon = (icon) => ({ calendar: '◷', document: '▤', scope: '◎', replace: '↔' }[icon] || '•');
+  function cardMarkdown(segments, refs) {
+    return [segments.map((segment) => segment.text).join('\n\n'), '', ...refs.map((ref, index) => `Nguồn [${index + 1}]: ${citeLabel(ref)} — ${ref.reg_title}\n${ref.excerpt}`)].join('\n');
+  }
+  function renderAnswerCard(response, refs, restore, cardId) {
+    const card = response.card || {};
+    const segments = card.verdict_segments?.length ? card.verdict_segments : [{ text: response.answer, cites: [] }];
+    if (response.refused) return `<section class="refusal-card"><h3>Chưa tìm thấy căn cứ</h3><p>${escapeHTML(response.answer)}</p><p class="refusal-hint">Tôi không đoán mò khi nguồn chưa đủ rõ. Bạn có thể thử một trong các câu hỏi có căn cứ sau:</p><div class="follow-up-row">${(card.suggestions || []).map((question) => `<button class="follow-up-chip">${escapeHTML(question)}</button>`).join('')}</div></section>`;
+    return `<section class="answer-card"><header class="answer-card-header"><div><span class="card-kicker">Phiếu kết quả tra cứu</span><h3>Kết luận</h3></div>${meter(card.grounding)}</header><div class="verdict-list">${segments.map((segment) => `<p>${escapeHTML(segment.text).replace(/\n/g, '<br>')} ${segment.cites.map((cite) => `<button class="citation-chip" data-citation="${cite}" aria-label="Xem nguồn ${cite}">[${cite}]</button>`).join('')}</p>`).join('')}</div>${refs.length ? `<section class="card-sources"><h4>Căn cứ</h4>${refs.map((ref, index) => sourceCard(ref, index, `card-${cardId}`)).join('')}</section>` : ''}${card.notes?.length ? `<section class="card-notes"><h4>Lưu ý</h4>${card.notes.map((note) => `<p><span>${noteIcon(note.icon)}</span>${escapeHTML(note.text)}</p>`).join('')}</section>` : ''}<footer class="message-footer"><span class="intent-badge">${restore ? 'Lượt đã lưu' : 'Nguồn đã đối chiếu'}</span><button class="copy-btn" aria-label="Sao chép kèm nguồn">Sao chép kèm nguồn</button></footer></section>`;
+  }
   function appendAnswer(response, { restore = false } = {}) {
     state.turn++; const refs = response.references || [];
-    const mode = response.metadata?.ai_mode || 'off';
-    const modeLabel = mode === 'on' ? 'AI + nguồn' : mode === 'fallback' ? 'Nguồn trực tiếp · AI chưa sẵn sàng' : 'Nguồn trực tiếp';
-    const followUps = !response.refused && !restore ? ['Nội dung này áp dụng trong trường hợp nào?', 'Có mốc thời gian hoặc điều kiện nào cần lưu ý?'] : [];
+    const segments = response.card?.verdict_segments || [{ text: response.answer, cites: [] }];
     const item = document.createElement('article'); item.className = `message bot${response.refused ? ' refused' : ''}`;
-    item.innerHTML = `<div class="avatar">AI</div><div class="bubble"><p>${escapeHTML(response.answer).replace(/\n/g, '<br>')}</p><div class="citation-row">${refs.map((_, i) => `<button class="citation-chip" data-citation="${i + 1}" aria-label="Xem nguồn ${i + 1}">[${i + 1}]</button>`).join('')}</div>${followUps.length ? `<div class="follow-up-row">${followUps.map((question) => `<button class="follow-up-chip">${escapeHTML(question)}</button>`).join('')}</div>` : ''}<footer class="message-footer"><span class="intent-badge">${restore ? 'Lượt đã lưu' : modeLabel}</span><button class="copy-btn" aria-label="Sao chép câu trả lời">Sao chép</button></footer></div>`;
-    item.querySelectorAll('[data-citation]').forEach((button) => button.addEventListener('click', () => document.getElementById(`evidence-${button.dataset.citation}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })));
-    item.querySelector('.copy-btn').addEventListener('click', () => copyAnswer(item.querySelector('.copy-btn'), response.answer));
+    item.innerHTML = `<div class="avatar">AI</div><div class="bubble card-bubble">${renderAnswerCard(response, refs, restore, state.turn)}</div>`;
+    item.querySelectorAll('[data-citation]').forEach((button) => button.addEventListener('click', () => { const source = item.querySelector(`[data-source-index="${button.dataset.citation}"]`) || document.getElementById(`evidence-src-${button.dataset.citation}`); source?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); flashSource(button.dataset.citation); }));
+    item.querySelectorAll('[data-source-index]').forEach((card) => card.addEventListener('click', () => flashSource(card.dataset.sourceIndex)));
+    item.querySelector('.copy-btn')?.addEventListener('click', () => copyAnswer(item.querySelector('.copy-btn'), cardMarkdown(segments, refs)));
     item.querySelectorAll('.follow-up-chip').forEach((button) => button.addEventListener('click', () => send(button.textContent)));
-    dom.thread.appendChild(item); remember('assistant', response.answer, { references: refs.map((ref) => ({ reg_title: ref.reg_title, art_heading: ref.art_heading, rid: ref.rid })) }); updateEvidence(refs); scrollBottom(); if (!restore) speak(response.answer);
+    dom.thread.appendChild(item); remember('assistant', response.answer, { references: refs.map((ref) => ({ reg_title: ref.reg_title, art_heading: ref.art_heading, rid: ref.rid })) }); updateEvidence(refs); scrollBottom(); if (!restore) speak(segments.map((segment) => segment.text).join('. '));
   }
   function appendError(message) {
     const item = document.createElement('article'); item.className = 'message bot error';
@@ -227,7 +248,11 @@
     dom.form.addEventListener('submit', (event) => { event.preventDefault(); send(); });
     dom.tts.addEventListener('click', () => { state.ttsEnabled = !state.ttsEnabled; if (!state.ttsEnabled && state.liveEnabled) stopLive(); else updateFeatureControls(); });
     dom.mic.addEventListener('click', () => { state.recognitionRunning ? state.recognition.stop() : startListening(false); });
-    dom.suggestions.addEventListener('click', (event) => { if (event.target.matches('.suggestion-chip')) send(event.target.textContent); });
+    dom.suggestions.addEventListener('click', (event) => {
+      const topic = event.target.closest('[data-topic]');
+      if (topic) { const questions = dom.suggestions.querySelector(`[data-topic-questions="${topic.dataset.topic}"]`); const open = questions.hidden; questions.hidden = !open; topic.setAttribute('aria-expanded', String(open)); }
+      if (event.target.matches('.suggestion-chip')) send(event.target.textContent);
+    });
     document.addEventListener('keydown', (event) => {
       const editable = event.target.matches('input, textarea, select, [contenteditable="true"]');
       if (event.key === '/' && !event.ctrlKey && !event.altKey && !event.metaKey && !editable) {
@@ -241,11 +266,12 @@
   async function boot() {
     document.documentElement.dataset.theme = state.theme; updateFeatureControls(); bind(); setupVoice();
     try {
-      const [health, documents, history] = await Promise.all([
-        api('/api/health'), api('/api/documents'), api(`/api/history?session_id=${encodeURIComponent(state.sessionId)}`),
+      const [health, documents, history, topics] = await Promise.all([
+        api('/api/health'), api('/api/documents'), api(`/api/history?session_id=${encodeURIComponent(state.sessionId)}`), api('/api/suggestions'),
       ]);
       setStatus(true, `Trực tuyến · ${health.documents} văn bản`);
       dom.documents.innerHTML = documents.map((doc) => `<article class="doc-item"><div class="doc-title">${escapeHTML(doc.title)}</div><div class="doc-meta">${escapeHTML(doc.rid)} · Bản ${escapeHTML(doc.version)}</div></article>`).join('');
+      renderSuggestionTopics(topics);
       restoreHistory(history);
     } catch (_) { setStatus(false, 'Mất kết nối'); dom.documents.innerHTML = '<p class="error">Không thể tải cơ sở tri thức.</p>'; }
   }

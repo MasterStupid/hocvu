@@ -184,6 +184,7 @@ class Response:
     timing: dict[str, float] = field(default_factory=dict)
     session_id: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
+    card: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self, include_retrieved: bool = False) -> dict:
         result = {
@@ -200,6 +201,7 @@ class Response:
             "timing": {k: round(v, 2) for k, v in self.timing.items()},
             "session_id": self.session_id,
             "metadata": self.metadata,
+            "card": self.card,
         }
         if include_retrieved:
             result["retrieved"] = [r.to_dict() for r in self.retrieved]

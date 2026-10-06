@@ -385,6 +385,11 @@ button:focus-visible, a:focus-visible, textarea:focus-visible {
     background: var(--accent);
     color: white;
 }
+.topic-card { width: 100%; border: 1px solid rgba(13, 148, 136, .28); border-radius: var(--radius-md); overflow: hidden; background: var(--bg-primary); }
+.topic-toggle { width: 100%; display: flex; justify-content: space-between; gap: .75rem; align-items: center; padding: .7rem .8rem; color: var(--accent); font-weight: 750; text-align: left; }
+.topic-toggle:hover { background: var(--accent-soft); }
+.topic-toggle small { color: var(--text-secondary); font-weight: 600; }
+.topic-questions { padding: 0 .7rem .7rem; display: flex; flex-wrap: wrap; gap: .4rem; }
 .follow-up-row { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .8rem; }
 .follow-up-chip, .copy-btn {
     border: 1px solid rgba(13, 148, 136, .35);
@@ -582,6 +587,32 @@ kbd {
     padding-top: 0.75rem;
     border-top: var(--glass-border);
 }
+.card-bubble { width: min(680px, 100%); padding: 0; overflow: hidden; }
+.answer-card, .refusal-card { padding: 1rem 1.15rem; }
+.answer-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; padding-bottom: .8rem; border-bottom: var(--glass-border); }
+.answer-card h3, .answer-card h4, .refusal-card h3 { margin: 0; }
+.card-kicker { display: block; color: var(--accent); font-size: .69rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; margin-bottom: .18rem; }
+.grounding-meter { display: grid; grid-template-columns: repeat(5, 5px) auto; align-items: end; gap: 3px; color: var(--text-secondary); font-size: .69rem; white-space: nowrap; }
+.grounding-meter i { height: 12px; border-radius: 2px; background: rgba(148, 163, 184, .32); }
+.grounding-meter i.on { background: #94a3b8; }
+.grounding-meter.trung.bình i.on { background: var(--warning); }
+.grounding-meter.mạnh i.on { background: var(--success); }
+.grounding-meter b { grid-column: 1 / -1; font-weight: 650; }
+.verdict-list { display: grid; gap: .7rem; margin-top: .9rem; }
+.verdict-list p { margin: 0; }
+.card-sources, .card-notes { margin-top: 1rem; padding-top: .8rem; border-top: var(--glass-border); }
+.card-sources h4, .card-notes h4 { font-size: .8rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .55rem; }
+.card-sources { display: grid; gap: .55rem; }
+.card-sources h4 { margin-bottom: 0; }
+.source-card { cursor: pointer; }
+.source-heading { font-size: .8rem; font-weight: 700; margin-bottom: .35rem; }
+.evidence-card.flash { border-color: #8b5cf6; background: rgba(139, 92, 246, .11); box-shadow: 0 0 0 3px rgba(139, 92, 246, .13); }
+.citation-chip.active { background: #8b5cf6; color: white; }
+.card-notes p { display: flex; gap: .45rem; color: var(--text-secondary); font-size: .82rem; margin: .4rem 0; }
+.card-notes p span { color: var(--accent); width: 1rem; text-align: center; }
+.refusal-card { border-left: 4px solid var(--warning); }
+.refusal-card p { margin: .6rem 0; }
+.refusal-hint { color: var(--text-secondary); font-size: .86rem; }
 
 /* Intents & Confidence */
 .meta-tags {
@@ -664,6 +695,8 @@ kbd {
     .message { max-width: 95%; }
     .composer-footer { display: none; }
     .top-actions .utility-button { display: none; }
+    .answer-card-header { flex-direction: column; }
+    .card-bubble { width: 100%; }
 }
 
 @media print {

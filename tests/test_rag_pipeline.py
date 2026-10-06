@@ -126,6 +126,29 @@ class RagPipelineTests(unittest.TestCase):
         self.assertIsNone(self.searcher.semantic)
         self.assertIn("Semantic query fallback", self.searcher.semantic_error)
 
+    def test_grounded_response_includes_structured_answer_card(self):
+        engine = HocVuEngine(self.config, self.searcher)
+        engine.session = MagicMock()
+        engine.session.contextualize.return_value = ("Điều kiện bảo lưu kết quả học tập là gì?", "")
+        response = engine.ask("Điều kiện bảo lưu kết quả học tập là gì?", "card-session")
+        card = response.to_dict()["card"]
+        self.assertTrue(response.references)
+        self.assertTrue(card["verdict_segments"])
+        self.assertEqual(card["verdict_segments"][0]["cites"], [1])
+        self.assertGreaterEqual(card["grounding"]["level"], 2)
+        self.assertEqual(card["grounding"]["source_count"], len(response.references))
+        self.assertIn("answer", response.to_dict())
+        self.assertIn("references", response.to_dict())
+
+    def test_refusal_card_contains_answerable_suggestions(self):
+        engine = HocVuEngine(self.config, self.searcher)
+        engine.session = MagicMock()
+        response = engine.ask("Con vịt có biết lập trình không?", "refusal-card")
+        self.assertTrue(response.refused)
+        self.assertEqual(len(response.card["suggestions"]), 3)
+        suggested = {question for topic in engine.suggestion_topics() for question in topic["questions"]}
+        self.assertTrue(set(response.card["suggestions"]).issubset(suggested))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -85,7 +85,7 @@ class HocVuHandler(BaseHTTPRequestHandler):
                 "status": "ok", "documents": len(engine.list_documents()), "voice": "browser",
                 "retrieval": engine.searcher.provider,
                 "semantic_error": engine.searcher.semantic_error,
-                "api_version": "live-ai-1",
+                "api_version": "answer-cards-1",
             })
         elif parsed.path == "/api/documents":
             self.respond_json(engine.list_documents())
@@ -98,6 +98,8 @@ class HocVuHandler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/history":
             session_id = parse_qs(parsed.query).get("session_id", [""])[0]
             self.respond_json(engine.history(session_id))
+        elif parsed.path == "/api/suggestions":
+            self.respond_json(engine.suggestion_topics())
         elif parsed.path.startswith("/api/"):
             self.respond_json({"error": "Not found"}, 404)
         else:

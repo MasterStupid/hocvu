@@ -6,6 +6,7 @@ from datetime import date
 from pathlib import Path
 
 from .classifier import Classifier, Intent
+from .cards import best_suggestions, build_card, build_suggestion_topics
 from .corpus import build_corpus
 from .documents import DocumentRepository
 from .generator import DECLINE_MSG, Generator
@@ -42,6 +43,7 @@ class HocVuEngine:
         self.voice = VoiceManager(config, AUD)
         self.session = SessionStore(SESSION_DB)
         self.documents = DocumentRepository(DOCS)
+        self._suggestion_topics = build_suggestion_topics(config.seed)
 
     @classmethod
     def load(cls, config: AppConfig, index_path: Path):
@@ -105,10 +107,14 @@ class HocVuEngine:
             audio_url=None, providers={"retrieval": self.searcher.provider, "voice": "browser", "llm": ai_status},
             timing={"total_ms": (time.perf_counter() - started) * 1000}, session_id=session_id,
             metadata={"grounded": bool(references), "ai_mode": ai_status, "lexical_coverage": round(lexical_coverage if 'lexical_coverage' in locals() else 0.0, 4)},
+            card=build_card(answer, references, hits, confidence, best_suggestions(question, self._suggestion_topics) if refused else None),
         )
         if record_session and question:
             self.session.add_turn(session_id, question, answer, intent.value, references[0].aid if references else "", references[0].rid if references else "")
         return response
+
+    def suggestion_topics(self) -> list[dict]:
+        return self._suggestion_topics
 
     def ask_voice(self, audio_path: str, session_id: str, with_audio: bool = True, ref_date: str | None = None) -> Response:
         speech = self.voice.speech_to_text(audio_path)
