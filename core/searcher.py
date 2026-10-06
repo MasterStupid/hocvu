@@ -1,0 +1,114 @@
+"""Dependency-free hybrid retriever for Vietnamese regulation text."""
+from __future__ import annotations
+
+import json
+import math
+from collections import Counter
+from datetime import date, datetime
+from pathlib import Path
+
+from .models import Chunk, RankedChunk
+from .nlp import content_tokens
+from .semantic import SemanticEncoder
+from .settings import MODELS
+
+
+class HybridSearcher:
+    def __init__(self, config):
+        self.config = config
+        self.chunks: list[Chunk] = []
+        self._freqs: list[Counter] = []
+        self._idf: dict[str, float] = {}
+        self._avg_len = 0.0
+        self.semantic: SemanticEncoder | None = None
+        self.semantic_error = ""
+
+    @property
+    def provider(self) -> str:
+        return "bm25+multilingual-e5" if self.semantic and self.semantic.available else "bm25"
+
+    def build(self, chunks: list[Chunk]) -> None:
+        self.chunks = chunks
+        token_lists = [content_tokens(chunk.text + " " + chunk.art_heading) for chunk in chunks]
+        self._freqs = [Counter(tokens) for tokens in token_lists]
+        self._avg_len = sum(map(len, token_lists)) / max(1, len(token_lists))
+        df = Counter(token for freq in self._freqs for token in freq)
+        total = len(self.chunks)
+        self._idf = {token: math.log(1 + (total - count + 0.5) / (count + 0.5)) for token, count in df.items()}
+        if not self.config.semantic_enabled:
+            self.semantic = None
+            self.semantic_error = "Disabled by HV_SEMANTIC"
+            return
+        self.semantic = SemanticEncoder(self.config.embedding_model, MODELS)
+        passages = [f"{chunk.art_heading}\n{chunk.text}" for chunk in chunks]
+        if not self.semantic.build(passages):
+            self.semantic_error = self.semantic.error
+
+    def save(self, path: str) -> None:
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        Path(path).write_text(json.dumps({"chunks": [chunk.to_dict() for chunk in self.chunks]}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    @classmethod
+    def load(cls, path: str, config):
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        searcher = cls(config)
+        searcher.build([Chunk.from_dict(item) for item in data.get("chunks", [])])
+        return searcher
+
+    def search(self, query: str, top_k: int | None = None, ref_date: str | None = None) -> list[RankedChunk]:
+        if not self.chunks:
+            return []
+        q_tokens = content_tokens(query)
+        if not q_tokens:
+            return []
+        q_freq = Counter(q_tokens)
+        semantic_scores = self.semantic.similarities(query) if self.semantic and self.semantic.available else []
+        lexical_scores: list[float] = []
+        candidates = []
+        k1, b = 1.5, 0.75
+        for index, (chunk, freq) in enumerate(zip(self.chunks, self._freqs)):
+            if not self._is_valid(chunk, ref_date):
+                continue
+            length = sum(freq.values())
+            bm25 = 0.0
+            for token, q_count in q_freq.items():
+                term_freq = freq.get(token, 0)
+                if term_freq:
+                    bm25 += self._idf.get(token, 0.0) * (term_freq * (k1 + 1) / (term_freq + k1 * (1 - b + b * length / max(1, self._avg_len))) * min(q_count, 2))
+            heading_terms = set(content_tokens(chunk.art_heading))
+            bm25 += sum(self._idf.get(token, 0.0) * 2.0 for token in q_freq if token in heading_terms)
+            normalized_query = " ".join(q_tokens)
+            normalized_text = " ".join(content_tokens(chunk.text))
+            if len(q_tokens) > 1 and normalized_query in normalized_text:
+                bm25 += 3.0
+            candidates.append((index, chunk, bm25))
+            lexical_scores.append(bm25)
+
+        if not candidates:
+            return []
+        lexical_peak = max(lexical_scores) or 1.0
+        results: list[RankedChunk] = []
+        for index, chunk, bm25 in candidates:
+            vec = semantic_scores[index] if semantic_scores else 0.0
+            # Blend normalized lexical relevance with cosine semantic
+            # relevance. BM25 remains the complete fallback when the local
+            # model is unavailable, so existing deployments do not regress.
+            score = (
+                self.config.bm25_weight * (bm25 / lexical_peak)
+                + (1 - self.config.bm25_weight) * max(0.0, vec)
+            ) if semantic_scores else bm25
+            results.append(RankedChunk(chunk=chunk, score=score, bm25=bm25, vec=vec))
+        results.sort(key=lambda item: item.score, reverse=True)
+        return results[: top_k or self.config.top_k]
+
+    @staticmethod
+    def _is_valid(chunk: Chunk, ref_date: str | None) -> bool:
+        if not ref_date:
+            return True
+        try:
+            at = datetime.strptime(ref_date, "%Y-%m-%d").date()
+            start = datetime.strptime(chunk.valid_from, "%Y-%m-%d").date() if chunk.valid_from else date.min
+            end = datetime.strptime(chunk.valid_until, "%Y-%m-%d").date() if chunk.valid_until else date.max
+            return start <= at <= end
+        except ValueError:
+            return True

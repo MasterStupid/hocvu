@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quản lý tài liệu | HocVu AI</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="documents-page">
+  <main class="documents-shell">
+    <header class="documents-header">
+      <div>
+        <a class="back-link" href="index.html">← Trở về hội thoại</a>
+        <h1>Quản lý tài liệu</h1>
+        <p>Thêm PDF, DOCX hoặc ảnh để lập chỉ mục cho HocVu AI.</p>
+      </div>
+      <button class="reindex-button" data-doc="reindex" type="button">Xây dựng lại chỉ mục</button>
+    </header>
+
+    <section class="upload-panel" aria-labelledby="upload-title">
+      <h2 id="upload-title">Thêm tài liệu</h2>
+      <form data-doc="upload-form">
+        <label class="drop-zone" data-doc="drop-zone" for="file-input">
+          <input id="file-input" data-doc="file-input" type="file" multiple accept=".pdf,.docx,.png,.jpg,.jpeg,.webp,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png,image/jpeg,image/webp">
+          <strong>Kéo tệp vào đây hoặc chọn tệp</strong>
+          <span>PDF, DOCX, PNG, JPG, WEBP · tối đa 25 MB · PDF không được mã hóa</span>
+        </label>
+        <label class="ocr-option"><input data-doc="ocr" type="checkbox"> <span>Mặc định bật OCR tiếng Việt cho các tệp mới thêm vào hàng đợi</span><small>OCR áp dụng cho ảnh, trang PDF scan và ảnh nhúng trong DOCX; xử lý thực hiện cục bộ.</small></label>
+        <section class="upload-queue" data-doc="queue" aria-live="polite"></section>
+        <div class="upload-actions">
+          <span data-doc="selected-file">Chưa chọn tệp</span>
+          <button class="delete-button" data-doc="remove-queued" type="button" disabled>Xóa tệp đã chọn</button>
+          <button class="upload-button" data-doc="upload" type="submit">Tải lên và lập chỉ mục</button>
+        </div>
+      </form>
+      <p class="upload-status" data-doc="status" role="status"></p>
+    </section>
+
+    <section class="library-panel" aria-labelledby="library-title">
+      <div class="library-heading"><div><h2 id="library-title">Thư viện tri thức</h2><p>Tài liệu tải lên sẽ được dùng để trả lời có trích dẫn.</p></div><div class="library-actions"><span class="document-count" data-doc="count">0 tài liệu</span><button class="delete-button" data-doc="remove-library" type="button" disabled>Xóa mục đã chọn</button></div></div>
+      <div class="document-table-wrap">
+        <table>
+          <thead><tr><th></th><th>Tài liệu</th><th>Định dạng</th><th>Trạng thái</th><th>Thời điểm</th><th></th></tr></thead>
+          <tbody data-doc="table"><tr><td colspan="6">Đang tải thư viện...</td></tr></tbody>
+        </table>
+      </div>
+      <section class="text-preview" data-doc="preview" hidden><div><h3 data-doc="preview-title">Nội dung trích xuất</h3><button class="delete-button" data-doc="close-preview" type="button">Đóng</button></div><p data-doc="preview-meta"></p><pre data-doc="preview-text"></pre></section>
+    </section>
+  </main>
+  <script src="documents.js?v=20261004-2"></script>
+</body>
+</html>

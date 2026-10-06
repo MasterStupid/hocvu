@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
+    <title>HocVu AI &middot; Trợ lý quy chế đào tạo thông minh</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- SVG Sprite -->
+    <svg style="display: none;" xmlns="http://www.w3.org/2000/svg">
+        <symbol id="icon-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></symbol>
+        <symbol id="icon-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></symbol>
+        <symbol id="icon-mic-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></symbol>
+        <symbol id="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></symbol>
+        <symbol id="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></symbol>
+        <symbol id="icon-thumbs-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></symbol>
+        <symbol id="icon-thumbs-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-3"></path></symbol>
+        <symbol id="icon-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></symbol>
+        <symbol id="icon-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></symbol>
+        <symbol id="icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></symbol>
+        <symbol id="icon-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></symbol>
+        <symbol id="icon-volume-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></symbol>
+        <symbol id="icon-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></symbol>
+        <symbol id="icon-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></symbol>
+        <symbol id="icon-graduation-cap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c3 3 9 3 12 0v-5"></path></symbol>
+        <symbol id="icon-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></symbol>
+    </svg>
+
+    <div class="app-container">
+        <!-- Top Bar -->
+        <header class="top-bar">
+            <button class="mobile-toggle" data-hv="menu-btn" aria-label="Menu">
+                <svg><use href="#icon-menu"></use></svg>
+            </button>
+            <div class="brand">
+                <svg class="brand-icon"><use href="#icon-graduation-cap"></use></svg>
+                <h1>HocVu AI</h1>
+            </div>
+            <div class="status-container">
+                <span class="status-indicator" data-hv="status-dot"></span>
+                <span class="status-text" data-hv="status-text">Đang kết nối...</span>
+            </div>
+            <div class="top-actions">
+                <a class="document-link" href="documents.html">Quản lý tài liệu</a>
+                <button class="utility-button" data-hv="new-conversation" type="button" title="Bắt đầu một hội thoại mới">Mới</button>
+                <button class="utility-button" data-hv="export-conversation" type="button" title="Tải hội thoại này về máy">Xuất</button>
+                <button class="ai-toggle" data-hv="ai-toggle" type="button" aria-pressed="false" title="AI diễn đạt theo nguồn">AI</button>
+                <button class="theme-toggle" data-hv="theme-toggle" aria-label="Chuyển đổi giao diện">
+                    <svg class="icon-light"><use href="#icon-sun"></use></svg>
+                    <svg class="icon-dark"><use href="#icon-moon"></use></svg>
+                </button>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <!-- Left Sidebar: Documents -->
+            <aside class="sidebar left-sidebar" data-hv="left-sidebar">
+                <div class="sidebar-header">
+                    <h2><svg><use href="#icon-book"></use></svg> Quy chế &amp; Văn bản</h2>
+                    <button class="close-sidebar mobile-only" data-hv="close-left" aria-label="Đóng"><svg><use href="#icon-x"></use></svg></button>
+                </div>
+                <div class="document-list" data-hv="doc-list">
+                    <!-- Loaded dynamically -->
+                    <div class="loading-pulse">Đang tải danh sách văn bản...</div>
+                </div>
+            </aside>
+
+            <!-- Center: Chat Area -->
+            <main class="chat-area">
+                <div class="chat-thread" data-hv="thread" role="log" aria-live="polite" aria-atomic="false">
+                    <div class="message bot welcome-message" data-hv="welcome">
+                        <div class="avatar"><svg><use href="#icon-graduation-cap"></use></svg></div>
+                        <div class="bubble">
+                            <p>Xin chào! Tôi là HocVu AI - trợ lý tra cứu quy chế đào tạo. Mỗi câu trả lời đều kèm nguồn; khi thiếu căn cứ, tôi sẽ từ chối trả lời.</p>
+                            <p class="pilot-notice">Bản thử nghiệm đang dùng dữ liệu minh họa. Trước khi triển khai thực tế, cần thay bằng văn bản quy chế đã được nhà trường xác thực.</p>
+                            <div class="suggestions" data-hv="suggestions">
+                                <button class="suggestion-chip">Sinh viên năm nhất cần đạt bao nhiêu tín chỉ để lên năm 2?</button>
+                                <button class="suggestion-chip">Điều kiện bảo lưu kết quả học tập là gì?</button>
+                                <button class="suggestion-chip">Quy định về việc tính điểm rèn luyện đối với sinh viên trao đổi?</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="composer-container">
+                    <form class="composer-form" data-hv="composer-form">
+                        <div class="input-wrapper">
+                            <button type="button" class="btn-icon tts-toggle" data-hv="tts-toggle" aria-label="Bật/tắt đọc kết quả" title="Đọc câu trả lời">
+                                <svg><use href="#icon-volume-2"></use></svg>
+                            </button>
+                            <textarea 
+                                class="chat-input" 
+                                data-hv="chat-input" 
+                                placeholder="Hỏi về quy chế đào tạo... (Nhấn / để tìm kiếm)" 
+                                rows="1" 
+                                aria-label="Nhập câu hỏi"
+                            ></textarea>
+                            <div class="composer-actions">
+                                <button type="button" class="live-toggle" data-hv="live-toggle" aria-pressed="false" title="Hội thoại liên tục bằng giọng nói">Live</button>
+                                <button type="button" class="btn-icon mic-btn" data-hv="mic-btn" aria-label="Nhập bằng giọng nói">
+                                    <svg><use href="#icon-mic"></use></svg>
+                                </button>
+                                <button type="submit" class="btn-icon send-btn" data-hv="send-btn" aria-label="Gửi tin nhắn" disabled>
+                                    <svg><use href="#icon-send"></use></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                    <div class="composer-footer">
+                        <span class="live-status" data-hv="live-status" aria-live="polite">Sẵn sàng nhập câu hỏi</span>
+                        <span><strong>Live</strong> hội thoại liên tục</span>
+                        <span><strong>AI</strong> diễn đạt theo nguồn</span>
+                        <span><kbd>Enter</kbd> gửi</span>
+                        <span><kbd>Shift</kbd> + <kbd>Enter</kbd> xuống dòng</span>
+                        <span><kbd>/</kbd> tập trung</span>
+                    </div>
+                </div>
+            </main>
+
+            <!-- Right Sidebar: Evidence -->
+            <aside class="sidebar right-sidebar" data-hv="right-sidebar">
+                <div class="sidebar-header">
+                    <h2><svg><use href="#icon-search"></use></svg> Nguồn tham khảo</h2>
+                    <button class="close-sidebar mobile-only" data-hv="close-right" aria-label="Đóng"><svg><use href="#icon-x"></use></svg></button>
+                </div>
+                <div class="evidence-list" data-hv="evidence-list">
+                    <div class="empty-state">
+                        <p>Các điều khoản quy chế được sử dụng để trả lời sẽ hiển thị tại đây.</p>
+                    </div>
+                </div>
+            </aside>
+        </div>
+        
+        <!-- Mobile Overlay -->
+        <div class="mobile-overlay" data-hv="overlay" aria-hidden="true"></div>
+    </div>
+    
+    <script src="main.js?v=20261006-clean-1"></script>
+</body>
+</html>

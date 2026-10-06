@@ -1,0 +1,22 @@
+# Required for PDF document ingestion
+pypdf>=5.0.0
+
+# Local Vietnamese semantic search (downloads the selected embedding model on first use)
+sentence-transformers>=3.0.0
+
+# Optional local OCR for uploaded PNG/JPG/WEBP images (requires Tesseract OCR)
+Pillow>=10.0.0
+pytesseract>=0.3.10
+PyMuPDF>=1.24.0
+
+# Optional dependencies for HocVu AI
+
+# # LLM & Vector Embeddings (if not using dummy/stdlib fallbacks)
+# openai>=1.0.0
+
+# # Web UI & API alternative (if not using stdlib http.server)
+# # fastapi
+# # uvicorn
+
+# # Audio / Voice processing
+# # pydub
