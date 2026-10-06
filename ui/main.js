@@ -6,7 +6,7 @@
     theme: localStorage.getItem('hv_theme') || 'light',
     aiEnabled: localStorage.getItem('hv_ai_enabled') === 'true',
     ttsEnabled: false, liveEnabled: false, isLoading: false, isSpeaking: false,
-    recognition: null, recognitionRunning: false, turn: 0, listenTimer: null, transcript: [],
+    recognition: null, recognitionRunning: false, turn: 0, listenTimer: null, transcript: [], speechRetry: false,
   };
   localStorage.setItem('hv_session_id', state.sessionId);
 
@@ -108,6 +108,13 @@
   }
   function speak(text) {
     if (!(state.ttsEnabled || state.liveEnabled) || !('speechSynthesis' in window)) { scheduleListening(); return; }
+    // Chromium may populate voices asynchronously just after page load.
+    // Retry once so the first Vietnamese answer does not use a random voice.
+    if (!speechSynthesis.getVoices().length && !state.speechRetry) {
+      state.speechRetry = true;
+      setTimeout(() => { state.speechRetry = false; speak(text); }, 180);
+      return;
+    }
     speechSynthesis.cancel(); state.isSpeaking = true; setLiveStatus('AI đang đọc câu trả lời', 'working');
     const utterance = new SpeechSynthesisUtterance(speechText(text)); utterance.lang = 'vi-VN'; utterance.rate = state.liveEnabled ? .94 : 1;
     const voice = preferredVietnameseVoice(); if (voice) utterance.voice = voice;

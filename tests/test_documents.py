@@ -67,6 +67,10 @@ class DocumentRepositoryTests(unittest.TestCase):
         text = self.repository._extract_docx(source)
         self.assertIn("##### Mục quan trọng", text)
 
+    def test_numbered_content_line_is_not_mistaken_for_a_table_of_contents(self):
+        self.assertFalse(self.repository._is_table_of_contents_line("1. Quy định áp dụng cho năm 2026"))
+        self.assertTrue(self.repository._is_table_of_contents_line("Điều 1. Phạm vi ........ 3"))
+
 
 if __name__ == "__main__":
     unittest.main()

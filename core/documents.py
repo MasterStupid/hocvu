@@ -315,9 +315,9 @@ class DocumentRepository:
     @staticmethod
     def _is_table_of_contents_line(text: str) -> bool:
         compact = re.sub(r"\s+", " ", text).strip()
-        # A table-of-contents item is normally a short heading followed by a
-        # page number and has no sentence-ending punctuation.
-        return bool(len(compact) < 240 and re.search(r"\d{1,3}$", compact) and not re.search(r"[.!?;:]$", compact) and (DocumentRepository._is_heading(compact) or "..." in compact))
+        # Do not discard an ordinary numbered line just because it ends in a
+        # number. Only dot leaders are reliable evidence of a generated TOC.
+        return bool(len(compact) < 240 and re.search(r"\.{3,}\s*\d{1,3}$", compact))
 
     @classmethod
     def _make_articles(cls, text: str, document_title: str) -> list[Article]:

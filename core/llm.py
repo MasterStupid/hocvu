@@ -6,8 +6,10 @@ retrieved excerpts, and the extractive answer remains the safe fallback.
 from __future__ import annotations
 
 import json
+import time
 import urllib.error
 import urllib.request
+from urllib.parse import urlsplit, urlunsplit
 
 from .models import Reference
 
@@ -49,8 +51,7 @@ class GroundedLLM:
             "max_output_tokens": 450,
             "store": False,
         }
-        base_url = self.config.openai_url.rstrip("/")
-        endpoint = base_url if base_url.endswith("/responses") else f"{base_url}/responses"
+        endpoint = self._responses_endpoint(self.config.openai_url)
         request = urllib.request.Request(
             endpoint,
             data=json.dumps(payload).encode("utf-8"),
@@ -60,15 +61,31 @@ class GroundedLLM:
                 "Content-Type": "application/json",
             },
         )
-        try:
-            with urllib.request.urlopen(request, timeout=35) as response:
-                body = json.loads(response.read().decode("utf-8"))
-        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as exc:
-            raise LLMError("Không thể gọi mô hình AI lúc này; đã dùng câu trả lời từ tài liệu.") from exc
+        for attempt in range(2):
+            try:
+                with urllib.request.urlopen(request, timeout=35) as response:
+                    body = json.loads(response.read().decode("utf-8"))
+                break
+            except urllib.error.HTTPError as exc:
+                if exc.code in {429, 500, 502, 503, 504} and attempt == 0:
+                    time.sleep(0.4)
+                    continue
+                raise LLMError("Không thể gọi mô hình AI lúc này; đã dùng câu trả lời từ tài liệu.") from exc
+            except (urllib.error.URLError, TimeoutError) as exc:
+                raise LLMError("Không thể gọi mô hình AI lúc này; đã dùng câu trả lời từ tài liệu.") from exc
         text = self._output_text(body)
         if not text:
             raise LLMError("Mô hình AI không trả về nội dung hợp lệ; đã dùng câu trả lời từ tài liệu.")
         return text.strip()
+
+    @staticmethod
+    def _responses_endpoint(base_url: str) -> str:
+        """Append `/responses` without breaking a proxy URL query string."""
+        parts = urlsplit(base_url)
+        path = parts.path.rstrip("/")
+        if not path.endswith("/responses"):
+            path = f"{path}/responses"
+        return urlunsplit((parts.scheme, parts.netloc, path, parts.query, parts.fragment))
 
     @staticmethod
     def _output_text(body: dict) -> str:

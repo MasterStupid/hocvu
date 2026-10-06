@@ -17,6 +17,10 @@ class GroundedLLMTests(unittest.TestCase):
         ]})
         self.assertEqual(text, "Câu trả lời có nguồn.")
 
+    def test_preserves_proxy_query_when_building_responses_endpoint(self):
+        endpoint = GroundedLLM._responses_endpoint("https://proxy.example/v1?api-version=2026-01-01")
+        self.assertEqual(endpoint, "https://proxy.example/v1/responses?api-version=2026-01-01")
+
 
 if __name__ == "__main__":
     unittest.main()
