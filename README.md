@@ -17,6 +17,12 @@ python manage.py serve --open
 
 Open `http://127.0.0.1:8000`. Use Chrome or Edge for Vietnamese browser speech recognition; text-to-speech uses the browser's Vietnamese voice when available.
 
+The date field below the chat box is optional: choose it only when you need to
+look up the regulation effective on a historical date. Leaving it blank always
+uses the current date. The server is intentionally local-only by default. If
+you bind it to a network address, set a strong `HV_API_TOKEN`; network API
+requests must then send it in the `X-HocVu-Token` header.
+
 ## AI-assisted answers and Live conversation
 
 The **AI** switch on the main page is off by default. When enabled, the

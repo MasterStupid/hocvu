@@ -71,6 +71,19 @@ class DocumentRepositoryTests(unittest.TestCase):
         self.assertFalse(self.repository._is_table_of_contents_line("1. Quy định áp dụng cho năm 2026"))
         self.assertTrue(self.repository._is_table_of_contents_line("Điều 1. Phạm vi ........ 3"))
 
+    def test_duplicate_content_is_rejected_before_extraction(self):
+        content = b"PK\x03\x04 duplicate document"
+        with patch.object(self.repository, "extract", return_value=("Nội dung quy định đủ dài để lập chỉ mục an toàn.", 1)):
+            self.repository.add("mot.docx", content)
+            with self.assertRaisesRegex(DocumentError, "trùng"):
+                self.repository.add("hai.docx", content)
+
+    def test_corrupt_manifest_recovers_from_last_backup(self):
+        self.repository._write_manifest([{"id": "old", "order": 1}])
+        self.repository._write_manifest([{"id": "new", "order": 2}])
+        self.repository.manifest.write_text("{broken", encoding="utf-8")
+        self.assertEqual(self.repository.list(), [{"id": "old", "order": 1}])
+
 
 if __name__ == "__main__":
     unittest.main()

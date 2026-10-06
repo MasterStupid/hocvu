@@ -125,8 +125,8 @@ class RankedChunk:
     bm25: float = 0.0
     vec: float = 0.0
 
-    def to_dict(self) -> dict:
-        return {
+    def to_dict(self, include_retrieved: bool = False) -> dict:
+        result = {
             "chunk": self.chunk.to_dict(),
             "score": round(self.score, 5),
             "bm25": round(self.bm25, 5),
@@ -185,8 +185,8 @@ class Response:
     session_id: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> dict:
-        return {
+    def to_dict(self, include_retrieved: bool = False) -> dict:
+        result = {
             "query": self.query,
             "answer": self.answer,
             "references": [r.to_dict() for r in self.references],
@@ -195,13 +195,15 @@ class Response:
             "refusal_reason": self.refusal_reason,
             "intent": self.intent,
             "speech": self.speech.to_dict() if self.speech else None,
-            "retrieved": [r.to_dict() for r in self.retrieved],
             "audio_url": self.audio_url,
             "providers": self.providers,
             "timing": {k: round(v, 2) for k, v in self.timing.items()},
             "session_id": self.session_id,
             "metadata": self.metadata,
         }
+        if include_retrieved:
+            result["retrieved"] = [r.to_dict() for r in self.retrieved]
+        return result
 
 
 # ═══════════════════════════════════════════════════════════════════════════

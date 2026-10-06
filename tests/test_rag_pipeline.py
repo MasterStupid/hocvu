@@ -11,6 +11,7 @@ from core.searcher import HybridSearcher
 from core.scenarios import expand_retrieval_query, is_attendance_training_scenario
 from core.settings import AppConfig
 from core.engine import HocVuEngine
+from core.models import Response
 from core.splitter import split_regulation
 
 
@@ -95,6 +96,35 @@ class RagPipelineTests(unittest.TestCase):
             index_path.write_text(json.dumps({"schema_version": 999, "chunks": []}), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "schema version"):
                 HybridSearcher.load(str(index_path), self.config)
+
+    def test_corrupt_index_uses_last_atomic_backup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            index_path = Path(directory) / "index.json"
+            self.searcher.save(index_path)
+            self.searcher.save(index_path)
+            index_path.write_text("{broken", encoding="utf-8")
+            restored = HybridSearcher.load(str(index_path), self.config)
+            self.assertEqual(len(restored.chunks), len(self.searcher.chunks))
+
+    def test_api_response_hides_raw_retrieval_by_default(self):
+        response = Response(query="q", answer="a", retrieved=self.searcher.search("bảo lưu", 1))
+        self.assertNotIn("retrieved", response.to_dict())
+        self.assertIn("retrieved", response.to_dict(include_retrieved=True))
+
+    def test_empty_question_is_not_persisted(self):
+        engine = HocVuEngine(self.config, self.searcher)
+        engine.session = MagicMock()
+        engine.ask("", "empty-session")
+        engine.session.add_turn.assert_not_called()
+
+    def test_semantic_query_error_falls_back_to_bm25(self):
+        self.searcher.semantic = MagicMock()
+        self.searcher.semantic.available = True
+        self.searcher.semantic.similarities.side_effect = RuntimeError("model unavailable")
+        hits = self.searcher.search("điều kiện bảo lưu", 1)
+        self.assertTrue(hits)
+        self.assertIsNone(self.searcher.semantic)
+        self.assertIn("Semantic query fallback", self.searcher.semantic_error)
 
 
 if __name__ == "__main__":

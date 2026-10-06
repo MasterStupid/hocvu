@@ -106,7 +106,7 @@ class HocVuEngine:
             timing={"total_ms": (time.perf_counter() - started) * 1000}, session_id=session_id,
             metadata={"grounded": bool(references), "ai_mode": ai_status, "lexical_coverage": round(lexical_coverage if 'lexical_coverage' in locals() else 0.0, 4)},
         )
-        if record_session:
+        if record_session and question:
             self.session.add_turn(session_id, question, answer, intent.value, references[0].aid if references else "", references[0].rid if references else "")
         return response
 

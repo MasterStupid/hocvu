@@ -103,6 +103,8 @@ class AppConfig:
     # ── Whisper / TTS ───────────────────────────
     whisper_size: str = "small"
     tts_voice: str = "vi-VN-HoaiMyNeural"
+    api_token: str = ""
+    rate_limit_per_minute: int = 120
 
     # ── Misc ────────────────────────────────────
     seed: int = 20262027
@@ -124,6 +126,7 @@ class AppConfig:
             "llm": self.llm_backend,
             "stt": self.stt_backend,
             "tts": self.tts_backend,
+            "rate_limit_per_minute": self.rate_limit_per_minute,
         }
 
 
@@ -153,9 +156,11 @@ def load_config() -> AppConfig:
         openai_embed=_e("OPENAI_EMBED_MODEL", "text-embedding-3-small"),
         whisper_size=_e("WHISPER_MODEL", "small"),
         tts_voice=_e("TTS_VOICE", "vi-VN-HoaiMyNeural"),
+        api_token=_e("HV_API_TOKEN", ""),
+        rate_limit_per_minute=_i("HV_RATE_LIMIT_PER_MINUTE", 120),
         seed=_i("HV_SEED", 20262027),
     )
-    for name in ("top_k", "bm25_pool", "vec_pool", "embed_dim", "max_chunk_chars", "max_units", "max_history"):
+    for name in ("top_k", "bm25_pool", "vec_pool", "embed_dim", "max_chunk_chars", "max_units", "max_history", "rate_limit_per_minute"):
         if getattr(config, name) <= 0:
             raise ValueError(f"{name} phải lớn hơn 0.")
     for name in ("bm25_weight", "confidence_floor", "semantic_floor", "lexical_coverage_floor"):

@@ -5,6 +5,8 @@ import json
 import mimetypes
 import os
 import re
+import threading
+import time
 import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -12,15 +14,18 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from core.engine import HocVuEngine, build_index
-from core.documents import DocumentError
+from core.documents import DocumentError, DocumentRepository
 from core.settings import INDEX_JSON, SERVER_META, UI, ensure_dirs, load_config
 
 
 engine: HocVuEngine | None = None
+requires_api_token = False
 
 
 class HocVuHandler(BaseHTTPRequestHandler):
     server_version = "HocVuAI/0.2"
+    _request_times: dict[str, list[float]] = {}
+    _rate_lock = threading.Lock()
 
     def log_message(self, fmt, *args):
         return
@@ -28,7 +33,25 @@ class HocVuHandler(BaseHTTPRequestHandler):
     def _headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-HocVu-Token")
+
+    def _check_api_access(self) -> bool:
+        if not self.path.startswith("/api/"):
+            return True
+        if requires_api_token and self.headers.get("X-HocVu-Token", "") != engine.config.api_token:
+            self.respond_json({"error": "API token is required for network access."}, 401)
+            return False
+        now = time.monotonic()
+        client = self.client_address[0]
+        with self._rate_lock:
+            recent = [stamp for stamp in self._request_times.get(client, []) if now - stamp < 60]
+            if len(recent) >= engine.config.rate_limit_per_minute:
+                self._request_times[client] = recent
+                self.respond_json({"error": "Too many requests; try again in a minute."}, 429)
+                return False
+            recent.append(now)
+            self._request_times[client] = recent
+        return True
 
     def respond_json(self, data, status=200):
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
@@ -54,6 +77,8 @@ class HocVuHandler(BaseHTTPRequestHandler):
         return data
 
     def do_GET(self):
+        if not self._check_api_access():
+            return
         parsed = urlparse(self.path)
         if parsed.path == "/api/health":
             self.respond_json({
@@ -70,8 +95,6 @@ class HocVuHandler(BaseHTTPRequestHandler):
                 self.respond_json(engine.document_text(item_id))
             except DocumentError as exc:
                 self.respond_json({"error": str(exc)}, 404)
-        elif parsed.path == "/api/sources":
-            self.respond_json(engine.list_sources())
         elif parsed.path == "/api/history":
             session_id = parse_qs(parsed.query).get("session_id", [""])[0]
             self.respond_json(engine.history(session_id))
@@ -99,6 +122,8 @@ class HocVuHandler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_POST(self):
+        if not self._check_api_access():
+            return
         path = urlparse(self.path).path
         if path == "/api/documents/upload":
             self._upload_document()
@@ -150,7 +175,7 @@ class HocVuHandler(BaseHTTPRequestHandler):
             raise DocumentError("Không tìm thấy ranh giới dữ liệu tải lên.")
         boundary = (match.group(1) or match.group(2)).encode("utf-8")
         content_length = int(self.headers.get("Content-Length", "0"))
-        if not 0 < content_length <= 26 * 1024 * 1024:
+        if not 0 < content_length <= DocumentRepository.max_bytes + 64 * 1024:
             raise DocumentError("Kích thước yêu cầu không hợp lệ hoặc vượt quá 25 MB.")
         body = self.rfile.read(content_length)
         marker = b"--" + boundary
@@ -178,6 +203,8 @@ class HocVuHandler(BaseHTTPRequestHandler):
         raise DocumentError("Không tìm thấy trường tệp trong yêu cầu tải lên.")
 
     def do_DELETE(self):
+        if not self._check_api_access():
+            return
         prefix = "/api/documents/"
         if not self.path.startswith(prefix):
             self.respond_json({"error": "Not found"}, 404)
@@ -194,8 +221,11 @@ class HocVuHandler(BaseHTTPRequestHandler):
 
 
 def main(host="127.0.0.1", port=8000, verbose=False, open_browser=False):
-    global engine
+    global engine, requires_api_token
     config = load_config()
+    requires_api_token = host not in {"127.0.0.1", "localhost", "::1"}
+    if requires_api_token and not config.api_token:
+        raise RuntimeError("Khi mở server ra mạng, hãy đặt HV_API_TOKEN để bảo vệ tài liệu và API.")
     ensure_dirs()
     if not INDEX_JSON.exists():
         _, searcher = build_index(config, return_searcher=True)

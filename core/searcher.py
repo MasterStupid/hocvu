@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import math
+import shutil
 from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
@@ -48,22 +49,44 @@ class HybridSearcher:
             self.semantic_error = self.semantic.error
 
     def save(self, path: str) -> None:
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
-        Path(path).write_text(json.dumps({
+        destination = Path(path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        temporary = destination.with_suffix(".tmp")
+        temporary.write_text(json.dumps({
             "schema_version": INDEX_SCHEMA_VERSION,
             "chunks": [chunk.to_dict() for chunk in self.chunks],
         }, ensure_ascii=False, indent=2), encoding="utf-8")
+        if destination.exists():
+            shutil.copy2(destination, destination.with_suffix(".json.bak"))
+        temporary.replace(destination)
 
     @classmethod
     def load(cls, path: str, config):
-        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        def read_index(index_path: Path):
+            try:
+                return json.loads(index_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                raise ValueError("Index bị lỗi hoặc không đọc được. Hãy chạy lại 'python manage.py ingest'.") from exc
+
+        index_path = Path(path)
+        try:
+            data = read_index(index_path)
+        except ValueError:
+            backup = index_path.with_suffix(".json.bak")
+            if not backup.exists():
+                raise
+            data = read_index(backup)
         schema_version = data.get("schema_version", 1)
         if schema_version not in {1, INDEX_SCHEMA_VERSION}:
             raise ValueError(f"Index schema version {schema_version} không được hỗ trợ. Hãy chạy lại 'python manage.py ingest'.")
         if not isinstance(data.get("chunks"), list):
             raise ValueError("Index không hợp lệ: thiếu danh sách chunks. Hãy chạy lại 'python manage.py ingest'.")
+        try:
+            chunks = [Chunk.from_dict(item) for item in data.get("chunks", [])]
+        except (KeyError, TypeError) as exc:
+            raise ValueError("Index không tương thích với phiên bản hiện tại. Hãy chạy lại 'python manage.py ingest'.") from exc
         searcher = cls(config)
-        searcher.build([Chunk.from_dict(item) for item in data.get("chunks", [])])
+        searcher.build(chunks)
         return searcher
 
     def search(self, query: str, top_k: int | None = None, ref_date: str | None = None) -> list[RankedChunk]:
@@ -73,7 +96,14 @@ class HybridSearcher:
         if not q_tokens:
             return []
         q_freq = Counter(q_tokens)
-        semantic_scores = self.semantic.similarities(query) if self.semantic and self.semantic.available else []
+        try:
+            semantic_scores = self.semantic.similarities(query) if self.semantic and self.semantic.available else []
+        except Exception as exc:
+            # A runtime model/CPU error must degrade to BM25 instead of
+            # dropping the user's request.
+            self.semantic_error = f"Semantic query fallback: {type(exc).__name__}: {exc}"
+            self.semantic = None
+            semantic_scores = []
         lexical_scores: list[float] = []
         candidates = []
         k1, b = 1.5, 0.75

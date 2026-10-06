@@ -20,6 +20,7 @@
     right: $('right-sidebar'), closeLeft: $('close-left'), closeRight: $('close-right'),
     overlay: $('overlay'), welcome: $('welcome'), liveStatus: $('live-status'),
     newConversation: $('new-conversation'), exportConversation: $('export-conversation'),
+    refDate: $('ref-date'),
   };
   const escapeHTML = (value) => { const box = document.createElement('div'); box.textContent = value || ''; return box.innerHTML; };
   const scrollBottom = () => { dom.thread.scrollTop = dom.thread.scrollHeight; };
@@ -136,7 +137,7 @@
     item.querySelectorAll('[data-citation]').forEach((button) => button.addEventListener('click', () => document.getElementById(`evidence-${button.dataset.citation}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })));
     item.querySelector('.copy-btn').addEventListener('click', () => copyAnswer(item.querySelector('.copy-btn'), response.answer));
     item.querySelectorAll('.follow-up-chip').forEach((button) => button.addEventListener('click', () => send(button.textContent)));
-    dom.thread.appendChild(item); remember('assistant', response.answer, { rid: refs[0]?.rid || response.rid || '' }); updateEvidence(refs); scrollBottom(); if (!restore) speak(response.answer);
+    dom.thread.appendChild(item); remember('assistant', response.answer, { references: refs.map((ref) => ({ reg_title: ref.reg_title, art_heading: ref.art_heading, rid: ref.rid })) }); updateEvidence(refs); scrollBottom(); if (!restore) speak(response.answer);
   }
   function appendError(message) {
     const item = document.createElement('article'); item.className = 'message bot error';
@@ -146,7 +147,7 @@
     const question = text.trim(); if (!question || state.isLoading) return;
     state.isLoading = true; dom.input.value = ''; updateComposer(); setLiveStatus('Đang tìm trong tài liệu', 'working'); appendUser(question); appendTyping();
     try {
-      const response = await api('/api/ask', { method: 'POST', body: JSON.stringify({ question, session_id: state.sessionId, use_ai: state.aiEnabled }) });
+      const response = await api('/api/ask', { method: 'POST', body: JSON.stringify({ question, session_id: state.sessionId, use_ai: state.aiEnabled, ref_date: dom.refDate.value || null }) });
       removeTyping(); appendAnswer(response);
     } catch (error) { removeTyping(); appendError(error.message); scheduleListening(); }
     finally { state.isLoading = false; updateComposer(); if (!state.liveEnabled && !state.isSpeaking) setLiveStatus('Sẵn sàng nhập câu hỏi'); }
@@ -192,7 +193,11 @@
       'HOCVU AI — LỊCH SỬ HỘI THOẠI',
       `Xuất lúc: ${new Date().toLocaleString('vi-VN')}`,
       '',
-      ...state.transcript.flatMap((entry) => [`${entry.role === 'user' ? 'BẠN' : 'HOCVU AI'}:`, entry.text, '']),
+      ...state.transcript.flatMap((entry) => [
+        `${entry.role === 'user' ? 'BẠN' : 'HOCVU AI'}:`, entry.text,
+        ...(entry.references?.length ? ['Nguồn: ' + entry.references.map((ref) => `${ref.reg_title} — ${ref.art_heading}`).join('; ')] : []),
+        '',
+      ]),
     ].join('\n');
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
     const link = document.createElement('a'); link.href = URL.createObjectURL(blob);
@@ -223,6 +228,12 @@
     dom.tts.addEventListener('click', () => { state.ttsEnabled = !state.ttsEnabled; if (!state.ttsEnabled && state.liveEnabled) stopLive(); else updateFeatureControls(); });
     dom.mic.addEventListener('click', () => { state.recognitionRunning ? state.recognition.stop() : startListening(false); });
     dom.suggestions.addEventListener('click', (event) => { if (event.target.matches('.suggestion-chip')) send(event.target.textContent); });
+    document.addEventListener('keydown', (event) => {
+      const editable = event.target.matches('input, textarea, select, [contenteditable="true"]');
+      if (event.key === '/' && !event.ctrlKey && !event.altKey && !event.metaKey && !editable) {
+        event.preventDefault(); dom.input.focus();
+      }
+    });
     const closeMenus = () => { dom.left.classList.remove('open'); dom.right.classList.remove('open'); dom.overlay.classList.remove('active'); };
     dom.menu.addEventListener('click', () => { dom.left.classList.toggle('open'); dom.overlay.classList.toggle('active'); });
     dom.closeLeft.addEventListener('click', closeMenus); dom.closeRight.addEventListener('click', closeMenus); dom.overlay.addEventListener('click', closeMenus);

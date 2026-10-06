@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import io
+import hashlib
 import re
 import shutil
 import uuid
@@ -30,6 +31,7 @@ class DocumentRepository:
         self.extracted_root = self.root / "extracted"
         self.extracted_root.mkdir(parents=True, exist_ok=True)
         self.manifest = self.root / "manifest.json"
+        self.manifest_backup = self.root / "manifest.json.bak"
 
     def _extracted_path(self, item_id: str) -> Path:
         """Location of the plain-text representation used for indexing."""
@@ -39,14 +41,43 @@ class DocumentRepository:
         if not self.manifest.exists():
             return []
         try:
-            return json.loads(self.manifest.read_text(encoding="utf-8"))
+            entries = json.loads(self.manifest.read_text(encoding="utf-8"))
+            if not isinstance(entries, list):
+                raise json.JSONDecodeError("Manifest must be a list", "", 0)
+            return entries
         except json.JSONDecodeError as exc:
-            raise DocumentError("Danh mục tài liệu bị lỗi; không thể đọc an toàn.") from exc
+            if self.manifest_backup.exists():
+                try:
+                    entries = json.loads(self.manifest_backup.read_text(encoding="utf-8"))
+                    if not isinstance(entries, list):
+                        raise json.JSONDecodeError("Manifest backup must be a list", "", 0)
+                except json.JSONDecodeError:
+                    entries = None
+                if entries is not None:
+                    # Repair the active copy from the last known-good atomic backup.
+                    temp = self.manifest.with_suffix(".restore.tmp")
+                    temp.write_text(json.dumps(entries, ensure_ascii=False, indent=2), encoding="utf-8")
+                    temp.replace(self.manifest)
+                    return entries
+            raise DocumentError("Danh mục tài liệu bị lỗi và không có bản sao lưu hợp lệ.") from exc
 
     def _write_manifest(self, entries: list[dict]) -> None:
         temp = self.manifest.with_suffix(".tmp")
         temp.write_text(json.dumps(entries, ensure_ascii=False, indent=2), encoding="utf-8")
+        if self.manifest.exists():
+            shutil.copy2(self.manifest, self.manifest_backup)
         temp.replace(self.manifest)
+
+    def _content_hash(self, entry: dict) -> str:
+        existing = entry.get("sha256")
+        if existing:
+            return str(existing)
+        stored = self.root / str(entry.get("stored_name", ""))
+        if not stored.is_file():
+            return ""
+        digest = hashlib.sha256(stored.read_bytes()).hexdigest()
+        entry["sha256"] = digest
+        return digest
 
     @staticmethod
     def _safe_name(name: str) -> str:
@@ -95,6 +126,11 @@ class DocumentRepository:
             raise DocumentError("Tệp không phải PDF hợp lệ.")
         if suffix == ".docx" and content[:2] != b"PK":
             raise DocumentError("Tệp không phải DOCX hợp lệ.")
+        content_hash = hashlib.sha256(content).hexdigest()
+        entries = self._read_manifest()
+        for existing in entries:
+            if self._content_hash(existing) == content_hash:
+                raise DocumentError(f"Tệp trùng với tài liệu đã tải lên: {existing.get('filename', 'không rõ tên')}.")
         item_id = uuid.uuid4().hex
         metadata = self._metadata(metadata)
         safe_name = self._safe_name(filename)
@@ -124,9 +160,9 @@ class DocumentRepository:
             "status": "ready",
             "ocr": bool(use_ocr),
             "extraction_version": self.extraction_version,
+            "sha256": content_hash,
             **metadata,
         }
-        entries = self._read_manifest()
         entries.append(entry)
         self._write_manifest(entries)
         return entry
