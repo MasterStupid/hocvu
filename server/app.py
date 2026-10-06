@@ -7,7 +7,7 @@ import os
 import re
 import uuid
 import webbrowser
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -48,7 +48,10 @@ class HocVuHandler(BaseHTTPRequestHandler):
         size = int(self.headers.get("Content-Length", "0"))
         if size > 1_000_000:
             raise ValueError("Request too large")
-        return json.loads(self.rfile.read(size).decode("utf-8")) if size else {}
+        data = json.loads(self.rfile.read(size).decode("utf-8")) if size else {}
+        if not isinstance(data, dict):
+            raise ValueError("JSON request body phải là một object.")
+        return data
 
     def do_GET(self):
         parsed = urlparse(self.path)
@@ -96,7 +99,8 @@ class HocVuHandler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_POST(self):
-        if self.path == "/api/documents/upload":
+        path = urlparse(self.path).path
+        if path == "/api/documents/upload":
             self._upload_document()
             return
         try:
@@ -104,14 +108,14 @@ class HocVuHandler(BaseHTTPRequestHandler):
         except (ValueError, json.JSONDecodeError) as exc:
             self.respond_json({"error": str(exc)}, 400)
             return
-        if self.path == "/api/ask":
+        if path == "/api/ask":
             session_id = str(data.get("session_id") or uuid.uuid4())
             response = engine.ask(
                 data.get("question", ""), session_id, data.get("ref_date"),
                 bool(data.get("with_audio")), use_ai=bool(data.get("use_ai")),
             )
             self.respond_json(response.to_dict())
-        elif self.path == "/api/documents/reindex":
+        elif path == "/api/documents/reindex":
             self.respond_json(engine.rebuild_index())
         else:
             self.respond_json({"error": "Not found"}, 404)
@@ -194,9 +198,11 @@ def main(host="127.0.0.1", port=8000, verbose=False, open_browser=False):
     config = load_config()
     ensure_dirs()
     if not INDEX_JSON.exists():
-        build_index(config)
-    engine = HocVuEngine.load(config, INDEX_JSON)
-    server = HTTPServer((host, port), HocVuHandler)
+        _, searcher = build_index(config, return_searcher=True)
+        engine = HocVuEngine(config, searcher)
+    else:
+        engine = HocVuEngine.load(config, INDEX_JSON)
+    server = ThreadingHTTPServer((host, port), HocVuHandler)
     SERVER_META.write_text(json.dumps({"pid": os.getpid(), "port": port}), encoding="utf-8")
     url = f"http://{host}:{port}"
     print(f"HocVu AI is running at {url}")

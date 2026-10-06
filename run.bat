@@ -10,7 +10,7 @@ for /f "delims=" %%P in ('where python 2^>nul') do if not defined PYTHON_EXE set
 if not defined PYTHON_EXE goto no_python
 
 :start
-set "HV_SEMANTIC=0"
+if not defined HV_SEMANTIC set "HV_SEMANTIC=1"
 echo Starting HocVu AI at http://127.0.0.1:8000 ...
 echo Keep this window open while using the project. Press Ctrl+C to stop.
 "%PYTHON_EXE%" manage.py serve --open %*

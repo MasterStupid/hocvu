@@ -1,11 +1,13 @@
 # HocVu AI
 
-HocVu AI is a Vietnamese, grounded voice assistant for looking up academic regulations. It implements the research proposal's core pipeline: a regulation knowledge base, chunking and BM25 retrieval, citation-backed answers with abstention, multi-turn session storage, browser voice input/output, feedback capture, and a repeatable retrieval evaluation.
+HocVu AI is a Vietnamese, grounded voice assistant for looking up academic regulations. It implements the research proposal's core pipeline: a regulation knowledge base, chunking and retrieval, citation-backed answers with abstention, multi-turn session storage, browser voice input/output, and a repeatable retrieval evaluation.
 
 ## Run locally
 
 On Windows, the quickest option is to double-click `run.bat`. It opens the
-application in the browser and uses fast BM25 retrieval. Keep its terminal
+application in the browser. Local semantic retrieval is enabled by default;
+the first run may download the embedding model. Set `HV_SEMANTIC=0` before
+starting it when you explicitly want BM25-only retrieval. Keep its terminal
 window open while using the project; press `Ctrl+C` there to stop it.
 
 ```powershell
@@ -83,7 +85,7 @@ Student text or voice
 Intent and safety gate -> Vietnamese tokenization -> Hybrid BM25 + AI embedding retrieval
                                                    -> grounded answer + citations
         ^                                                               |
-        +------------------- SQLite session and feedback <--------------+
+        +------------------------ SQLite session <---------------------+
                                                                         |
                                                             browser TTS v
 ```

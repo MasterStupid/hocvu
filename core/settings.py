@@ -7,6 +7,7 @@ hoặc file .env. Không cần bất kỳ thư viện bên thứ ba nào.
 from __future__ import annotations
 
 import os
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -39,19 +40,27 @@ def _e(name: str, fallback: str) -> str:
 def _i(name: str, fallback: int) -> int:
     try:
         return int(_e(name, str(fallback)))
-    except ValueError:
-        return fallback
+    except ValueError as exc:
+        raise ValueError(f"{name} phải là số nguyên hợp lệ.") from exc
 
 
 def _f(name: str, fallback: float) -> float:
     try:
-        return float(_e(name, str(fallback)))
-    except ValueError:
-        return fallback
+        value = float(_e(name, str(fallback)))
+    except ValueError as exc:
+        raise ValueError(f"{name} phải là số thực hợp lệ.") from exc
+    if not math.isfinite(value):
+        raise ValueError(f"{name} phải là số hữu hạn.")
+    return value
 
 
 def _b(name: str, fallback: bool) -> bool:
-    return _e(name, str(fallback)).strip().lower() not in {"0", "false", "no", "off"}
+    value = _e(name, str(fallback)).strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} phải là true/false (hoặc 1/0).")
 
 
 @dataclass(frozen=False)
@@ -74,6 +83,7 @@ class AppConfig:
     # ── Generation ──────────────────────────────
     confidence_floor: float = 0.28
     semantic_floor: float = 0.20
+    lexical_coverage_floor: float = 0.50
     max_units: int = 2
 
     # ── Session / Dialogue ──────────────────────
@@ -110,6 +120,7 @@ class AppConfig:
             "semantic_enabled": self.semantic_enabled,
             "confidence_floor": self.confidence_floor,
             "semantic_floor": self.semantic_floor,
+            "lexical_coverage_floor": self.lexical_coverage_floor,
             "llm": self.llm_backend,
             "stt": self.stt_backend,
             "tts": self.tts_backend,
@@ -118,7 +129,7 @@ class AppConfig:
 
 def load_config() -> AppConfig:
     """Nạp cấu hình từ env → fallback mặc định."""
-    return AppConfig(
+    config = AppConfig(
         top_k=_i("HV_TOP_K", 5),
         bm25_pool=_i("HV_BM25_POOL", 15),
         vec_pool=_i("HV_VEC_POOL", 15),
@@ -130,6 +141,7 @@ def load_config() -> AppConfig:
         overlap_sents=_i("HV_OVERLAP_SENTS", 1),
         confidence_floor=_f("HV_CONFIDENCE_FLOOR", 0.28),
         semantic_floor=_f("HV_SEMANTIC_FLOOR", 0.20),
+        lexical_coverage_floor=_f("HV_LEXICAL_COVERAGE_FLOOR", 0.50),
         max_units=_i("HV_MAX_UNITS", 2),
         max_history=_i("HV_MAX_HISTORY", 8),
         llm_backend=_e("HV_LLM", "local").lower(),
@@ -143,6 +155,13 @@ def load_config() -> AppConfig:
         tts_voice=_e("TTS_VOICE", "vi-VN-HoaiMyNeural"),
         seed=_i("HV_SEED", 20262027),
     )
+    for name in ("top_k", "bm25_pool", "vec_pool", "embed_dim", "max_chunk_chars", "max_units", "max_history"):
+        if getattr(config, name) <= 0:
+            raise ValueError(f"{name} phải lớn hơn 0.")
+    for name in ("bm25_weight", "confidence_floor", "semantic_floor", "lexical_coverage_floor"):
+        if not 0 <= getattr(config, name) <= 1:
+            raise ValueError(f"{name} phải nằm trong khoảng 0 đến 1.")
+    return config
 
 
 def ensure_dirs() -> None:

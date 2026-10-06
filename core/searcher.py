@@ -13,6 +13,9 @@ from .semantic import SemanticEncoder
 from .settings import MODELS
 
 
+INDEX_SCHEMA_VERSION = 2
+
+
 class HybridSearcher:
     def __init__(self, config):
         self.config = config
@@ -46,11 +49,19 @@ class HybridSearcher:
 
     def save(self, path: str) -> None:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-        Path(path).write_text(json.dumps({"chunks": [chunk.to_dict() for chunk in self.chunks]}, ensure_ascii=False, indent=2), encoding="utf-8")
+        Path(path).write_text(json.dumps({
+            "schema_version": INDEX_SCHEMA_VERSION,
+            "chunks": [chunk.to_dict() for chunk in self.chunks],
+        }, ensure_ascii=False, indent=2), encoding="utf-8")
 
     @classmethod
     def load(cls, path: str, config):
         data = json.loads(Path(path).read_text(encoding="utf-8"))
+        schema_version = data.get("schema_version", 1)
+        if schema_version not in {1, INDEX_SCHEMA_VERSION}:
+            raise ValueError(f"Index schema version {schema_version} không được hỗ trợ. Hãy chạy lại 'python manage.py ingest'.")
+        if not isinstance(data.get("chunks"), list):
+            raise ValueError("Index không hợp lệ: thiếu danh sách chunks. Hãy chạy lại 'python manage.py ingest'.")
         searcher = cls(config)
         searcher.build([Chunk.from_dict(item) for item in data.get("chunks", [])])
         return searcher
@@ -102,6 +113,20 @@ class HybridSearcher:
         return results[: top_k or self.config.top_k]
 
     @staticmethod
+    def lexical_coverage(query: str, hit: RankedChunk) -> float:
+        """Fraction of meaningful query terms directly supported by a hit.
+
+        Raw BM25 values depend on corpus size and cannot be used as a global
+        confidence scale. Coverage is stable and lets the engine abstain from
+        a document that merely shares one generic word with a long query.
+        """
+        query_terms = set(content_tokens(query))
+        if not query_terms:
+            return 0.0
+        evidence_terms = set(content_tokens(f"{hit.chunk.art_heading} {hit.chunk.text}"))
+        return len(query_terms & evidence_terms) / len(query_terms)
+
+    @staticmethod
     def _is_valid(chunk: Chunk, ref_date: str | None) -> bool:
         if not ref_date:
             return True
@@ -111,4 +136,5 @@ class HybridSearcher:
             end = datetime.strptime(chunk.valid_until, "%Y-%m-%d").date() if chunk.valid_until else date.max
             return start <= at <= end
         except ValueError:
-            return True
+            # Invalid metadata must never make a document appear valid.
+            return False

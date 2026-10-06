@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from enum import Enum
+import re
 
 from .nlp import normalize, strip_accents
 
@@ -20,7 +21,7 @@ class Classifier:
     _academic = (
         "quy che", "hoc vu", "tin chi", "hoc phan", "dang ky", "huy hoc",
         "bao luu", "tot nghiep", "diem", "canh bao", "ky luat", "khen thuong",
-        "thuc tap", "do an", "hoc lai", "hoc bong", "nghi hoc",
+        "thuc tap", "do an", "thi", "hoc lai", "hoc bong", "nghi hoc",
         "tai lieu", "de tai", "muc tieu", "phuong phap", "kien truc", "rag",
         "stt", "tts", "bao cao", "chuong", "noi dung", "ket qua", "he thong",
         "truy xuat", "chi so", "thu nghiem", "ket luan", "phan mem",
@@ -31,8 +32,13 @@ class Classifier:
 
     def classify(self, question: str) -> Intent:
         q = strip_accents(normalize(question)).lower()
-        if any(word in q for word in self._toxic):
+        def has_phrase(phrase: str) -> bool:
+            return bool(re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", q))
+
+        if any(has_phrase(word) for word in self._toxic):
             return Intent.TOXIC
-        if len(q.split()) <= 5 and any(word in q for word in self._greetings):
+        # Phrase boundaries matter: the greeting "hi" must not turn "thi
+        # lại" (a core academic query) into a greeting.
+        if len(q.split()) <= 5 and any(has_phrase(word) for word in self._greetings):
             return Intent.GREETING
-        return Intent.ACADEMIC_RULES if any(word in q for word in self._academic) else Intent.OUT_OF_SCOPE
+        return Intent.ACADEMIC_RULES if any(has_phrase(word) for word in self._academic) else Intent.OUT_OF_SCOPE

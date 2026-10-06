@@ -12,21 +12,24 @@ from .generator import DECLINE_MSG, Generator
 from .llm import GroundedLLM, LLMError
 from .models import Response
 from .searcher import HybridSearcher
-from .scenarios import expand_retrieval_query, is_attendance_training_scenario
+from .scenarios import expand_retrieval_query, is_attendance_training_scenario, is_contextual_follow_up
 from .session import SessionStore
 from .settings import AUD, DOCS, INDEX_JSON, SESSION_DB, AppConfig
 from .splitter import split_regulation
 from .voice import VoiceManager
 
 
-def build_index(config: AppConfig) -> dict:
+def build_index(config: AppConfig, *, return_searcher: bool = False):
     repository = DocumentRepository(DOCS)
     corpus = build_corpus(seed=config.seed) + repository.regulations()
     chunks = [chunk for regulation in corpus for chunk in split_regulation(regulation, config.max_chunk_chars, config.overlap_sents)]
     searcher = HybridSearcher(config)
     searcher.build(chunks)
     searcher.save(str(INDEX_JSON))
-    return {"chunks": len(chunks), "documents": len(corpus), "uploaded": len(repository.list())}
+    result = {"chunks": len(chunks), "documents": len(corpus), "uploaded": len(repository.list())}
+    # Reuse this instance after upload/reindex. Loading a just-saved index
+    # would build semantic embeddings a second time on the same corpus.
+    return (result, searcher) if return_searcher else result
 
 
 class HocVuEngine:
@@ -44,10 +47,13 @@ class HocVuEngine:
     def load(cls, config: AppConfig, index_path: Path):
         return cls(config, HybridSearcher.load(str(index_path), config))
 
-    def ask(self, question: str, session_id: str, ref_date: str | None = None, with_audio: bool = False, use_context: bool = True, use_ai: bool = False) -> Response:
+    def ask(self, question: str, session_id: str, ref_date: str | None = None, with_audio: bool = False, use_context: bool = True, use_ai: bool = False, record_session: bool = True) -> Response:
         started = time.perf_counter()
         question = (question or "").strip()
         intent = self.classifier.classify(question)
+        follow_up = intent == Intent.OUT_OF_SCOPE and use_context and is_contextual_follow_up(question) and bool(self.session.get_history(session_id, 1))
+        if follow_up:
+            intent = Intent.ACADEMIC_RULES
         refused, reason, references, hits, confidence = False, "", [], [], 0.0
         ai_status = "off"
         if not question:
@@ -61,17 +67,28 @@ class HocVuEngine:
         else:
             scenario = is_attendance_training_scenario(question)
             retrieval_question = expand_retrieval_query(question)
+            if use_context:
+                retrieval_question, _ = self.session.contextualize(session_id, retrieval_question)
             # Situation questions may need evidence from two regulations (for
             # example attendance and training score), so retain a wider pool
             # before the scenario generator selects only relevant passages.
             hits = self.searcher.search(retrieval_question, max(self.config.top_k, 20) if scenario else self.config.top_k, ref_date or date.today().isoformat())
             using_semantic = self.searcher.provider != "bm25"
-            confidence = (min(1.0, hits[0].score) if using_semantic else min(1.0, hits[0].score / 4.0)) if hits else 0.0
-            floor = self.config.semantic_floor if using_semantic else self.config.confidence_floor
-            if not hits or hits[0].score < floor:
+            lexical_coverage = self.searcher.lexical_coverage(retrieval_question, hits[0]) if hits else 0.0
+            confidence = min(1.0, hits[0].score) if using_semantic and hits else lexical_coverage
+            floor = self.config.semantic_floor if using_semantic else self.config.lexical_coverage_floor
+            # Scenario expansion deliberately adds the regulation vocabulary
+            # needed to retrieve both attendance and training-score evidence.
+            if scenario and not using_semantic:
+                floor = min(floor, 0.30)
+            if follow_up and not using_semantic:
+                # The pronouns in a short follow-up are intentionally not in
+                # the document; its earlier turn supplies the actual topic.
+                floor = min(floor, 0.40)
+            if not hits or confidence < floor:
                 answer, refused, reason = DECLINE_MSG, True, "Insufficient grounded context"
             else:
-                scenario_answer = self.generator.generate_attendance_training_scenario(hits) if scenario else None
+                scenario_answer = self.generator.generate_attendance_training_scenario(hits, question) if scenario else None
                 answer, references = scenario_answer or self.generator.generate(question, hits)
                 refused = not bool(references)
                 reason = "Insufficient grounded context" if refused else ""
@@ -87,9 +104,10 @@ class HocVuEngine:
             refused=refused, refusal_reason=reason, intent=intent.value, retrieved=hits,
             audio_url=None, providers={"retrieval": self.searcher.provider, "voice": "browser", "llm": ai_status},
             timing={"total_ms": (time.perf_counter() - started) * 1000}, session_id=session_id,
-            metadata={"grounded": bool(references), "ai_mode": ai_status},
+            metadata={"grounded": bool(references), "ai_mode": ai_status, "lexical_coverage": round(lexical_coverage if 'lexical_coverage' in locals() else 0.0, 4)},
         )
-        self.session.add_turn(session_id, question, answer, intent.value, references[0].aid if references else "", references[0].rid if references else "")
+        if record_session:
+            self.session.add_turn(session_id, question, answer, intent.value, references[0].aid if references else "", references[0].rid if references else "")
         return response
 
     def ask_voice(self, audio_path: str, session_id: str, with_audio: bool = True, ref_date: str | None = None) -> Response:
@@ -121,14 +139,12 @@ class HocVuEngine:
 
     def add_document(self, filename: str, content: bytes, use_ocr: bool = False, metadata: dict | None = None) -> dict:
         item = self.documents.add(filename, content, use_ocr=use_ocr, metadata=metadata)
-        build_index(self.config)
-        self.searcher = HybridSearcher.load(str(INDEX_JSON), self.config)
+        _, self.searcher = build_index(self.config, return_searcher=True)
         return item
 
     def remove_document(self, item_id: str) -> None:
         self.documents.remove(item_id)
-        build_index(self.config)
-        self.searcher = HybridSearcher.load(str(INDEX_JSON), self.config)
+        _, self.searcher = build_index(self.config, return_searcher=True)
 
     def document_text(self, item_id: str) -> dict:
         result = self.documents.get_text(item_id)
@@ -137,8 +153,7 @@ class HocVuEngine:
         return result
 
     def rebuild_index(self) -> dict:
-        result = build_index(self.config)
-        self.searcher = HybridSearcher.load(str(INDEX_JSON), self.config)
+        result, self.searcher = build_index(self.config, return_searcher=True)
         return result
 
     def list_sources(self) -> list[dict]:

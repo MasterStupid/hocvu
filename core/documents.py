@@ -91,7 +91,7 @@ class DocumentRepository:
             raise DocumentError("Tệp ảnh cần bật tùy chọn OCR trước khi tải lên.")
         if not content or len(content) > self.max_bytes:
             raise DocumentError("Tệp phải có dung lượng từ 1 byte đến 25 MB.")
-        if suffix == ".pdf" and not content.startswith(b"%PDF-"):
+        if suffix == ".pdf" and not content.lstrip().startswith(b"%PDF-"):
             raise DocumentError("Tệp không phải PDF hợp lệ.")
         if suffix == ".docx" and content[:2] != b"PK":
             raise DocumentError("Tệp không phải DOCX hợp lệ.")
@@ -270,7 +270,7 @@ class DocumentRepository:
             style = (style_node.get(value_attr, "") if style_node is not None else "").lower()
             if not text or style.startswith("toc"):
                 continue
-            heading = re.fullmatch(r"heading([1-4])", style)
+            heading = re.fullmatch(r"heading([1-6])", style)
             blocks.append(f"{'#' * int(heading.group(1))} {text}" if heading else text)
         for number, image in enumerate(embedded_images, start=1):
             recognized = self._ocr_pil_image_from_bytes(image).strip()
@@ -298,7 +298,9 @@ class DocumentRepository:
             regulations.append(Regulation(
                 rid=entry["rid"], title=entry["title"], category="Tài liệu tải lên",
                 version=f"Quyết định {decision}" if decision else "Tải lên",
-                valid_from=entry.get("document_date") or date.today().isoformat(), valid_until=None,
+                # Preserve a stable fallback for documents without an entered
+                # effective date; reindexing must not change their validity.
+                valid_from=entry.get("document_date") or entry["uploaded_at"][:10], valid_until=None,
                 issuer="Người quản lý hệ thống", articles=articles,
             ))
         if upgraded:

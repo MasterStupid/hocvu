@@ -35,7 +35,7 @@ def main():
     
     if args.command == "doctor":
         print("Checking environment...")
-        print(f"Config loaded: {config}")
+        print(f"Config loaded: {config.summary()}")
         print(f"Index exists: {INDEX_JSON.exists()}")
         
     elif args.command == "generate":
@@ -61,12 +61,15 @@ def main():
         engine = HocVuEngine.load(config, INDEX_JSON)
         session_id = str(uuid.uuid4())
         print("HocVu AI Chat (type 'exit' to quit)")
-        while True:
-            q = input("\nBạn: ")
-            if q.lower() in ('exit', 'quit'):
-                break
-            resp = engine.ask(q, session_id)
-            print(f"AI: {resp.answer}")
+        try:
+            while True:
+                q = input("\nBạn: ")
+                if q.lower() in ('exit', 'quit'):
+                    break
+                resp = engine.ask(q, session_id)
+                print(f"AI: {resp.answer}")
+        except (EOFError, KeyboardInterrupt):
+            print("\nĐã kết thúc hội thoại.")
             
     elif args.command == "serve":
         serve_main(host=args.host, port=args.port, verbose=args.verbose, open_browser=args.open_browser)

@@ -1,9 +1,7 @@
 """Mô hình dữ liệu HocVu AI — dataclass thuần, JSON-serializable.
 
-Thiết kế hoàn toàn mới so với bản gốc:
-- Dùng tên trường tiếng Anh ngắn gọn, nhất quán
-- Hỗ trợ feedback (thumbs up/down)
-- Tách rõ tầng: Source → Index → Retrieval → Response
+Thiết kế dùng tên trường ngắn gọn, nhất quán và tách rõ tầng:
+Source → Index → Retrieval → Response.
 """
 
 from __future__ import annotations
@@ -185,7 +183,6 @@ class Response:
     providers: dict[str, str] = field(default_factory=dict)
     timing: dict[str, float] = field(default_factory=dict)
     session_id: str = ""
-    feedback: int | None = None      # 1=up, -1=down, None=chưa đánh giá
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
@@ -203,7 +200,6 @@ class Response:
             "providers": self.providers,
             "timing": {k: round(v, 2) for k, v in self.timing.items()},
             "session_id": self.session_id,
-            "feedback": self.feedback,
             "metadata": self.metadata,
         }
 

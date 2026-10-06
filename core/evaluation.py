@@ -18,7 +18,8 @@ def evaluate(engine, output_path: Path) -> dict:
     rows = []
     grounded_correct = refusals_correct = 0
     for item in questions:
-        response = engine.ask(item.question, session_id=f"evaluation-{item.qid}")
+        # Evaluation must not pollute real user dialogue history.
+        response = engine.ask(item.question, session_id=f"evaluation-{item.qid}", record_session=False)
         cited = {reference.rid for reference in response.references}
         if item.should_refuse:
             correct = response.refused

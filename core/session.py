@@ -7,7 +7,8 @@ class SessionStore:
         self._init_db()
 
     def _init_db(self):
-        with sqlite3.connect(self.db_path) as conn:
+        conn = sqlite3.connect(self.db_path)
+        try:
             cursor = conn.cursor()
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS turns (
@@ -17,14 +18,16 @@ class SessionStore:
                     answer TEXT NOT NULL,
                     intent TEXT,
                     article_id TEXT,
-                    rid TEXT,
-                    feedback INTEGER DEFAULT 0
+                    rid TEXT
                 )
             ''')
             conn.commit()
+        finally:
+            conn.close()
 
     def add_turn(self, session_id: str, question: str, answer: str, intent: str, article_id: str, rid: str):
-        with sqlite3.connect(self.db_path) as conn:
+        conn = sqlite3.connect(self.db_path)
+        try:
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT INTO turns (session_id, question, answer, intent, article_id, rid)
@@ -32,9 +35,12 @@ class SessionStore:
             ''', (session_id, question, answer, intent, article_id, rid))
             conn.commit()
             return cursor.lastrowid
+        finally:
+            conn.close()
 
     def get_history(self, session_id: str, limit: int) -> list[dict]:
-        with sqlite3.connect(self.db_path) as conn:
+        conn = sqlite3.connect(self.db_path)
+        try:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute('''
@@ -45,6 +51,8 @@ class SessionStore:
             ''', (session_id, limit))
             rows = cursor.fetchall()
             return [dict(row) for row in reversed(rows)]
+        finally:
+            conn.close()
 
     def contextualize(self, session_id: str, question: str) -> tuple[str, str]:
         history = self.get_history(session_id, 3)

@@ -12,6 +12,14 @@ def is_attendance_training_scenario(question: str) -> bool:
     return mentions_absence and mentions_class_time and mentions_training
 
 
+def is_contextual_follow_up(question: str) -> bool:
+    """Recognise short references to the immediately preceding topic only."""
+    q = strip_accents(normalize(question)).lower()
+    return any(q.startswith(prefix) for prefix in (
+        "con dieu kien", "con truong hop", "the con", "noi ro hon", "cu the hon",
+    ))
+
+
 def expand_retrieval_query(question: str) -> str:
     """Add concepts implied by a student scenario, without altering its meaning."""
     if is_attendance_training_scenario(question):

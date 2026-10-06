@@ -5,6 +5,8 @@ adapter must retain the retrieved passages and their citations.
 """
 from __future__ import annotations
 
+import re
+
 from .models import Reference, RankedChunk
 from .nlp import content_tokens
 
@@ -55,7 +57,7 @@ class Generator:
         references = [Reference(
             rid=hit.chunk.rid, reg_title=hit.chunk.reg_title, aid=hit.chunk.aid,
             art_heading=hit.chunk.art_heading, clause_ids=hit.chunk.clause_ids,
-            excerpt=hit.chunk.text[:280],
+            excerpt=_excerpt(hit.chunk.text),
         ) for hit in selected]
         # The article/clause identifiers are retained in `references` for
         # traceability, but are jargon for students reading the reply. Chunks
@@ -63,7 +65,7 @@ class Generator:
         answer = "\n\n".join(hit.chunk.text for hit in selected)
         return answer, references
 
-    def generate_attendance_training_scenario(self, hits: list[RankedChunk]) -> tuple[str, list[Reference]] | None:
+    def generate_attendance_training_scenario(self, hits: list[RankedChunk], question: str = "") -> tuple[str, list[Reference]] | None:
         """Explain an absence/discipline scenario without inventing a penalty."""
         attendance = next((hit for hit in hits if "vắng mặt" in hit.chunk.text.lower() and "%" in hit.chunk.text), None)
         course_score = next((hit for hit in hits if "điểm chuyên cần chiếm" in hit.chunk.text.lower()), None)
@@ -75,17 +77,26 @@ class Generator:
         references = [Reference(
             rid=hit.chunk.rid, reg_title=hit.chunk.reg_title, aid=hit.chunk.aid,
             art_heading=hit.chunk.art_heading, clause_ids=hit.chunk.clause_ids,
-            excerpt=hit.chunk.text[:280],
+            excerpt=_excerpt(hit.chunk.text),
         ) for hit in selected]
-        parts = [
-            "Nghỉ 3 tiết có thể ảnh hưởng đến tiêu chí ý thức học tập và chuyên cần khi chấm điểm rèn luyện; tiêu chí này tối đa 30 điểm.",
-        ]
+        absent = re.search(r"\b(?:nghỉ|vắng mặt|bỏ học)\s+(\d+(?:[.,]\d+)?)\s+(tiết|buổi)\b", question, re.IGNORECASE)
+        stated_absence = f"Việc nghỉ {absent.group(1)} {absent.group(2)}" if absent else "Việc nghỉ học"
+        parts = [f"{stated_absence} có thể ảnh hưởng đến tiêu chí ý thức học tập và chuyên cần khi chấm điểm rèn luyện; tiêu chí này tối đa 30 điểm."]
         if course_score:
             parts.append("Với học phần, điểm chuyên cần cũng chiếm 10% tổng điểm và được đánh giá qua mức độ tham gia trên lớp.")
         if exact_deduction:
             parts.append(f"Văn bản có nêu mức xử lý trực tiếp cho trường hợp vắng/nghỉ học: {exact_deduction.chunk.text.splitlines()[-1]}")
         else:
-            parts.append("Tuy nhiên, tài liệu hiện có không quy định mức trừ điểm rèn luyện cố định chỉ vì nghỉ 3 tiết, nên chưa thể kết luận bạn bị trừ bao nhiêu điểm. Mức cụ thể còn phụ thuộc quy định điểm danh/chấm rèn luyện của lớp hoặc khoa.")
+            parts.append("Tuy nhiên, tài liệu hiện có không quy định mức trừ điểm rèn luyện cố định chỉ theo số tiết vắng mặt bạn nêu, nên chưa thể kết luận bạn bị trừ bao nhiêu điểm. Mức cụ thể còn phụ thuộc quy định điểm danh/chấm rèn luyện của lớp hoặc khoa.")
         if attendance:
             parts.append("Ngưỡng được nêu rõ là vắng quá 25% tổng số tiết của một học phần sẽ bị cấm thi cuối kỳ.")
         return "\n\n".join(parts), references
+
+
+def _excerpt(text: str, limit: int = 280) -> str:
+    """Return a readable citation preview without silently cutting a word."""
+    compact = " ".join(text.split())
+    if len(compact) <= limit:
+        return compact
+    boundary = compact.rfind(" ", 0, limit - 3)
+    return f"{compact[:boundary if boundary > 0 else limit - 3].rstrip()}..."

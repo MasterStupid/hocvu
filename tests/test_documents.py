@@ -53,6 +53,20 @@ class DocumentRepositoryTests(unittest.TestCase):
         self.assertEqual(entry["format"], "PNG")
         self.assertTrue(entry["ocr"])
 
+    def test_uploaded_date_is_stable_when_effective_date_is_not_provided(self):
+        with patch.object(self.repository, "extract", return_value=("Nội dung quy định đủ dài để lập chỉ mục an toàn.", 1)):
+            entry = self.repository.add("van_ban.pdf", b" \n%PDF-1.7", metadata={})
+        regulation = self.repository.regulations()[0]
+        self.assertEqual(regulation.valid_from, entry["uploaded_at"][:10])
+
+    def test_docx_heading_level_five_is_retained(self):
+        source = self.root / "heading.docx"
+        document_xml = '''<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:pPr><w:pStyle w:val="Heading5"/></w:pPr><w:r><w:t>Mục quan trọng</w:t></w:r></w:p><w:p><w:r><w:t>Nội dung điều khoản đầy đủ.</w:t></w:r></w:p></w:body></w:document>'''.encode("utf-8")
+        with __import__("zipfile").ZipFile(source, "w") as archive:
+            archive.writestr("word/document.xml", document_xml)
+        text = self.repository._extract_docx(source)
+        self.assertIn("##### Mục quan trọng", text)
+
 
 if __name__ == "__main__":
     unittest.main()
