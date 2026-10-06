@@ -58,6 +58,9 @@ class RagPipelineTests(unittest.TestCase):
         self.assertNotIn("3 tiết", answer)
         self.assertGreaterEqual(len(references), 2)
 
+    def test_attendance_scenario_does_not_match_nghiep(self):
+        self.assertFalse(is_attendance_training_scenario("Nghiệp vụ điểm rèn luyện có 3 tiết thực hành"))
+
     def test_bm25_refuses_a_query_with_only_generic_overlap(self):
         engine = HocVuEngine(self.config, self.searcher)
         engine.session = MagicMock()
