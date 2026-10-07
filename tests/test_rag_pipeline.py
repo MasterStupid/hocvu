@@ -146,6 +146,7 @@ class RagPipelineTests(unittest.TestCase):
         response = engine.ask("Con vịt có biết lập trình không?", "refusal-card")
         self.assertTrue(response.refused)
         self.assertEqual(len(response.card["suggestions"]), 3)
+        self.assertNotIn("Con vịt có biết lập trình không?", response.card["suggestions"])
         suggested = {question for topic in engine.suggestion_topics() for question in topic["questions"]}
         self.assertTrue(set(response.card["suggestions"]).issubset(suggested))
 

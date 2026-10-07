@@ -35,7 +35,11 @@ def build_suggestion_topics(seed: int) -> list[dict]:
 
 def best_suggestions(question: str, topics: list[dict], limit: int = 3) -> list[str]:
     query_terms = set(content_tokens(question))
-    candidates = [candidate for topic in topics for candidate in topic["questions"]]
+    question_key = " ".join(content_tokens(question))
+    candidates = [
+        candidate for topic in topics for candidate in topic["questions"]
+        if " ".join(content_tokens(candidate)) != question_key
+    ]
     scored = sorted(
         candidates,
         key=lambda candidate: (-len(query_terms.intersection(content_tokens(candidate))), candidate),

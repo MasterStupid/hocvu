@@ -6,7 +6,7 @@
     theme: localStorage.getItem('hv_theme') || 'light',
     aiEnabled: localStorage.getItem('hv_ai_enabled') === 'true',
     ttsEnabled: false, liveEnabled: false, isLoading: false, isSpeaking: false,
-    recognition: null, recognitionRunning: false, turn: 0, listenTimer: null, transcript: [], speechRetry: false,
+    recognition: null, recognitionRunning: false, turn: 0, listenTimer: null, transcript: [], speechRetry: false, livePaused: false,
   };
   localStorage.setItem('hv_session_id', state.sessionId);
 
@@ -84,7 +84,7 @@
   }
   function scheduleListening() {
     clearTimeout(state.listenTimer);
-    if (!state.liveEnabled || state.isLoading || state.isSpeaking || state.recognitionRunning) return;
+    if (!state.liveEnabled || state.livePaused || state.isLoading || state.isSpeaking || state.recognitionRunning) return;
     setLiveStatus('Live sẵn sàng lắng nghe', 'listening');
     state.listenTimer = setTimeout(() => startListening(true), 450);
   }
@@ -130,7 +130,7 @@
     speechSynthesis.cancel(); state.isSpeaking = true; setLiveStatus('AI đang đọc câu trả lời', 'working');
     const utterance = new SpeechSynthesisUtterance(speechText(text)); utterance.lang = 'vi-VN'; utterance.rate = state.liveEnabled ? .94 : 1;
     const voice = preferredVietnameseVoice(); if (voice) utterance.voice = voice;
-    const done = () => { state.isSpeaking = false; if (!state.liveEnabled) setLiveStatus('Sẵn sàng nhập câu hỏi'); scheduleListening(); };
+    const done = () => { state.isSpeaking = false; if (!state.liveEnabled) setLiveStatus('Sẵn sàng nhập câu hỏi'); else state.livePaused = false; scheduleListening(); };
     utterance.onend = done; utterance.onerror = done; speechSynthesis.speak(utterance);
   }
   function copyAnswer(button, answer) {
@@ -175,10 +175,11 @@
   }
   function startListening(fromLive = false) {
     if (!state.recognition || state.recognitionRunning || state.isLoading || state.isSpeaking) return;
+    if (!fromLive) state.livePaused = false;
     try { state.recognition.start(); } catch (_) { if (fromLive) scheduleListening(); }
   }
   function stopLive() {
-    state.liveEnabled = false; clearTimeout(state.listenTimer); speechSynthesis?.cancel();
+    state.liveEnabled = false; state.livePaused = false; clearTimeout(state.listenTimer); speechSynthesis?.cancel();
     if (state.recognitionRunning) state.recognition.stop(); updateFeatureControls(); setLiveStatus('Sẵn sàng nhập câu hỏi');
   }
   function setupVoice() {
@@ -189,13 +190,19 @@
     recognition.onend = () => { state.recognitionRunning = false; dom.mic.classList.remove('active'); dom.mic.setAttribute('aria-label', 'Nhập bằng giọng nói'); scheduleListening(); };
     recognition.onerror = (event) => {
       if (event.error === 'not-allowed' || event.error === 'service-not-allowed') { stopLive(); appendError('Trình duyệt chưa được cấp quyền micro. Hãy cho phép micro rồi bật Live lại.'); }
-      else if (event.error !== 'aborted' && event.error !== 'no-speech') appendError('Không thể nhận dạng giọng nói. Bạn có thể nói lại hoặc nhập bằng văn bản.');
+      else if (event.error === 'no-speech') {
+        state.livePaused = state.liveEnabled;
+        setLiveStatus(state.liveEnabled ? 'Không nghe thấy lời nói. Nhấn micro để nói tiếp.' : 'Không nghe thấy lời nói.');
+      } else if (event.error !== 'aborted') {
+        state.livePaused = state.liveEnabled;
+        appendError('Không thể nhận dạng giọng nói. Hãy bấm micro để thử lại hoặc nhập bằng văn bản.');
+      }
     };
     recognition.onresult = (event) => {
       let transcript = ''; let isFinal = false;
       for (let index = event.resultIndex; index < event.results.length; index += 1) { transcript += event.results[index][0].transcript; isFinal ||= event.results[index].isFinal; }
       dom.input.value = transcript.trim(); updateComposer();
-      if (isFinal && transcript.trim()) { recognition.stop(); send(transcript); }
+      if (isFinal && transcript.trim()) { state.livePaused = false; recognition.stop(); send(transcript); }
     };
     state.recognition = recognition;
   }
@@ -241,7 +248,7 @@
     dom.exportConversation.addEventListener('click', exportConversation);
     dom.live.addEventListener('click', () => {
       if (state.liveEnabled) { stopLive(); appendSystem('Đã dừng hội thoại Live.'); return; }
-      state.liveEnabled = true; state.ttsEnabled = true; updateFeatureControls(); appendSystem('Chế độ Live đã bật. Tôi sẽ lắng nghe, trả lời và tự mở micro cho lượt tiếp theo. Bạn có thể bắt đầu nói.'); speak('Chế độ hội thoại Live đã bật. Bạn có thể bắt đầu nói.');
+      state.liveEnabled = true; state.livePaused = false; state.ttsEnabled = true; updateFeatureControls(); appendSystem('Chế độ Live đã bật. Tôi sẽ lắng nghe, trả lời và tự mở micro cho lượt tiếp theo. Bạn có thể bắt đầu nói.'); speak('Chế độ hội thoại Live đã bật. Bạn có thể bắt đầu nói.');
     });
     dom.input.addEventListener('input', updateComposer);
     dom.input.addEventListener('keydown', (event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); send(); } });
