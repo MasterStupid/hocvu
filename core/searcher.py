@@ -9,7 +9,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from .models import Chunk, RankedChunk
-from .nlp import content_tokens
+from .nlp import content_tokens, ngrams
 from .semantic import SemanticEncoder
 from .settings import MODELS
 
@@ -18,6 +18,7 @@ INDEX_SCHEMA_VERSION = 2
 
 
 class HybridSearcher:
+    _generic_institutional_terms = {"dai", "hoc", "truong", "sinh", "vien", "quy", "dinh", "van", "ban"}
     def __init__(self, config):
         self.config = config
         self.chunks: list[Chunk] = []
@@ -33,7 +34,7 @@ class HybridSearcher:
 
     def build(self, chunks: list[Chunk]) -> None:
         self.chunks = chunks
-        token_lists = [content_tokens(chunk.text + " " + chunk.art_heading) for chunk in chunks]
+        token_lists = [content_tokens(f"{chunk.version} {chunk.reg_title} {chunk.art_heading} {chunk.text}") for chunk in chunks]
         self._freqs = [Counter(tokens) for tokens in token_lists]
         self._avg_len = sum(map(len, token_lists)) / max(1, len(token_lists))
         df = Counter(token for freq in self._freqs for token in freq)
@@ -89,7 +90,7 @@ class HybridSearcher:
         searcher.build(chunks)
         return searcher
 
-    def search(self, query: str, top_k: int | None = None, ref_date: str | None = None) -> list[RankedChunk]:
+    def search(self, query: str, top_k: int | None = None, ref_date: str | None = None, include_expired: bool = False) -> list[RankedChunk]:
         if not self.chunks:
             return []
         q_tokens = content_tokens(query)
@@ -108,7 +109,7 @@ class HybridSearcher:
         candidates = []
         k1, b = 1.5, 0.75
         for index, (chunk, freq) in enumerate(zip(self.chunks, self._freqs)):
-            if not self._is_valid(chunk, ref_date):
+            if not self._is_valid(chunk, ref_date, include_expired):
                 continue
             length = sum(freq.values())
             bm25 = 0.0
@@ -116,7 +117,7 @@ class HybridSearcher:
                 term_freq = freq.get(token, 0)
                 if term_freq:
                     bm25 += self._idf.get(token, 0.0) * (term_freq * (k1 + 1) / (term_freq + k1 * (1 - b + b * length / max(1, self._avg_len))) * min(q_count, 2))
-            heading_terms = set(content_tokens(chunk.art_heading))
+            heading_terms = set(content_tokens(f"{chunk.version} {chunk.reg_title} {chunk.art_heading}"))
             bm25 += sum(self._idf.get(token, 0.0) * 2.0 for token in q_freq if token in heading_terms)
             normalized_query = " ".join(q_tokens)
             normalized_text = " ".join(content_tokens(chunk.text))
@@ -143,21 +144,77 @@ class HybridSearcher:
         return results[: top_k or self.config.top_k]
 
     @staticmethod
-    def lexical_coverage(query: str, hit: RankedChunk) -> float:
+    def lexical_coverage(query: str, hit: RankedChunk | list[RankedChunk]) -> float:
         """Fraction of meaningful query terms directly supported by a hit.
 
         Raw BM25 values depend on corpus size and cannot be used as a global
         confidence scale. Coverage is stable and lets the engine abstain from
         a document that merely shares one generic word with a long query.
         """
-        query_terms = set(content_tokens(query))
+        if isinstance(hit, list):
+            return max((HybridSearcher.lexical_coverage(query, item) for item in hit), default=0.0)
+        query_tokens = list(dict.fromkeys(content_tokens(query)))
+        query_terms = set(query_tokens)
         if not query_terms:
             return 0.0
         evidence_terms = set(content_tokens(f"{hit.chunk.art_heading} {hit.chunk.text}"))
         return len(query_terms & evidence_terms) / len(query_terms)
 
     @staticmethod
-    def _is_valid(chunk: Chunk, ref_date: str | None) -> bool:
+    def phrase_coverage(query: str, hit: RankedChunk) -> float:
+        """Measure adjacent query terms for reranking only, never refusal."""
+        query_tokens = list(dict.fromkeys(content_tokens(query)))
+        evidence_tokens = content_tokens(f"{hit.chunk.art_heading} {hit.chunk.text}")
+        query_phrases = set(ngrams(query_tokens, 2))
+        if not query_phrases:
+            return 0.0
+        evidence_phrases = set(ngrams(evidence_tokens, 2))
+        return len(query_phrases & evidence_phrases) / len(query_phrases)
+
+    @staticmethod
+    def rerank_by_coverage(query: str, hits: list[RankedChunk]) -> list[RankedChunk]:
+        """Prefer the evidence that covers most of the student's question.
+
+        BM25 remains the retrieval score; coverage is a transparent second
+        stage that fixes a broad document winning over the exact clause.
+        """
+        peak_bm25 = max((hit.bm25 for hit in hits), default=0.0) or 1.0
+        query_terms = set(content_tokens(query))
+        asks_for_conditions = {"dieu", "kien"}.issubset(query_terms)
+
+        def rank(hit: RankedChunk) -> float:
+            value = (
+                (0.50 * HybridSearcher.lexical_coverage(query, hit))
+                + (0.40 * HybridSearcher.phrase_coverage(query, hit))
+                + (0.10 * (hit.bm25 / peak_bm25))
+            )
+            if asks_for_conditions:
+                evidence = hit.chunk.text.lower()
+                if any(marker in evidence for marker in ("khi ", "từ ", "tối thiểu", "không được", "phải", "đủ điều kiện")):
+                    value += 0.18
+            return value
+        return sorted(
+            hits,
+            key=rank,
+            reverse=True,
+        )
+
+    @classmethod
+    def has_specific_evidence(cls, query: str, hits: list[RankedChunk]) -> bool:
+        """Reject coincidental overlap on only university-generic words."""
+        query_terms = set(content_tokens(query)) - cls._generic_institutional_terms
+        if not query_terms:
+            return False
+        best = 0.0
+        for hit in hits:
+            evidence_terms = set(content_tokens(f"{hit.chunk.art_heading} {hit.chunk.text}"))
+            best = max(best, len(query_terms & evidence_terms) / len(query_terms))
+        return best >= 0.5
+
+    @staticmethod
+    def _is_valid(chunk: Chunk, ref_date: str | None, include_expired: bool = False) -> bool:
+        if include_expired:
+            return True
         if not ref_date:
             return True
         try:

@@ -12,6 +12,7 @@ from core.scenarios import expand_retrieval_query, is_attendance_training_scenar
 from core.settings import AppConfig
 from core.engine import HocVuEngine
 from core.models import Response
+from core.nlp import content_tokens
 from core.splitter import split_regulation
 
 
@@ -33,8 +34,14 @@ class RagPipelineTests(unittest.TestCase):
         hits = self.searcher.search("Quy định cũ có cho phép thi lại không", 10, "2026-10-04")
         self.assertTrue(all(hit.chunk.valid_until != "2026-08-31" for hit in hits))
 
-    def test_blocks_non_academic_question(self):
-        self.assertEqual(Classifier().classify("Căng tin trường có món gì?"), Intent.OUT_OF_SCOPE)
+    def test_lets_unknown_topic_reach_retrieval_then_refuses_without_evidence(self):
+        # Scope is determined by evidence, not a closed keyword allowlist.
+        self.assertEqual(Classifier().classify("Căng tin trường có món gì?"), Intent.ACADEMIC_RULES)
+        engine = HocVuEngine(self.config, self.searcher)
+        for question in ("Căng tin trường có món gì?", "Xe bus tuyến nào đi ngang qua cổng chính của Đại học Hải Phòng?", "Trường có tổ chức giải bóng đá sinh viên không?"):
+            with self.subTest(question=question):
+                response = engine.ask(question, "out-of-scope", use_context=False, record_session=False)
+                self.assertTrue(response.refused)
 
     def test_does_not_treat_thi_lai_as_a_greeting(self):
         classifier = Classifier()
@@ -43,8 +50,63 @@ class RagPipelineTests(unittest.TestCase):
 
     def test_admits_administrative_document_question_but_blocks_casual_question(self):
         classifier = Classifier()
-        self.assertEqual(classifier.classify("Tại sao một con vịt lại sinh ra một con gà?"), Intent.OUT_OF_SCOPE)
+        self.assertEqual(classifier.classify("Tại sao một con vịt lại sinh ra một con gà?"), Intent.ACADEMIC_RULES)
         self.assertEqual(classifier.classify("Thời hạn cung cấp thông tin là khi nào?"), Intent.ACADEMIC_RULES)
+
+    def test_stopwords_keep_academic_words_that_collide_after_accent_stripping(self):
+        terms = content_tokens("Điểm rèn luyện tối đa là bao nhiêu? Quy định cũ có cho phép thi lại không?")
+        self.assertIn("toi", terms)
+        self.assertIn("da", terms)
+        self.assertIn("thi", terms)
+        self.assertIn("lai", terms)
+        self.assertNotIn("la", terms)
+        self.assertNotIn("bao", terms)
+        self.assertNotIn("nhieu", terms)
+
+    def test_academic_shorthand_and_synonyms_retrieve_the_right_clause(self):
+        engine = HocVuEngine(self.config, self.searcher)
+        cases = {
+            "Điểm RL tối đa là bao nhiêu?": ("QD-RLSV-HPU-2026", "100 điểm"),
+            "Nghỉ học bao nhiêu % thì bị cấm thi?": ("QD-DTDC-HPU-2026", "25%"),
+            "Điều kiện để học song ngành là gì?": ("QD-DTDC-HPU-2026", "2.8"),
+            "Điểm danh hộ bị xử lý ra sao?": ("QD-DTDC-HPU-2026", "trừ toàn bộ"),
+        }
+        for question, (rid, expected) in cases.items():
+            with self.subTest(question=question):
+                response = engine.ask(question, "synonyms", use_context=False, record_session=False)
+                self.assertFalse(response.refused)
+                self.assertEqual(response.references[0].rid, rid)
+                self.assertIn(expected, response.answer)
+
+    def test_coverage_uses_the_best_retrieved_clause_not_only_rank_one(self):
+        engine = HocVuEngine(self.config, self.searcher)
+        response = engine.ask("Điểm thực tập được tính như thế nào?", "coverage", use_context=False, record_session=False)
+        self.assertFalse(response.refused)
+        self.assertIn("40%", response.answer)
+        self.assertEqual(response.references[0].rid, "QD-TTTN-HPU-2026")
+
+    def test_numeric_inference_is_shown_with_its_source_formula(self):
+        engine = HocVuEngine(self.config, self.searcher)
+        response = engine.ask("Hiến máu 2 lần được cộng mấy điểm?", "numeric", use_context=False, record_session=False)
+        self.assertFalse(response.refused)
+        self.assertIn("2 lần × 10 điểm/lần = 20 điểm", response.answer)
+        self.assertEqual(response.references[0].rid, "QD-RLSV-HPU-2026")
+
+    def test_old_rule_can_be_retrieved_when_explicitly_requested(self):
+        engine = HocVuEngine(self.config, self.searcher)
+        response = engine.ask("Quy định cũ có cho phép thi lại không?", "historical", use_context=False, record_session=False)
+        self.assertFalse(response.refused)
+        self.assertEqual(response.references[0].rid, "QD-DTDC-HPU-2024")
+        self.assertIn("thi lại 1 lần", response.answer)
+
+    def test_comparison_uses_both_regulation_versions(self):
+        engine = HocVuEngine(self.config, self.searcher)
+        response = engine.ask("Quy định 2026 khác gì 2024 về thi lại?", "comparison", use_context=False, record_session=False)
+        self.assertFalse(response.refused)
+        self.assertEqual({reference.rid for reference in response.references}, {"QD-DTDC-HPU-2024", "QD-DTDC-HPU-2026"})
+        self.assertIn("2024:", response.answer)
+        self.assertIn("2026:", response.answer)
+        self.assertIn("Không tổ chức thi lại", response.answer)
 
     def test_explains_absence_and_training_as_a_grounded_condition(self):
         question = "Tôi nghỉ 5 tiết học thì điểm rèn luyện bị ảnh hưởng như nào?"
@@ -143,7 +205,7 @@ class RagPipelineTests(unittest.TestCase):
     def test_refusal_card_contains_answerable_suggestions(self):
         engine = HocVuEngine(self.config, self.searcher)
         engine.session = MagicMock()
-        response = engine.ask("Con vịt có biết lập trình không?", "refusal-card")
+        response = engine.ask("Con vịt có biết lập trình không?", "refusal-card", use_context=False)
         self.assertTrue(response.refused)
         self.assertEqual(len(response.card["suggestions"]), 3)
         self.assertNotIn("Con vịt có biết lập trình không?", response.card["suggestions"])

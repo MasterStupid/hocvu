@@ -19,7 +19,9 @@ def evaluate(engine, output_path: Path) -> dict:
     grounded_correct = refusals_correct = 0
     for item in questions:
         # Evaluation must not pollute real user dialogue history.
-        response = engine.ask(item.question, session_id=f"evaluation-{item.qid}", record_session=False)
+        # An evaluation item must be independent of any old browser/session
+        # data that happens to share its deterministic identifier.
+        response = engine.ask(item.question, session_id=f"evaluation-{item.qid}", use_context=False, record_session=False)
         cited = {reference.rid for reference in response.references}
         if item.should_refuse:
             correct = response.refused

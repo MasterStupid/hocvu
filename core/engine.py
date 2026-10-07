@@ -13,7 +13,7 @@ from .generator import DECLINE_MSG, Generator
 from .llm import GroundedLLM, LLMError
 from .models import Response
 from .searcher import HybridSearcher
-from .scenarios import expand_retrieval_query, is_attendance_training_scenario, is_contextual_follow_up
+from .scenarios import expand_retrieval_query, is_attendance_training_scenario, is_comparison_query, is_contextual_follow_up, is_historical_query
 from .session import SessionStore
 from .settings import AUD, DOCS, INDEX_JSON, SESSION_DB, AppConfig
 from .splitter import split_regulation
@@ -68,15 +68,25 @@ class HocVuEngine:
             answer, refused, reason = "Tôi chỉ hỗ trợ tra cứu quy chế đào tạo, như tín chỉ, học phần, học vụ, bảo lưu, tốt nghiệp và kỷ luật học tập.", True, "Out of scope"
         else:
             scenario = is_attendance_training_scenario(question)
+            comparison = is_comparison_query(question)
+            historical = comparison or is_historical_query(question)
             retrieval_question = expand_retrieval_query(question)
             if use_context:
                 retrieval_question, _ = self.session.contextualize(session_id, retrieval_question)
             # Situation questions may need evidence from two regulations (for
             # example attendance and training score), so retain a wider pool
             # before the scenario generator selects only relevant passages.
-            hits = self.searcher.search(retrieval_question, max(self.config.top_k, 20) if scenario else self.config.top_k, ref_date or date.today().isoformat())
+            retrieval_limit = max(self.config.top_k, 20) if scenario or comparison or historical else max(self.config.top_k, 12)
+            hits = self.searcher.search(retrieval_question, retrieval_limit, ref_date or date.today().isoformat(), include_expired=historical)
             using_semantic = self.searcher.provider != "bm25"
-            lexical_coverage = self.searcher.lexical_coverage(retrieval_question, hits[0]) if hits else 0.0
+            if not using_semantic:
+                hits = self.searcher.rerank_by_coverage(retrieval_question, hits)
+            if historical and not comparison:
+                # When the student explicitly asks for the old rule, an
+                # expired source is the intended evidence, not a fallback.
+                expired = [hit for hit in hits if hit.chunk.valid_until]
+                hits = expired + [hit for hit in hits if not hit.chunk.valid_until]
+            lexical_coverage = self.searcher.lexical_coverage(retrieval_question, hits)
             confidence = min(1.0, hits[0].score) if using_semantic and hits else lexical_coverage
             floor = self.config.semantic_floor if using_semantic else self.config.lexical_coverage_floor
             # Scenario expansion deliberately adds the regulation vocabulary
@@ -87,11 +97,11 @@ class HocVuEngine:
                 # The pronouns in a short follow-up are intentionally not in
                 # the document; its earlier turn supplies the actual topic.
                 floor = min(floor, 0.40)
-            if not hits or confidence < floor:
+            if not hits or confidence < floor or not self.searcher.has_specific_evidence(retrieval_question, hits):
                 answer, refused, reason = DECLINE_MSG, True, "Insufficient grounded context"
             else:
                 scenario_answer = self.generator.generate_attendance_training_scenario(hits, question) if scenario else None
-                answer, references = scenario_answer or self.generator.generate(question, hits)
+                answer, references = scenario_answer or self.generator.generate(question, hits, comparison=comparison)
                 refused = not bool(references)
                 reason = "Insufficient grounded context" if refused else ""
                 if use_ai and not refused:

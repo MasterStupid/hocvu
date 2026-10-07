@@ -18,9 +18,16 @@ class Generator:
     def __init__(self, config):
         self.config = config
 
-    def generate(self, question: str, hits: list[RankedChunk]) -> tuple[str, list[Reference]]:
+    def generate(self, question: str, hits: list[RankedChunk], comparison: bool = False) -> tuple[str, list[Reference]]:
         if not hits:
             return DECLINE_MSG, []
+        if comparison:
+            compared = self._generate_comparison(question, hits)
+            if compared:
+                return compared
+        numeric = self._generate_repeated_unit_total(question, hits)
+        if numeric:
+            return numeric
         query_terms = set(content_tokens(question))
         min_overlap = min(2, max(1, len(query_terms)))
         selected = []
@@ -38,9 +45,10 @@ class Generator:
             if hit.chunk.rid != primary_rid:
                 continue
             overlap = len(query_terms.intersection(content_tokens(hit.chunk.text)))
-            # The first passage establishes what the question is really
-            # about. Subsequent passages must be almost as specific, rather
-            # than merely sharing a broad term such as "hệ thống".
+            # An ordinary lookup should answer from its strongest clause.
+            # Multi-passage synthesis is reserved for explicit comparison and
+            # scenario handlers, preventing a generic neighbouring clause
+            # from diluting a precise answer.
             required_overlap = max(min_overlap, best_overlap - 1) if selected else min_overlap
             # Semantic evidence permits a paraphrased question to retrieve a
             # grounded passage even when it shares fewer literal Vietnamese
@@ -50,6 +58,7 @@ class Generator:
                 selected.append(hit)
                 if len(selected) == 1:
                     best_overlap = overlap
+                    break
             if len(selected) >= self.config.max_units:
                 break
         if not selected:
@@ -64,6 +73,59 @@ class Generator:
         # already begin with their natural section heading.
         answer = "\n\n".join(hit.chunk.text for hit in selected)
         return answer, references
+
+    @staticmethod
+    def _reference(hit: RankedChunk) -> Reference:
+        return Reference(
+            rid=hit.chunk.rid, reg_title=hit.chunk.reg_title, aid=hit.chunk.aid,
+            art_heading=hit.chunk.art_heading, clause_ids=hit.chunk.clause_ids,
+            excerpt=_excerpt(hit.chunk.text),
+        )
+
+    def _generate_comparison(self, question: str, hits: list[RankedChunk]) -> tuple[str, list[Reference]] | None:
+        """Return one directly relevant passage per regulation for comparison."""
+        ignored = {"quy", "dinh", "phien", "ban", "cu", "moi", "khac", "so", "sanh", "voi", "va"}
+        topic_tokens = [term for term in content_tokens(question) if term not in ignored and not re.fullmatch(r"20\d{2}", term)]
+        topic_terms = set(topic_tokens)
+        topic_phrases = {" ".join(topic_tokens[index:index + 2]) for index in range(len(topic_tokens) - 1)}
+        by_regulation: dict[str, tuple[tuple[int, int, float], RankedChunk]] = {}
+        for hit in hits:
+            # A chunk repeats its article heading. For a comparison we need
+            # the clause body to decide between neighbouring clauses under
+            # one heading (for example "thi lại" vs "học lại").
+            body = hit.chunk.text.split("\n", 1)[-1]
+            tokens = content_tokens(body)
+            overlap = len(topic_terms.intersection(tokens))
+            phrase_hits = sum(phrase in " ".join(tokens) for phrase in topic_phrases)
+            if not overlap:
+                continue
+            rank = (phrase_hits, overlap, hit.score)
+            current = by_regulation.get(hit.chunk.rid)
+            if current is None or rank > current[0]:
+                by_regulation[hit.chunk.rid] = (rank, hit)
+        selected = [item[1] for item in sorted(by_regulation.values(), key=lambda item: item[0], reverse=True)[:2]]
+        if len(selected) < 2:
+            return None
+        lines = [f"{hit.chunk.version}: {hit.chunk.text}" for hit in selected]
+        return "\n\n".join(lines), [self._reference(hit) for hit in selected]
+
+    def _generate_repeated_unit_total(self, question: str, hits: list[RankedChunk]) -> tuple[str, list[Reference]] | None:
+        """Compute a repeated, source-stated per-occurrence score transparently."""
+        count = re.search(r"\b(\d+)\s+lần\b", question, re.IGNORECASE)
+        if not count:
+            return None
+        occurrences = int(count.group(1))
+        for hit in hits:
+            unit = re.search(r"\b(\d+(?:[.,]\d+)?)\s*điểm\s*/\s*lần\b", hit.chunk.text, re.IGNORECASE)
+            if unit:
+                per_occurrence = float(unit.group(1).replace(",", "."))
+                total = occurrences * per_occurrence
+                total_text = str(int(total)) if total.is_integer() else f"{total:g}"
+                return (
+                    f"Theo quy định, mỗi lần được cộng {unit.group(1)} điểm. {occurrences} lần × {unit.group(1)} điểm/lần = {total_text} điểm.",
+                    [self._reference(hit)],
+                )
+        return None
 
     def generate_attendance_training_scenario(self, hits: list[RankedChunk], question: str = "") -> tuple[str, list[Reference]] | None:
         """Explain an absence/discipline scenario without inventing a penalty."""

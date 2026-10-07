@@ -18,16 +18,6 @@ class Classifier:
     """Small, transparent classifier appropriate for an offline pilot."""
 
     _greetings = ("xin chao", "chao ban", "hello", "hi", "cam on")
-    _academic = (
-        "quy che", "hoc vu", "tin chi", "hoc phan", "dang ky", "huy hoc",
-        "bao luu", "tot nghiep", "diem", "canh bao", "ky luat", "khen thuong",
-        "thuc tap", "do an", "thi", "hoc lai", "hoc bong", "nghi hoc",
-        "tai lieu", "de tai", "muc tieu", "phuong phap", "kien truc", "rag",
-        "stt", "tts", "bao cao", "chuong", "noi dung", "ket qua", "he thong",
-        "truy xuat", "chi so", "thu nghiem", "ket luan", "phan mem",
-        "thong bao", "thoi han", "cung cap", "thong tin", "cccd", "hemis",
-        "quyet dinh", "dieu khoan", "van ban", "bieu mau", "huong dan",
-    )
     _toxic = ("giết", "giet", "tu sat", "tự sát", "danh bom")
 
     def classify(self, question: str) -> Intent:
@@ -41,4 +31,8 @@ class Classifier:
         # lại" (a core academic query) into a greeting.
         if len(q.split()) <= 5 and any(has_phrase(word) for word in self._greetings):
             return Intent.GREETING
-        return Intent.ACADEMIC_RULES if any(has_phrase(word) for word in self._academic) else Intent.OUT_OF_SCOPE
+        # Do not reject legitimate policy topics by a closed vocabulary. The
+        # retriever's evidence threshold is the scope gate: unsupported
+        # questions still receive a grounded refusal, while new subjects such
+        # as "song ngành" or "IELTS" can reach their source documents.
+        return Intent.ACADEMIC_RULES

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 
-from .nlp import normalize, strip_accents
+from .nlp import expand_academic_terms, normalize, strip_accents
 
 
 def is_attendance_training_scenario(question: str) -> bool:
@@ -24,8 +24,21 @@ def is_contextual_follow_up(question: str) -> bool:
     ))
 
 
+def is_historical_query(question: str) -> bool:
+    """Whether the user explicitly asks to inspect a superseded regulation."""
+    q = strip_accents(normalize(question)).lower()
+    return any(phrase in q for phrase in ("quy dinh cu", "ban cu", "phien ban cu", "nam 2024", "2024"))
+
+
+def is_comparison_query(question: str) -> bool:
+    q = strip_accents(normalize(question)).lower()
+    years = re.findall(r"\b20\d{2}\b", q)
+    return len(set(years)) >= 2 or any(phrase in q for phrase in ("so sanh", "khac gi", "khac nhau", "doi chieu"))
+
+
 def expand_retrieval_query(question: str) -> str:
     """Add concepts implied by a student scenario, without altering its meaning."""
-    if is_attendance_training_scenario(question):
-        return f"{question} vắng mặt điểm danh chuyên cần ý thức học tập điểm rèn luyện"
-    return question
+    expanded = expand_academic_terms(question)
+    if is_attendance_training_scenario(expanded):
+        return f"{expanded} vắng mặt điểm danh chuyên cần ý thức học tập điểm rèn luyện"
+    return expanded
