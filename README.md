@@ -31,15 +31,19 @@ the answer more natural for speech. Citations still come from the local
 retrieval result. If no LLM key is configured or the request fails, HocVu AI
 keeps the extractive answer and labels it as a fallback.
 
-To enable the optional OpenAI Responses API integration for the current
-PowerShell session, set these variables before starting the server:
+To enable the optional Gemini integration, place these variables in the local
+`.env` file (it is ignored by Git) or set them in the current PowerShell
+session before starting the server:
 
 ```powershell
-$env:HV_LLM = "openai"
-$env:OPENAI_API_KEY = "your_api_key"
-# Optional: $env:OPENAI_MODEL = "your-selected-model"
+$env:HV_LLM = "gemini"
+$env:GEMINI_API_KEY = "your_api_key"
+# Optional: $env:GEMINI_MODEL = "gemini-2.5-flash"
 python manage.py serve
 ```
+
+OpenAI Responses remains available by setting `HV_LLM=openai` and
+`OPENAI_API_KEY` instead.
 
 When the AI switch is on, the user's question and only the retrieved excerpts
 for that turn are sent to the configured LLM provider. Do not enable it for
@@ -81,8 +85,8 @@ proxy keeps the API token out of the browser.
    use it automatically. Set the health check path to `/api/health`.
 2. In Render's environment variables, add a strong random `HV_API_TOKEN`, set
    `HV_SEMANTIC=0`, and set `HV_DATA_DIR=/var/data`. If using the optional AI
-   rewriting switch, also add `HV_LLM=openai`, `OPENAI_API_KEY`, and optionally
-   `OPENAI_MODEL`.
+   rewriting switch, also add `HV_LLM=gemini`, `GEMINI_API_KEY`, and optionally
+   `GEMINI_MODEL=gemini-2.5-flash`.
 3. Attach a Render persistent disk mounted at `/var/data`. This is required to
    keep uploaded documents, the OCR output, index, and chat database across
    deploys. Without it, Render's filesystem is temporary and the knowledge

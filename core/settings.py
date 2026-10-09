@@ -14,6 +14,30 @@ from pathlib import Path
 
 # ── Đường dẫn ────────────────────────────────────────────────────────────
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _load_dotenv(path: Path) -> None:
+    """Load simple KEY=value local settings without a third-party dependency.
+
+    Existing process variables always win, which lets Render/Netlify-style
+    hosts manage secrets normally while keeping local `.env` convenient.
+    """
+    if not path.is_file():
+        return
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, value = line.split("=", 1)
+        name = name.strip()
+        value = value.strip()
+        if name and (value[:1] == value[-1:] and value[:1] in {"'", '"'}):
+            value = value[1:-1]
+        if name:
+            os.environ.setdefault(name, value)
+
+
+_load_dotenv(ROOT / ".env")
 # Keep runtime state outside the source tree when the app is deployed.  Local
 # development keeps the original ``./data`` layout; a hosted service can set
 # HV_DATA_DIR to its persistent-volume mount (for example ``/var/data``).
@@ -93,7 +117,7 @@ class AppConfig:
     max_history: int = 8
 
     # ── Backends ────────────────────────────────
-    llm_backend: str = "local"     # local | openai
+    llm_backend: str = "local"     # local | openai | gemini
     stt_backend: str = "local"     # local | whisper
     tts_backend: str = "local"     # local | edge
 
@@ -102,6 +126,11 @@ class AppConfig:
     openai_url: str = "https://api.openai.com/v1"
     openai_model: str = "gpt-4o-mini"
     openai_embed: str = "text-embedding-3-small"
+
+    # ── Gemini (chỉ khi llm_backend=gemini) ────
+    gemini_key: str = ""
+    gemini_url: str = "https://generativelanguage.googleapis.com/v1beta"
+    gemini_model: str = "gemini-2.5-flash"
 
     # ── Whisper / TTS ───────────────────────────
     whisper_size: str = "small"
@@ -157,6 +186,9 @@ def load_config() -> AppConfig:
         openai_url=_e("OPENAI_BASE_URL", "https://api.openai.com/v1"),
         openai_model=_e("OPENAI_MODEL", "gpt-4o-mini"),
         openai_embed=_e("OPENAI_EMBED_MODEL", "text-embedding-3-small"),
+        gemini_key=_e("GEMINI_API_KEY", ""),
+        gemini_url=_e("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta"),
+        gemini_model=_e("GEMINI_MODEL", "gemini-2.5-flash"),
         whisper_size=_e("WHISPER_MODEL", "small"),
         tts_voice=_e("TTS_VOICE", "vi-VN-HoaiMyNeural"),
         api_token=_e("HV_API_TOKEN", ""),
