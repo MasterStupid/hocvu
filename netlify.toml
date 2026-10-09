@@ -1,0 +1,16 @@
+[build]
+  publish = "ui"
+  command = "node scripts/prepare-netlify.mjs"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# The build command replaces both placeholders with Netlify environment
+# variables.  Keep the placeholders in Git: the API address and token must
+# never be committed to the repository.
+[[redirects]]
+  from = "/api/*"
+  to = "HOCVU_API_URL_PLACEHOLDER/api/:splat"
+  status = 200
+  force = true
+  headers = { X-HocVu-Token = "HOCVU_API_TOKEN_PLACEHOLDER" }

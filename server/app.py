@@ -38,6 +38,11 @@ class HocVuHandler(BaseHTTPRequestHandler):
     def _check_api_access(self) -> bool:
         if not self.path.startswith("/api/"):
             return True
+        # Hosting providers call this endpoint directly and cannot attach the
+        # private proxy token.  It deliberately exposes only operational
+        # status, never a document, index, session, or answer.
+        if urlparse(self.path).path == "/api/health":
+            return True
         if requires_api_token and self.headers.get("X-HocVu-Token", "") != engine.config.api_token:
             self.respond_json({"error": "API token is required for network access."}, 401)
             return False

@@ -1,0 +1,6 @@
+# Dependencies needed by the hosted API.  Semantic embeddings remain optional:
+# HV_SEMANTIC=0 keeps the service fast and uses the built-in BM25 retriever.
+pypdf>=5.0.0
+Pillow>=10.0.0
+pytesseract>=0.3.10
+PyMuPDF>=1.24.0

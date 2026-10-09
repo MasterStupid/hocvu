@@ -14,7 +14,10 @@ from pathlib import Path
 
 # ── Đường dẫn ────────────────────────────────────────────────────────────
 ROOT = Path(__file__).resolve().parents[1]
-DATA = ROOT / "data"
+# Keep runtime state outside the source tree when the app is deployed.  Local
+# development keeps the original ``./data`` layout; a hosted service can set
+# HV_DATA_DIR to its persistent-volume mount (for example ``/var/data``).
+DATA = Path(os.environ.get("HV_DATA_DIR", str(ROOT / "data"))).expanduser().resolve()
 RAW  = DATA / "raw"
 IDX  = DATA / "index"
 AUD  = DATA / "audio"

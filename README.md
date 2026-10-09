@@ -5,10 +5,10 @@ HocVu AI is a Vietnamese, grounded voice assistant for looking up academic regul
 ## Run locally
 
 On Windows, the quickest option is to double-click `run.bat`. It opens the
-application in the browser. Local semantic retrieval is enabled by default;
-the first run may download the embedding model. Set `HV_SEMANTIC=0` before
-starting it when you explicitly want BM25-only retrieval. Keep its terminal
-window open while using the project; press `Ctrl+C` there to stop it.
+application in the browser and uses the fast local BM25 index by default.
+Set `HV_SEMANTIC=1` before starting only when the optional embedding model has
+already been installed or downloaded. Keep its terminal window open while
+using the project; press `Ctrl+C` there to stop it.
 
 ```powershell
 python manage.py ingest
@@ -68,6 +68,41 @@ Sentence Transformers model.
 Open **Quản lý tài liệu** from the top navigation or visit `http://127.0.0.1:8000/documents.html`. Select multiple PDF, DOCX or image files (up to 25 MB each), set the order number, decision number, article/clause and effective date for each file, then upload the queue. The page immediately rebuilds the retrieval index, can show the normalized extracted text and number of indexed chunks, and supports selecting and removing queued or previously uploaded files. Encrypted PDFs are rejected.
 
 Enable **OCR tiếng Việt** for a screenshot/photo, scanned PDF, or DOCX containing scanned images. OCR runs locally with Tesseract: image files are read entirely; PDF OCR runs only on pages without a usable text layer; and DOCX OCR reads images embedded in the file. It works best with clear, upright Vietnamese text. PDFs/DOCX with normal selectable text keep their native extraction.
+
+## Deploy: Netlify + Render
+
+The browser interface is static, but document upload, OCR, the search index,
+and conversation storage require Python and a writable disk. This repository
+therefore deploys the **UI on Netlify** and the **API on Render**. The Netlify
+proxy keeps the API token out of the browser.
+
+1. Push this repository to GitHub, then on Render choose **New → Web Service**
+   and connect the repository. Select the included `Dockerfile`; Render will
+   use it automatically. Set the health check path to `/api/health`.
+2. In Render's environment variables, add a strong random `HV_API_TOKEN`, set
+   `HV_SEMANTIC=0`, and set `HV_DATA_DIR=/var/data`. If using the optional AI
+   rewriting switch, also add `HV_LLM=openai`, `OPENAI_API_KEY`, and optionally
+   `OPENAI_MODEL`.
+3. Attach a Render persistent disk mounted at `/var/data`. This is required to
+   keep uploaded documents, the OCR output, index, and chat database across
+   deploys. Without it, Render's filesystem is temporary and the knowledge
+   base is reset whenever the service is rebuilt or restarted.
+4. After Render is live, copy its HTTPS address, such as
+   `https://hocvu-api.onrender.com`. On Netlify choose **Add new site → Import
+   an existing project**, select the same GitHub repository, and leave the
+   build settings to `netlify.toml`.
+5. In Netlify's **Environment variables**, set `HOCVU_API_URL` to the Render
+   HTTPS address (without a trailing slash) and `HOCVU_API_TOKEN` to the exact
+   same value as `HV_API_TOKEN` on Render. Trigger a new deploy.
+
+Netlify publishes the `ui` directory and rewrites every `/api/*` request to
+Render with the private `X-HocVu-Token` header. Do not put either token in
+`ui/*.js`, a committed `.env` file, or the public site settings.
+
+The demonstration regulations are generated from source code on the first
+startup. Files uploaded only to your old local `data/` folder are not committed
+to Git and will not appear in the cloud automatically; upload them again from
+the **Quản lý tài liệu** page after the first deployment.
 
 ## Research workflow
 
