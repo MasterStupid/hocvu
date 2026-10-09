@@ -26,8 +26,8 @@ class GroundedLLMTests(unittest.TestCase):
         self.assertEqual(endpoint, "https://proxy.example/v1/responses?api-version=2026-01-01")
 
     def test_builds_gemini_generate_content_endpoint(self):
-        endpoint = GroundedLLM._gemini_endpoint("https://generativelanguage.googleapis.com/v1beta", "gemini-2.5-flash")
-        self.assertEqual(endpoint, "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent")
+        endpoint = GroundedLLM._gemini_endpoint("https://generativelanguage.googleapis.com/v1beta", "gemini-3.8-flash")
+        self.assertEqual(endpoint, "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent")
 
     def test_reads_text_from_gemini_candidate(self):
         text = GroundedLLM._gemini_output_text({"candidates": [

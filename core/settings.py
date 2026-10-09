@@ -130,7 +130,7 @@ class AppConfig:
     # ── Gemini (chỉ khi llm_backend=gemini) ────
     gemini_key: str = ""
     gemini_url: str = "https://generativelanguage.googleapis.com/v1beta"
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-3.8-flash"
 
     # ── Whisper / TTS ───────────────────────────
     whisper_size: str = "small"
@@ -188,7 +188,7 @@ def load_config() -> AppConfig:
         openai_embed=_e("OPENAI_EMBED_MODEL", "text-embedding-3-small"),
         gemini_key=_e("GEMINI_API_KEY", ""),
         gemini_url=_e("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta"),
-        gemini_model=_e("GEMINI_MODEL", "gemini-2.5-flash"),
+        gemini_model=_e("GEMINI_MODEL", "gemini-3.8-flash"),
         whisper_size=_e("WHISPER_MODEL", "small"),
         tts_voice=_e("TTS_VOICE", "vi-VN-HoaiMyNeural"),
         api_token=_e("HV_API_TOKEN", ""),

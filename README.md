@@ -38,7 +38,7 @@ session before starting the server:
 ```powershell
 $env:HV_LLM = "gemini"
 $env:GEMINI_API_KEY = "your_api_key"
-# Optional: $env:GEMINI_MODEL = "gemini-2.5-flash"
+# Optional: $env:GEMINI_MODEL = "gemini-3.8-flash"
 python manage.py serve
 ```
 
@@ -86,7 +86,7 @@ proxy keeps the API token out of the browser.
 2. In Render's environment variables, add a strong random `HV_API_TOKEN`, set
    `HV_SEMANTIC=0`, and set `HV_DATA_DIR=/var/data`. If using the optional AI
    rewriting switch, also add `HV_LLM=gemini`, `GEMINI_API_KEY`, and optionally
-   `GEMINI_MODEL=gemini-2.5-flash`.
+   `GEMINI_MODEL=gemini-3.8-flash`.
 3. Attach a Render persistent disk mounted at `/var/data`. This is required to
    keep uploaded documents, the OCR output, index, and chat database across
    deploys. Without it, Render's filesystem is temporary and the knowledge
