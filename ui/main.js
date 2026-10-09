@@ -6,7 +6,9 @@
     theme: localStorage.getItem('hv_theme') || 'light',
     aiEnabled: localStorage.getItem('hv_ai_enabled') === 'true',
     ttsEnabled: false, liveEnabled: false, isLoading: false, isSpeaking: false,
-    recognition: null, recognitionRunning: false, turn: 0, listenTimer: null, transcript: [], speechRetry: false, livePaused: false,
+    recognition: null, recognitionRunning: false, recognitionRequested: false, turn: 0, listenTimer: null, transcript: [], speechRetry: false, livePaused: false,
+    ignoreRecognitionResults: false, listenAfter: 0, speechId: 0,
+    lastAssistantSpeech: '', echoGuardUntil: 0,
   };
   localStorage.setItem('hv_session_id', state.sessionId);
 
@@ -86,7 +88,14 @@
     clearTimeout(state.listenTimer);
     if (!state.liveEnabled || state.livePaused || state.isLoading || state.isSpeaking || state.recognitionRunning) return;
     setLiveStatus('Live sẵn sàng lắng nghe', 'listening');
-    state.listenTimer = setTimeout(() => startListening(true), 450);
+    // Leave a short acoustic gap after TTS finishes. Without it, Chromium can
+    // feed the last syllables from the speaker back into SpeechRecognition.
+    const delay = Math.max(450, state.listenAfter - Date.now());
+    state.listenTimer = setTimeout(() => {
+      state.listenTimer = null;
+      if (Date.now() < state.listenAfter) { scheduleListening(); return; }
+      startListening(true);
+    }, delay);
   }
   function speechText(text) {
     const replacements = [
@@ -119,7 +128,11 @@
       || voices.find((voice) => /^vi(-|_)/i.test(voice.lang));
   }
   function speak(text) {
-    if (!(state.ttsEnabled || state.liveEnabled) || !('speechSynthesis' in window)) { scheduleListening(); return; }
+    if (!(state.ttsEnabled || state.liveEnabled) || !('speechSynthesis' in window)) {
+      if (state.liveEnabled) state.livePaused = false;
+      scheduleListening();
+      return;
+    }
     // Chromium may populate voices asynchronously just after page load.
     // Retry once so the first Vietnamese answer does not use a random voice.
     if (!speechSynthesis.getVoices().length && !state.speechRetry) {
@@ -127,10 +140,25 @@
       setTimeout(() => { state.speechRetry = false; speak(text); }, 180);
       return;
     }
+    const speechId = ++state.speechId;
+    const spoken = speechText(text);
+    state.lastAssistantSpeech = spoken;
     speechSynthesis.cancel(); state.isSpeaking = true; setLiveStatus('AI đang đọc câu trả lời', 'working');
-    const utterance = new SpeechSynthesisUtterance(speechText(text)); utterance.lang = 'vi-VN'; utterance.rate = state.liveEnabled ? .94 : 1;
+    const utterance = new SpeechSynthesisUtterance(spoken); utterance.lang = 'vi-VN'; utterance.rate = state.liveEnabled ? .94 : 1;
     const voice = preferredVietnameseVoice(); if (voice) utterance.voice = voice;
-    const done = () => { state.isSpeaking = false; if (!state.liveEnabled) setLiveStatus('Sẵn sàng nhập câu hỏi'); else state.livePaused = false; scheduleListening(); };
+    const done = () => {
+      // cancel() emits an end event for the previous utterance. Only the
+      // currently active utterance is allowed to reopen the microphone.
+      if (speechId !== state.speechId) return;
+      state.isSpeaking = false;
+      if (!state.liveEnabled) setLiveStatus('Sẵn sàng nhập câu hỏi');
+      else {
+        state.livePaused = false;
+        state.listenAfter = Date.now() + 1100;
+        state.echoGuardUntil = Date.now() + 9000;
+      }
+      scheduleListening();
+    };
     utterance.onend = done; utterance.onerror = done; speechSynthesis.speak(utterance);
   }
   function copyAnswer(button, answer) {
@@ -164,30 +192,64 @@
     const item = document.createElement('article'); item.className = 'message bot error';
     item.innerHTML = `<div class="avatar">!</div><div class="bubble"><p>${escapeHTML(message)}</p></div>`; dom.thread.appendChild(item); scrollBottom();
   }
-  async function send(text = dom.input.value.trim()) {
+  function pauseRecognitionForTextTurn() {
+    clearTimeout(state.listenTimer);
+    state.livePaused = true;
+    if (!state.recognitionRunning && !state.recognitionRequested) return;
+    // Abort rather than wait for a final result: a clicked suggestion or typed
+    // question must never share a listening turn with the bot's answer.
+    state.ignoreRecognitionResults = true;
+    try { state.recognition.abort(); } catch (_) { /* recognition already ended */ }
+  }
+  function speechWords(value) {
+    return speechText(value).toLocaleLowerCase('vi-VN').normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '').match(/[a-zđ0-9]+/g) || [];
+  }
+  function isLikelySpeakerEcho(text) {
+    if (!state.liveEnabled || Date.now() > state.echoGuardUntil) return false;
+    const heard = speechWords(text); const spoken = speechWords(state.lastAssistantSpeech);
+    if (heard.length < 4 || !spoken.length) return false;
+    const spokenSet = new Set(spoken); const uniqueHeard = new Set(heard);
+    let shared = 0; uniqueHeard.forEach((word) => { if (spokenSet.has(word)) shared += 1; });
+    return shared / uniqueHeard.size >= 0.8;
+  }
+  async function send(text = dom.input.value.trim(), { source = 'text' } = {}) {
     const question = text.trim(); if (!question || state.isLoading) return;
+    if (source === 'text') pauseRecognitionForTextTurn();
+    else { clearTimeout(state.listenTimer); state.livePaused = true; }
     state.isLoading = true; dom.input.value = ''; updateComposer(); setLiveStatus('Đang tìm trong tài liệu', 'working'); appendUser(question); appendTyping();
     try {
       const response = await api('/api/ask', { method: 'POST', body: JSON.stringify({ question, session_id: state.sessionId, use_ai: state.aiEnabled, ref_date: dom.refDate.value || null }) });
       removeTyping(); appendAnswer(response);
-    } catch (error) { removeTyping(); appendError(error.message); scheduleListening(); }
+    } catch (error) {
+      removeTyping(); appendError(error.message);
+      if (state.liveEnabled) state.livePaused = false;
+      scheduleListening();
+    }
     finally { state.isLoading = false; updateComposer(); if (!state.liveEnabled && !state.isSpeaking) setLiveStatus('Sẵn sàng nhập câu hỏi'); }
   }
   function startListening(fromLive = false) {
-    if (!state.recognition || state.recognitionRunning || state.isLoading || state.isSpeaking) return;
+    if (!state.recognition || state.recognitionRunning || state.recognitionRequested || state.isLoading || state.isSpeaking) return;
     if (!fromLive) state.livePaused = false;
-    try { state.recognition.start(); } catch (_) { if (fromLive) scheduleListening(); }
+    state.recognitionRequested = true;
+    try { state.recognition.start(); } catch (_) { state.recognitionRequested = false; if (fromLive) scheduleListening(); }
   }
   function stopLive() {
     state.liveEnabled = false; state.livePaused = false; clearTimeout(state.listenTimer); speechSynthesis?.cancel();
-    if (state.recognitionRunning) state.recognition.stop(); updateFeatureControls(); setLiveStatus('Sẵn sàng nhập câu hỏi');
+    if (state.recognitionRunning || state.recognitionRequested) state.recognition.abort(); updateFeatureControls(); setLiveStatus('Sẵn sàng nhập câu hỏi');
   }
   function setupVoice() {
     const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Recognition) { dom.mic.title = 'Trình duyệt chưa hỗ trợ nhận dạng giọng nói'; dom.live.disabled = true; return; }
     const recognition = new Recognition(); recognition.lang = 'vi-VN'; recognition.interimResults = true; recognition.continuous = false;
-    recognition.onstart = () => { state.recognitionRunning = true; dom.mic.classList.add('active'); dom.mic.setAttribute('aria-label', 'Dừng ghi âm'); setLiveStatus('Đang nghe…', 'listening'); };
-    recognition.onend = () => { state.recognitionRunning = false; dom.mic.classList.remove('active'); dom.mic.setAttribute('aria-label', 'Nhập bằng giọng nói'); scheduleListening(); };
+    recognition.onstart = () => {
+      state.recognitionRunning = true;
+      if (state.livePaused || state.isLoading || state.isSpeaking) {
+        state.ignoreRecognitionResults = true; recognition.abort(); return;
+      }
+      state.ignoreRecognitionResults = false; dom.mic.classList.add('active'); dom.mic.setAttribute('aria-label', 'Dừng ghi âm'); setLiveStatus('Đang nghe…', 'listening');
+    };
+    recognition.onend = () => { state.recognitionRunning = false; state.recognitionRequested = false; dom.mic.classList.remove('active'); dom.mic.setAttribute('aria-label', 'Nhập bằng giọng nói'); scheduleListening(); };
     recognition.onerror = (event) => {
       if (event.error === 'not-allowed' || event.error === 'service-not-allowed') { stopLive(); appendError('Trình duyệt chưa được cấp quyền micro. Hãy cho phép micro rồi bật Live lại.'); }
       else if (event.error === 'no-speech') {
@@ -201,8 +263,17 @@
     recognition.onresult = (event) => {
       let transcript = ''; let isFinal = false;
       for (let index = event.resultIndex; index < event.results.length; index += 1) { transcript += event.results[index][0].transcript; isFinal ||= event.results[index].isFinal; }
+      if (state.ignoreRecognitionResults || state.isSpeaking || state.isLoading) return;
       dom.input.value = transcript.trim(); updateComposer();
-      if (isFinal && transcript.trim()) { state.livePaused = false; recognition.stop(); send(transcript); }
+      if (isFinal && transcript.trim()) {
+        if (isLikelySpeakerEcho(transcript)) {
+          state.livePaused = true;
+          recognition.stop();
+          setLiveStatus('Đã bỏ qua âm thanh của AI. Nhấn micro để nói tiếp.');
+          return;
+        }
+        state.livePaused = true; recognition.stop(); send(transcript, { source: 'speech' });
+      }
     };
     state.recognition = recognition;
   }
@@ -258,7 +329,7 @@
     dom.suggestions.addEventListener('click', (event) => {
       const topic = event.target.closest('[data-topic]');
       if (topic) { const questions = dom.suggestions.querySelector(`[data-topic-questions="${topic.dataset.topic}"]`); const open = questions.hidden; questions.hidden = !open; topic.setAttribute('aria-expanded', String(open)); }
-      if (event.target.matches('.suggestion-chip')) send(event.target.textContent);
+      if (event.target.matches('.suggestion-chip')) send(event.target.textContent, { source: 'text' });
     });
     document.addEventListener('keydown', (event) => {
       const editable = event.target.matches('input, textarea, select, [contenteditable="true"]');
