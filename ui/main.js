@@ -127,28 +127,17 @@
     return voices.find((voice) => /^vi(-|_)/i.test(voice.lang) && /hoaimy|namminh|vietnamese|việt/i.test(voice.name))
       || voices.find((voice) => /^vi(-|_)/i.test(voice.lang));
   }
-  function speak(text) {
-    if (!(state.ttsEnabled || state.liveEnabled) || !('speechSynthesis' in window)) {
+  function speak(text, audioUrl = null) {
+    if (!(state.ttsEnabled || state.liveEnabled)) {
       if (state.liveEnabled) state.livePaused = false;
       scheduleListening();
-      return;
-    }
-    // Chromium may populate voices asynchronously just after page load.
-    // Retry once so the first Vietnamese answer does not use a random voice.
-    if (!speechSynthesis.getVoices().length && !state.speechRetry) {
-      state.speechRetry = true;
-      setTimeout(() => { state.speechRetry = false; speak(text); }, 180);
       return;
     }
     const speechId = ++state.speechId;
     const spoken = speechText(text);
     state.lastAssistantSpeech = spoken;
-    speechSynthesis.cancel(); state.isSpeaking = true; setLiveStatus('AI đang đọc câu trả lời', 'working');
-    const utterance = new SpeechSynthesisUtterance(spoken); utterance.lang = 'vi-VN'; utterance.rate = state.liveEnabled ? .94 : 1;
-    const voice = preferredVietnameseVoice(); if (voice) utterance.voice = voice;
+    state.isSpeaking = true; setLiveStatus('AI đang đọc câu trả lời', 'working');
     const done = () => {
-      // cancel() emits an end event for the previous utterance. Only the
-      // currently active utterance is allowed to reopen the microphone.
       if (speechId !== state.speechId) return;
       state.isSpeaking = false;
       if (!state.liveEnabled) setLiveStatus('Sẵn sàng nhập câu hỏi');
@@ -159,7 +148,35 @@
       }
       scheduleListening();
     };
-    utterance.onend = done; utterance.onerror = done; speechSynthesis.speak(utterance);
+
+    if (audioUrl) {
+      const audio = new Audio(audioUrl);
+      audio.onended = done;
+      audio.onerror = () => {
+        speakBrowser(spoken, speechId, done);
+      };
+      audio.play().catch(() => speakBrowser(spoken, speechId, done));
+      return;
+    }
+    speakBrowser(spoken, speechId, done);
+  }
+
+  function speakBrowser(spoken, speechId, done) {
+    if (!('speechSynthesis' in window)) { done(); return; }
+    if (!speechSynthesis.getVoices().length && !state.speechRetry) {
+      state.speechRetry = true;
+      setTimeout(() => { state.speechRetry = false; speakBrowser(spoken, speechId, done); }, 180);
+      return;
+    }
+    speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(spoken);
+    utterance.lang = 'vi-VN';
+    utterance.rate = state.liveEnabled ? .94 : 1;
+    const voice = preferredVietnameseVoice();
+    if (voice) utterance.voice = voice;
+    utterance.onend = done;
+    utterance.onerror = done;
+    speechSynthesis.speak(utterance);
   }
   function copyAnswer(button, answer) {
     const copied = () => { button.textContent = 'Đã chép'; setTimeout(() => { button.textContent = 'Sao chép'; }, 1600); };
@@ -186,7 +203,7 @@
     item.querySelectorAll('[data-source-index]').forEach((card) => card.addEventListener('click', () => flashSource(card.dataset.sourceIndex)));
     item.querySelector('.copy-btn')?.addEventListener('click', () => copyAnswer(item.querySelector('.copy-btn'), cardMarkdown(segments, refs)));
     item.querySelectorAll('.follow-up-chip').forEach((button) => button.addEventListener('click', () => send(button.textContent)));
-    dom.thread.appendChild(item); remember('assistant', response.answer, { references: refs.map((ref) => ({ reg_title: ref.reg_title, art_heading: ref.art_heading, rid: ref.rid })) }); updateEvidence(refs); scrollBottom(); if (!restore) speak(segments.map((segment) => segment.text).join('. '));
+    dom.thread.appendChild(item); remember('assistant', response.answer, { references: refs.map((ref) => ({ reg_title: ref.reg_title, art_heading: ref.art_heading, rid: ref.rid })) }); updateEvidence(refs); scrollBottom(); if (!restore) speak(segments.map((segment) => segment.text).join('. '), response.audio_url);
   }
   function appendError(message) {
     const item = document.createElement('article'); item.className = 'message bot error';
@@ -219,7 +236,7 @@
     else { clearTimeout(state.listenTimer); state.livePaused = true; }
     state.isLoading = true; dom.input.value = ''; updateComposer(); setLiveStatus('Đang tìm trong tài liệu', 'working'); appendUser(question); appendTyping();
     try {
-      const response = await api('/api/ask', { method: 'POST', body: JSON.stringify({ question, session_id: state.sessionId, use_ai: state.aiEnabled, ref_date: dom.refDate.value || null }) });
+      const response = await api('/api/ask', { method: 'POST', body: JSON.stringify({ question, session_id: state.sessionId, use_ai: state.aiEnabled, ref_date: dom.refDate.value || null, with_audio: Boolean(state.ttsEnabled || state.liveEnabled) }) });
       removeTyping(); appendAnswer(response);
     } catch (error) {
       removeTyping(); appendError(error.message);

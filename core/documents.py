@@ -147,12 +147,28 @@ class DocumentRepository:
             path.unlink(missing_ok=True)
             self._extracted_path(item_id).unlink(missing_ok=True)
             raise
+        title = Path(safe_name).stem
+        if not metadata.get("decision_number"):
+            num_m = re.search(r"\b(?:Số|Số hiệu):\s*([0-9]+/[A-Z0-9_-]+)", text, re.IGNORECASE)
+            if num_m:
+                metadata["decision_number"] = num_m.group(1).strip()
+        if not metadata.get("document_date"):
+            date_m = re.search(r"\bngày\s+(\d{1,2})\s+tháng\s+(\d{1,2})\s+năm\s+(\d{4})", text, re.IGNORECASE)
+            if date_m:
+                d, m, y = date_m.group(1).zfill(2), date_m.group(2).zfill(2), date_m.group(3)
+                metadata["document_date"] = f"{y}-{m}-{d}"
+        title_m = re.search(r"\b(?:Tiêu đề|Về việc):\s*([^\n]+)", text, re.IGNORECASE)
+        if metadata.get("decision_number") and title_m:
+            title = f"Thông báo {metadata['decision_number']} - {title_m.group(1).strip()}"[:150]
+        elif metadata.get("decision_number"):
+            title = f"Văn bản {metadata['decision_number']}"
+
         entry = {
             "id": item_id,
             "rid": f"UPL-{item_id[:8].upper()}",
             "filename": safe_name,
             "stored_name": path.name,
-            "title": Path(safe_name).stem,
+            "title": title,
             "format": suffix[1:].upper(),
             "size": len(content),
             "pages": pages,
@@ -211,12 +227,71 @@ class DocumentRepository:
     def _extract_pdf(self, path: Path, use_ocr: bool) -> tuple[str, int]:
         reader = self._pdf_reader(path)
         pages = [page.extract_text() or "" for page in reader.pages]
-        if use_ocr:
+        total_text_len = sum(len(p.strip()) for p in pages)
+        is_scanned = total_text_len < 100 or use_ocr
+        if is_scanned:
+            # 1. Ưu tiên VLM (Vision-Language Model) thông minh để khử nhiễu và đọc chính xác link/mã QR
+            vlm_text = self._extract_pdf_vlm(path)
+            if vlm_text:
+                return vlm_text, len(pages)
+            # 2. Fallback sang Tesseract OCR cục bộ
             ocr_text = self._extract_pdf_ocr(path, pages)
             for index, text in enumerate(ocr_text):
                 if text:
                     pages[index] = f"{pages[index]}\n{text}".strip()
         return "\n".join(pages), len(pages)
+
+    def _extract_pdf_vlm(self, path: Path) -> str:
+        """Trích xuất và tóm tắt thông báo bằng mô hình VLM (Gemini Vision) với độ chính xác cao nhất."""
+        try:
+            from .settings import load_config
+            from .llm import GroundedLLM
+            import fitz
+            import base64
+            import json
+            import urllib.request
+
+            cfg = load_config()
+            if not cfg.gemini_key:
+                return ""
+
+            doc = fitz.open(str(path))
+            parts = [{
+                "text": (
+                    "Bạn là chuyên gia số hóa văn bản giáo dục đại học. Hãy phân tích toàn bộ các trang thông báo sau và thực hiện 2 việc:\n"
+                    "1. Tạo [TỔNG QUAN ĐIỀU HÀNH & HƯỚNG DẪN SINH VIÊN] ở đầu (gồm: Số hiệu, Ngày, Tiêu đề, Đối tượng áp dụng, Yêu cầu thông tin nộp, "
+                    "HẠN CHÓT HOÀN THÀNH, ĐƯỜNG DẪN LINK BIỂU MẪU CHÍNH XÁC từng chữ/số, CÁN BỘ VÀ SỐ ĐIỆN THOẠI LIÊN HỆ HỖ TRỢ).\n"
+                    "2. Trích xuất TOÀN VĂN SẠCH CỦA CÁC MỤC (I, II, III, IV...) theo định dạng Markdown. Bỏ qua nhiễu đốm ảnh của mã QR code và con dấu đỏ."
+                )
+            }]
+            for page in doc:
+                pix = page.get_pixmap(dpi=150)
+                img_bytes = pix.tobytes("jpeg")
+                parts.append({
+                    "inlineData": {
+                        "mimeType": "image/jpeg",
+                        "data": base64.b64encode(img_bytes).decode("utf-8")
+                    }
+                })
+            doc.close()
+
+            endpoint = GroundedLLM._gemini_endpoint(cfg.gemini_url, cfg.gemini_model)
+            payload = {
+                "contents": [{"parts": parts}],
+                "generationConfig": {"maxOutputTokens": 3500, "temperature": 0.1}
+            }
+            req = urllib.request.Request(
+                endpoint,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"x-goog-api-key": cfg.gemini_key, "Content-Type": "application/json"},
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=45) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+            extracted = GroundedLLM._gemini_output_text(body)
+            return extracted.strip()
+        except Exception:
+            return ""
 
     def _extract_pdf_ocr(self, path: Path, page_texts: list[str]) -> list[str]:
         """OCR only pages without a usable PDF text layer."""
@@ -346,7 +421,15 @@ class DocumentRepository:
     @staticmethod
     def _is_heading(text: str) -> bool:
         compact = re.sub(r"\s+", " ", text).strip()
-        return bool(re.match(r"^#{1,6}\s+", compact) or re.match(r"^(CHƯƠNG|PHẦN|MỞ ĐẦU|KẾT LUẬN|TÀI LIỆU THAM KHẢO|PHỤ LỤC)\b", compact, re.IGNORECASE) or re.match(r"^\d+(?:\.\d+){0,4}\.?\s+", compact))
+        if re.match(r"^#{1,6}\s+", compact):
+            return True
+        if re.match(r"^(CHƯƠNG|PHẦN|MỞ ĐẦU|KẾT LUẬN|TÀI LIỆU THAM KHẢO|PHỤ LỤC)\b", compact, re.IGNORECASE):
+            return True
+        if re.match(r"^(?:[IVXLCDM]+\.|\d+(?:\.\d+){0,4}\.?)\s+[A-ZÀ-Ỹ]", compact):
+            return True
+        if re.match(r"^\*\*(?:[IVXLCDM]+\.|\d+\.)\s+", compact):
+            return True
+        return False
 
     @staticmethod
     def _is_table_of_contents_line(text: str) -> bool:
@@ -368,7 +451,7 @@ class DocumentRepository:
                 return
             clauses, current = [], ""
             for paragraph in buffer:
-                if len(current) + len(paragraph) + 1 > 2200 and current:
+                if len(current) + len(paragraph) + 1 > 700 and current:
                     clauses.append(Clause(str(len(clauses) + 1), current))
                     current = paragraph
                 else:
@@ -376,13 +459,25 @@ class DocumentRepository:
             if current:
                 clauses.append(Clause(str(len(clauses) + 1), current))
             if clauses:
-                articles.append(Article(f"Mục {len(articles) + 1}", heading, clauses))
+                clean_heading = re.sub(r"^[\*#\s]+|\*+$", "", heading).strip()
+                full_heading = f"{document_title} - {clean_heading}" if document_title not in clean_heading else clean_heading
+                articles.append(Article(f"Mục {len(articles) + 1}", full_heading, clauses))
             buffer.clear()
 
         for paragraph in paragraphs:
             if cls._is_heading(paragraph):
                 flush()
-                heading = re.sub(r"^#{1,6}\s+", "", paragraph)[:180]
+                inline_bold = re.match(r"^\*\*([^*]+)\*\*[:\s]*(.*)$", paragraph)
+                if inline_bold:
+                    heading = inline_bold.group(1).strip()
+                    remainder = inline_bold.group(2).strip()
+                    if remainder:
+                        buffer.append(f"**{heading}:** {remainder}")
+                else:
+                    raw_h = re.sub(r"^#{1,6}\s+", "", paragraph)
+                    heading = re.sub(r"^\*\s+", "", raw_h)[:120].strip()
+                    if not re.match(r"^#{1,6}\s+", paragraph):
+                        buffer.append(paragraph)
             else:
                 buffer.append(paragraph)
         flush()

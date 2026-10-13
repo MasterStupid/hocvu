@@ -67,6 +67,17 @@ def expand_academic_terms(text: str) -> str:
         normalized = f"{normalized} học cùng lúc hai chương trình"
     return normalize(normalized)
 
+def word_tokenize_vi(text: str) -> List[str]:
+    """Tách từ ghép tiếng Việt chuẩn xác bằng thư viện underthesea."""
+    if not text:
+        return []
+    try:
+        from underthesea import word_tokenize
+        segmented = word_tokenize(normalize(text), format="text")
+        return [w.replace("_", " ") for w in segmented.split()]
+    except Exception:
+        return tokenize(text)
+
 def tokenize(text: str) -> List[str]:
     text = normalize(text)
     text = strip_accents(text).lower()

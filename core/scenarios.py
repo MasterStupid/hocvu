@@ -19,9 +19,17 @@ def is_attendance_training_scenario(question: str) -> bool:
 def is_contextual_follow_up(question: str) -> bool:
     """Recognise short references to the immediately preceding topic only."""
     q = strip_accents(normalize(question)).lower()
-    return any(q.startswith(prefix) for prefix in (
+    prefixes = (
         "con dieu kien", "con truong hop", "the con", "noi ro hon", "cu the hon",
-    ))
+        "con gi", "vay con", "vay neu", "neu vay", "neu the", "vay thi", "the thi",
+        "the con", "the thi", "con nua khong", "dieu do",
+    )
+    if any(q.startswith(prefix) for prefix in prefixes):
+        return True
+    words = q.split()
+    if len(words) <= 4 and any(w in words for w in ("do", "nay", "ay", "kia", "sao", "khong")):
+        return True
+    return False
 
 
 def is_historical_query(question: str) -> bool:

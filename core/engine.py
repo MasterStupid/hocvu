@@ -71,16 +71,26 @@ class HocVuEngine:
             comparison = is_comparison_query(question)
             historical = comparison or is_historical_query(question)
             retrieval_question = expand_retrieval_query(question)
-            if use_context:
-                retrieval_question, _ = self.session.contextualize(session_id, retrieval_question)
-            # Situation questions may need evidence from two regulations (for
-            # example attendance and training score), so retain a wider pool
-            # before the scenario generator selects only relevant passages.
+            is_follow_up = follow_up or is_contextual_follow_up(question)
             retrieval_limit = max(self.config.top_k, 20) if scenario or comparison or historical else max(self.config.top_k, 12)
-            hits = self.searcher.search(retrieval_question, retrieval_limit, ref_date or date.today().isoformat(), include_expired=historical)
+            today_str = ref_date or date.today().isoformat()
             using_semantic = self.searcher.provider != "bm25"
-            if not using_semantic:
+
+            if is_follow_up and use_context:
+                retrieval_question, _ = self.session.contextualize(session_id, retrieval_question)
+                hits = self.searcher.search(retrieval_question, retrieval_limit, today_str, include_expired=historical)
                 hits = self.searcher.rerank_by_coverage(retrieval_question, hits)
+            else:
+                hits = self.searcher.search(retrieval_question, retrieval_limit, today_str, include_expired=historical)
+                hits = self.searcher.rerank_by_coverage(retrieval_question, hits)
+                if (not hits or not self.searcher.has_specific_evidence(retrieval_question, hits)) and use_context:
+                    context_q, _ = self.session.contextualize(session_id, retrieval_question)
+                    if context_q != retrieval_question:
+                        context_hits = self.searcher.search(context_q, retrieval_limit, today_str, include_expired=historical)
+                        context_hits = self.searcher.rerank_by_coverage(context_q, context_hits)
+                        if self.searcher.has_specific_evidence(context_q, context_hits):
+                            hits = context_hits
+                            retrieval_question = context_q
             if historical and not comparison:
                 # When the student explicitly asks for the old rule, an
                 # expired source is the intended evidence, not a fallback.
@@ -106,7 +116,7 @@ class HocVuEngine:
                 reason = "Insufficient grounded context" if refused else ""
                 if use_ai and not refused:
                     try:
-                        answer = self.llm.rewrite(question, answer, references)
+                        answer = self.llm.rewrite(question, answer, references, hits=hits)
                         ai_status = "on"
                     except LLMError as exc:
                         ai_status = "fallback"

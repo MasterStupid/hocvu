@@ -55,10 +55,10 @@ class SessionStore:
             conn.close()
 
     def contextualize(self, session_id: str, question: str) -> tuple[str, str]:
-        history = self.get_history(session_id, 3)
+        history = self.get_history(session_id, 1)
         if not history:
             return question, ""
             
-        context_str = " | ".join([t['question'] for t in history])
+        context_str = history[-1]['question']
         expanded = f"{context_str} | {question}"
         return expanded, context_str

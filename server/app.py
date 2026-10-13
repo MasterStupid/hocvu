@@ -1,256 +1,311 @@
-"""Small standard-library HTTP API for the HocVu AI pilot."""
+"""FastAPI RESTful web service for HocVu AI with Swagger UI and Edge-TTS support."""
 from __future__ import annotations
 
+import io
 import json
-import mimetypes
 import os
 import re
-import threading
 import time
 import uuid
 import webbrowser
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from typing import Any, Dict, List, Optional
+
+import uvicorn
+from fastapi import FastAPI, HTTPException, Request, Response, UploadFile, File, Form, Query, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 
 from core.engine import HocVuEngine, build_index
 from core.documents import DocumentError, DocumentRepository
-from core.settings import INDEX_JSON, SERVER_META, UI, ensure_dirs, load_config
+from core.settings import AUD, INDEX_JSON, SERVER_META, UI, ensure_dirs, load_config
+from core.voice import VoiceManager, clean_text_for_tts, DEFAULT_VOICE, MALE_VOICE
 
 
+# ── Global Engine & Voice State ──────────────────────────────────────────────
 engine: HocVuEngine | None = None
+voice_manager: VoiceManager | None = None
 requires_api_token = False
+config = load_config()
 
 
-class HocVuHandler(BaseHTTPRequestHandler):
-    server_version = "HocVuAI/0.2"
-    _request_times: dict[str, list[float]] = {}
-    _rate_lock = threading.Lock()
+def get_engine() -> HocVuEngine:
+    global engine
+    if engine is None:
+        ensure_dirs()
+        if not INDEX_JSON.exists():
+            _, searcher = build_index(config, return_searcher=True)
+            engine = HocVuEngine(config, searcher)
+        else:
+            engine = HocVuEngine.load(config, INDEX_JSON)
+    return engine
 
-    def log_message(self, fmt, *args):
-        return
 
-    def _headers(self):
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-HocVu-Token")
+def get_voice_manager() -> VoiceManager:
+    global voice_manager
+    if voice_manager is None:
+        voice_manager = VoiceManager(config=config, audio_dir=AUD)
+    return voice_manager
 
-    def _check_api_access(self) -> bool:
-        if not self.path.startswith("/api/"):
-            return True
-        # Hosting providers call this endpoint directly and cannot attach the
-        # private proxy token.  It deliberately exposes only operational
-        # status, never a document, index, session, or answer.
-        if urlparse(self.path).path == "/api/health":
-            return True
-        if requires_api_token and self.headers.get("X-HocVu-Token", "") != engine.config.api_token:
-            self.respond_json({"error": "API token is required for network access."}, 401)
-            return False
+
+# ── Pydantic Request / Response Models ───────────────────────────────────────
+class AskRequest(BaseModel):
+    question: str = Field(..., description="Câu hỏi quy chế của sinh viên")
+    session_id: Optional[str] = Field(None, description="Mã định danh phiên hội thoại")
+    ref_date: Optional[str] = Field(None, description="Ngày tra cứu hiệu lực văn bản (YYYY-MM-DD)")
+    with_audio: Optional[bool] = Field(False, description="Yêu cầu sinh kèm URL âm thanh phản hồi")
+    use_ai: Optional[bool] = Field(False, description="Bật Google Gemini diễn đạt lại câu trả lời")
+
+
+class TTSRequest(BaseModel):
+    text: str = Field(..., description="Văn bản cần đọc")
+    voice: Optional[str] = Field(DEFAULT_VOICE, description="Tên giọng đọc (vi-VN-HoaiMyNeural hoặc vi-VN-NamMinhNeural)")
+    rate: Optional[str] = Field("+0%", description="Tốc độ đọc, ví dụ: +0%, +10%, -10%")
+
+
+# ── Khởi tạo Ứng dụng FastAPI ────────────────────────────────────────────────
+app = FastAPI(
+    title="HocVu AI API",
+    description="Hệ thống Trợ lý ảo tư vấn Quy chế Đào tạo Sinh viên (RAG & Voice Assistant) - ĐH Hải Phòng",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+_request_times: dict[str, list[float]] = {}
+
+
+@app.middleware("http")
+async def rate_limit_and_auth_middleware(request: Request, call_next):
+    client_ip = request.client.host if request.client else "127.0.0.1"
+    path = request.url.path
+
+    # Kiểm tra bảo vệ API nếu mở ra mạng công cộng
+    if path.startswith("/api/") and path != "/api/health":
+        if requires_api_token:
+            token = request.headers.get("X-HocVu-Token", "")
+            if token != config.api_token:
+                return JSONResponse(status_code=401, content={"error": "API token is required for network access."})
+
+        # Rate limiting
         now = time.monotonic()
-        client = self.client_address[0]
-        with self._rate_lock:
-            recent = [stamp for stamp in self._request_times.get(client, []) if now - stamp < 60]
-            if len(recent) >= engine.config.rate_limit_per_minute:
-                self._request_times[client] = recent
-                self.respond_json({"error": "Too many requests; try again in a minute."}, 429)
-                return False
-            recent.append(now)
-            self._request_times[client] = recent
-        return True
+        recent = [stamp for stamp in _request_times.get(client_ip, []) if now - stamp < 60]
+        if len(recent) >= config.rate_limit_per_minute:
+            _request_times[client_ip] = recent
+            return JSONResponse(status_code=429, content={"error": "Too many requests; try again in a minute."})
+        recent.append(now)
+        _request_times[client_ip] = recent
 
-    def respond_json(self, data, status=200):
-        body = json.dumps(data, ensure_ascii=False).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self._headers()
-        self.end_headers()
-        self.wfile.write(body)
+    response = await call_next(request)
+    return response
 
-    def do_OPTIONS(self):
-        self.send_response(204)
-        self._headers()
-        self.end_headers()
 
-    def _json_body(self):
-        size = int(self.headers.get("Content-Length", "0"))
-        if size > 1_000_000:
-            raise ValueError("Request too large")
-        data = json.loads(self.rfile.read(size).decode("utf-8")) if size else {}
-        if not isinstance(data, dict):
-            raise ValueError("JSON request body phải là một object.")
-        return data
+# ── Các Endpoint Nghiệp vụ (API Routes) ──────────────────────────────────────
+@app.get("/api/health", summary="Kiểm tra trạng thái hệ thống")
+async def health_check():
+    eng = get_engine()
+    return {
+        "status": "ok",
+        "documents": len(eng.list_documents()),
+        "voice": "edge-tts+browser",
+        "retrieval": eng.searcher.provider,
+        "semantic_error": eng.searcher.semantic_error,
+        "api_framework": "FastAPI/Uvicorn",
+        "api_version": "answer-cards-1",
+    }
 
-    def do_GET(self):
-        if not self._check_api_access():
-            return
-        parsed = urlparse(self.path)
-        if parsed.path == "/api/health":
-            self.respond_json({
-                "status": "ok", "documents": len(engine.list_documents()), "voice": "browser",
-                "retrieval": engine.searcher.provider,
-                "semantic_error": engine.searcher.semantic_error,
-                "api_version": "answer-cards-1",
-            })
-        elif parsed.path == "/api/documents":
-            self.respond_json(engine.list_documents())
-        elif parsed.path.startswith("/api/documents/") and parsed.path.endswith("/text"):
-            item_id = parsed.path.removeprefix("/api/documents/").removesuffix("/text").strip("/")
-            try:
-                self.respond_json(engine.document_text(item_id))
-            except DocumentError as exc:
-                self.respond_json({"error": str(exc)}, 404)
-        elif parsed.path == "/api/history":
-            session_id = parse_qs(parsed.query).get("session_id", [""])[0]
-            self.respond_json(engine.history(session_id))
-        elif parsed.path == "/api/suggestions":
-            self.respond_json(engine.suggestion_topics())
-        elif parsed.path.startswith("/api/"):
-            self.respond_json({"error": "Not found"}, 404)
-        else:
-            self._serve_static(parsed.path)
 
-    def _serve_static(self, requested: str):
-        relative = "index.html" if requested in ("", "/") else requested.lstrip("/")
-        root = UI.resolve()
-        filepath = (root / relative).resolve()
-        if root not in filepath.parents and filepath != root:
-            self.send_error(403)
-            return
-        if not filepath.is_file():
-            self.send_error(404)
-            return
-        data = filepath.read_bytes()
-        self.send_response(200)
-        self.send_header("Content-Type", mimetypes.guess_type(str(filepath))[0] or "application/octet-stream")
-        self.send_header("Content-Length", str(len(data)))
-        self._headers()
-        self.end_headers()
-        self.wfile.write(data)
+@app.post("/api/ask", summary="Đặt câu hỏi tư vấn quy chế")
+async def ask_question(payload: AskRequest):
+    eng = get_engine()
+    session_id = payload.session_id or str(uuid.uuid4())
+    response = eng.ask(
+        question=payload.question,
+        session_id=session_id,
+        ref_date=payload.ref_date,
+        with_audio=bool(payload.with_audio),
+        use_ai=bool(payload.use_ai),
+    )
+    result = response.to_dict()
 
-    def do_POST(self):
-        if not self._check_api_access():
-            return
-        path = urlparse(self.path).path
-        if path == "/api/documents/upload":
-            self._upload_document()
-            return
+    # Nếu client yêu cầu kèm âm thanh server
+    if payload.with_audio and not result.get("audio_url"):
         try:
-            data = self._json_body()
-        except (ValueError, json.JSONDecodeError) as exc:
-            self.respond_json({"error": str(exc)}, 400)
-            return
-        if path == "/api/ask":
-            session_id = str(data.get("session_id") or uuid.uuid4())
-            response = engine.ask(
-                data.get("question", ""), session_id, data.get("ref_date"),
-                bool(data.get("with_audio")), use_ai=bool(data.get("use_ai")),
-            )
-            self.respond_json(response.to_dict())
-        elif path == "/api/documents/reindex":
-            self.respond_json(engine.rebuild_index())
-        else:
-            self.respond_json({"error": "Not found"}, 404)
-
-    def _upload_document(self):
-        content_type = self.headers.get("Content-Type", "")
-        if not content_type.startswith("multipart/form-data"):
-            self.respond_json({"error": "Yêu cầu phải là multipart/form-data."}, 400)
-            return
-        try:
-            filename, content, fields = self._read_multipart_file()
-            if not filename:
-                raise DocumentError("Hãy chọn một tệp PDF, DOCX hoặc ảnh.")
-            use_ocr = fields.get("ocr", "").strip().lower() in {"1", "true", "on", "yes"}
-            metadata = {key: fields.get(key, "") for key in ("order", "decision_number", "article_clause", "document_date")}
-            item = engine.add_document(filename, content, use_ocr=use_ocr, metadata=metadata)
-            self.respond_json(item, 201)
-        except DocumentError as exc:
-            self.respond_json({"error": str(exc)}, 400)
+            vm = get_voice_manager()
+            audio_url, _ = await vm.generate_audio_file(response.answer, prefix="ask")
+            result["audio_url"] = audio_url
         except Exception:
-            self.respond_json({"error": "Không thể đọc tệp. Hãy kiểm tra tệp hợp lệ, không bị mã hóa và tùy chọn OCR."}, 400)
+            pass
 
-    def _read_multipart_file(self) -> tuple[str, bytes, dict[str, str]]:
-        """Read one `file` form part without the removed cgi module.
-
-        The server accepts only a single, bounded upload and does not preserve
-        request headers supplied by the browser as file metadata.
-        """
-        content_type = self.headers.get("Content-Type", "")
-        match = re.search(r'boundary=(?:"([^"]+)"|([^;\s]+))', content_type)
-        if not match:
-            raise DocumentError("Không tìm thấy ranh giới dữ liệu tải lên.")
-        boundary = (match.group(1) or match.group(2)).encode("utf-8")
-        content_length = int(self.headers.get("Content-Length", "0"))
-        if not 0 < content_length <= DocumentRepository.max_bytes + 64 * 1024:
-            raise DocumentError("Kích thước yêu cầu không hợp lệ hoặc vượt quá 25 MB.")
-        body = self.rfile.read(content_length)
-        marker = b"--" + boundary
-        fields: dict[str, str] = {}
-        selected: tuple[str, bytes] | None = None
-        for part in body.split(marker):
-            headers, separator, payload = part.partition(b"\r\n\r\n")
-            if not separator:
-                continue
-            name_match = re.search(br'\bname="?([^";\s]+)"?', headers, flags=re.IGNORECASE)
-            filename_match = re.search(br'\bfilename="?([^";\r\n]+)"?', headers, flags=re.IGNORECASE)
-            if not name_match:
-                continue
-            # Multipart framing contributes exactly one CRLF before boundary;
-            # do not use rstrip(), which could corrupt binary ZIP/PDF content.
-            if payload.endswith(b"\r\n"):
-                payload = payload[:-2]
-            name = name_match.group(1).decode("utf-8", errors="replace")
-            if filename_match and name == "file":
-                selected = (filename_match.group(1).decode("utf-8", errors="replace"), payload)
-            else:
-                fields[name] = payload.decode("utf-8", errors="replace")
-        if selected:
-            return selected[0], selected[1], fields
-        raise DocumentError("Không tìm thấy trường tệp trong yêu cầu tải lên.")
-
-    def do_DELETE(self):
-        if not self._check_api_access():
-            return
-        prefix = "/api/documents/"
-        if not self.path.startswith(prefix):
-            self.respond_json({"error": "Not found"}, 404)
-            return
-        item_id = self.path[len(prefix):].strip("/")
-        if not item_id or "/" in item_id:
-            self.respond_json({"error": "Invalid document id"}, 400)
-            return
-        try:
-            engine.remove_document(item_id)
-            self.respond_json({"status": "deleted"})
-        except DocumentError as exc:
-            self.respond_json({"error": str(exc)}, 404)
+    return result
 
 
-def main(host="127.0.0.1", port=8000, verbose=False, open_browser=False):
-    global engine, requires_api_token
-    config = load_config()
+@app.get("/api/documents", summary="Danh sách tài liệu đã lập chỉ mục")
+async def list_documents():
+    eng = get_engine()
+    return eng.list_documents()
+
+
+@app.post("/api/documents/upload", status_code=status.HTTP_201_CREATED, summary="Tải lên tài liệu quy chế mới")
+async def upload_document(
+    file: UploadFile = File(...),
+    ocr: Optional[str] = Form(""),
+    order: Optional[str] = Form(""),
+    decision_number: Optional[str] = Form(""),
+    article_clause: Optional[str] = Form(""),
+    document_date: Optional[str] = Form(""),
+):
+    eng = get_engine()
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Hãy chọn một tệp PDF, DOCX hoặc ảnh.")
+    
+    content = await file.read()
+    if len(content) > DocumentRepository.max_bytes:
+        raise HTTPException(status_code=400, detail="Kích thước tệp vượt quá 25 MB.")
+
+    use_ocr = str(ocr).strip().lower() in {"1", "true", "on", "yes"}
+    metadata = {
+        "order": order or "",
+        "decision_number": decision_number or "",
+        "article_clause": article_clause or "",
+        "document_date": document_date or "",
+    }
+    try:
+        item = eng.add_document(file.filename, content, use_ocr=use_ocr, metadata=metadata)
+        return item
+    except DocumentError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Không thể đọc tệp: {exc}")
+
+
+@app.get("/api/documents/{item_id}/text", summary="Xem nội dung văn bản trích xuất")
+async def document_text(item_id: str):
+    eng = get_engine()
+    try:
+        return eng.document_text(item_id)
+    except DocumentError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@app.delete("/api/documents/{item_id}", summary="Xóa tài liệu khỏi kho dữ liệu")
+async def remove_document(item_id: str):
+    eng = get_engine()
+    try:
+        eng.remove_document(item_id)
+        return {"status": "deleted"}
+    except DocumentError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@app.post("/api/documents/reindex", summary="Tái lập toàn bộ chỉ mục tìm kiếm")
+async def reindex_documents():
+    eng = get_engine()
+    return eng.rebuild_index()
+
+
+@app.get("/api/history", summary="Lấy lịch sử hội thoại theo phiên")
+async def get_history(session_id: str = Query("", description="Mã phiên hội thoại")):
+    eng = get_engine()
+    return eng.history(session_id)
+
+
+@app.get("/api/suggestions", summary="Lấy danh mục câu hỏi gợi ý")
+async def get_suggestions():
+    eng = get_engine()
+    return eng.suggestion_topics()
+
+
+# ── Endpoint Xử lý Giọng nói (Server-side Edge-TTS) ──────────────────────────
+@app.get("/api/tts", summary="Tổng hợp giọng nói tiếng Việt (GET stream)")
+async def tts_get(
+    text: str = Query(..., description="Văn bản cần đọc"),
+    voice: Optional[str] = Query(DEFAULT_VOICE, description="Giọng đọc"),
+):
+    vm = get_voice_manager()
+    cleaned = clean_text_for_tts(text)
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="Văn bản rỗng.")
+    try:
+        audio_bytes = await vm.synthesize(cleaned, voice=voice or DEFAULT_VOICE)
+        return StreamingResponse(
+            io.BytesIO(audio_bytes),
+            media_type="audio/mpeg",
+            headers={"Content-Disposition": "inline; filename=speech.mp3"},
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Lỗi tổng hợp giọng nói: {exc}")
+
+
+@app.post("/api/tts", summary="Tổng hợp giọng nói tiếng Việt (POST)")
+async def tts_post(payload: TTSRequest):
+    vm = get_voice_manager()
+    cleaned = clean_text_for_tts(payload.text)
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="Văn bản rỗng.")
+    try:
+        audio_url, _ = await vm.generate_audio_file(cleaned, voice=payload.voice or DEFAULT_VOICE)
+        return {"status": "ok", "audio_url": audio_url}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Lỗi tổng hợp giọng nói: {exc}")
+
+
+@app.get("/api/audio/{filename}", summary="Phát file âm thanh đã lưu")
+async def get_audio_file(filename: str):
+    file_path = AUD / filename
+    if not file_path.is_file():
+        raise HTTPException(status_code=404, detail="Audio not found")
+    return FileResponse(file_path, media_type="audio/mpeg")
+
+
+# ── Phục vụ Giao diện Người dùng (Static Files) ──────────────────────────────
+@app.get("/", include_in_schema=False)
+async def serve_index():
+    return FileResponse(UI / "index.html")
+
+
+@app.get("/documents.html", include_in_schema=False)
+async def serve_docs_page():
+    return FileResponse(UI / "documents.html")
+
+
+# Mount static assets (css, js, vendor)
+app.mount("/", StaticFiles(directory=str(UI)), name="ui")
+
+
+# ── Hàm Khởi chạy Máy chủ Uvicorn ────────────────────────────────────────────
+def main(host: str = "127.0.0.1", port: int = 8000, verbose: bool = False, open_browser: bool = False):
+    global requires_api_token, engine
     requires_api_token = host not in {"127.0.0.1", "localhost", "::1"}
     if requires_api_token and not config.api_token:
         raise RuntimeError("Khi mở server ra mạng, hãy đặt HV_API_TOKEN để bảo vệ tài liệu và API.")
+
     ensure_dirs()
-    if not INDEX_JSON.exists():
-        _, searcher = build_index(config, return_searcher=True)
-        engine = HocVuEngine(config, searcher)
-    else:
-        engine = HocVuEngine.load(config, INDEX_JSON)
-    server = ThreadingHTTPServer((host, port), HocVuHandler)
-    SERVER_META.write_text(json.dumps({"pid": os.getpid(), "port": port}), encoding="utf-8")
+    engine = get_engine()
+    get_voice_manager()
+
+    SERVER_META.write_text(json.dumps({"pid": os.getpid(), "port": port, "server": "FastAPI/Uvicorn"}), encoding="utf-8")
     url = f"http://{host}:{port}"
-    print(f"HocVu AI is running at {url}")
+    print(f"HocVu AI (FastAPI + Edge-TTS) is running at {url}")
+    print(f"Interactive API Docs available at {url}/docs")
+
     if open_browser:
         webbrowser.open(url)
+
     try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        pass
+        log_lvl = "debug" if verbose else "info"
+        uvicorn.run(app, host=host, port=port, log_level=log_lvl)
     finally:
-        server.server_close()
         SERVER_META.unlink(missing_ok=True)
 
 

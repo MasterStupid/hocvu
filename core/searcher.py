@@ -18,7 +18,10 @@ INDEX_SCHEMA_VERSION = 2
 
 
 class HybridSearcher:
-    _generic_institutional_terms = {"dai", "hoc", "truong", "sinh", "vien", "quy", "dinh", "van", "ban"}
+    _generic_institutional_terms = {
+        "dai", "hoc", "truong", "sinh", "vien", "quy", "dinh", "van", "ban",
+        "to", "chuc", "co", "so", "yeu", "cau", "bo", "lam", "vao", "o",
+    }
     def __init__(self, config):
         self.config = config
         self.chunks: list[Chunk] = []
@@ -178,15 +181,17 @@ class HybridSearcher:
         BM25 remains the retrieval score; coverage is a transparent second
         stage that fixes a broad document winning over the exact clause.
         """
+        peak_score = max((hit.score for hit in hits), default=0.0) or 1.0
         peak_bm25 = max((hit.bm25 for hit in hits), default=0.0) or 1.0
         query_terms = set(content_tokens(query))
         asks_for_conditions = {"dieu", "kien"}.issubset(query_terms)
 
         def rank(hit: RankedChunk) -> float:
+            base_rel = (hit.score / peak_score) if hit.score > 0 else (hit.bm25 / peak_bm25)
             value = (
-                (0.50 * HybridSearcher.lexical_coverage(query, hit))
-                + (0.40 * HybridSearcher.phrase_coverage(query, hit))
-                + (0.10 * (hit.bm25 / peak_bm25))
+                (0.40 * HybridSearcher.lexical_coverage(query, hit))
+                + (0.30 * HybridSearcher.phrase_coverage(query, hit))
+                + (0.30 * base_rel)
             )
             if asks_for_conditions:
                 evidence = hit.chunk.text.lower()
@@ -199,10 +204,12 @@ class HybridSearcher:
             reverse=True,
         )
 
+    _conversational_terms = {"em", "minh", "gap", "xin", "a", "da"}
+
     @classmethod
     def has_specific_evidence(cls, query: str, hits: list[RankedChunk]) -> bool:
         """Reject coincidental overlap on only university-generic words."""
-        query_terms = set(content_tokens(query)) - cls._generic_institutional_terms
+        query_terms = set(content_tokens(query)) - cls._generic_institutional_terms - cls._conversational_terms
         if not query_terms:
             return False
         best = 0.0

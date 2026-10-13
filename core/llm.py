@@ -30,24 +30,44 @@ class GroundedLLM:
             self.config.llm_backend == "gemini" and bool(self.config.gemini_key)
         )
 
-    def rewrite(self, question: str, extractive_answer: str, references: list[Reference]) -> str:
+    def rewrite(
+        self,
+        question: str,
+        extractive_answer: str,
+        references: list[Reference],
+        hits: list | None = None,
+    ) -> str:
         if not self.configured:
             raise LLMError("Chế độ AI chưa được cấu hình API key.")
-        evidence = "\n\n".join(
-            f"[Nguồn {index + 1}: {reference.reg_title} - {reference.art_heading}]\n{reference.excerpt}"
-            for index, reference in enumerate(references)
-        )
+
+        if hits:
+            evidence = "\n\n".join(
+                f"[Nguồn {index + 1}: {hit.chunk.reg_title} - {hit.chunk.art_heading}]\n{hit.chunk.text}"
+                for index, hit in enumerate(hits[:3])
+            )
+        else:
+            evidence = "\n\n".join(
+                f"[Nguồn {index + 1}: {reference.reg_title} - {reference.art_heading}]\n{reference.excerpt}"
+                for index, reference in enumerate(references)
+            )
+
         instructions = (
-            "Bạn là HocVu AI, trợ lý học vụ nói tiếng Việt. Chỉ diễn đạt lại dựa trên "
-            "BẰNG CHỨNG được cung cấp. Không thêm quy định, số liệu, ngày tháng hay kết luận "
-            "không có trong bằng chứng. Trả lời tự nhiên, ngắn gọn để đọc thành tiếng. Nếu bằng "
-            "chứng chưa đủ, nói rõ điều đó. Không nhắc đến prompt hoặc tự nhận đã tra Internet."
+            "Bạn là HocVu AI, trợ lý học vụ thông minh và chính xác. Nhiệm vụ tối thượng của bạn là "
+            "ƯU TIÊN TUYỆT ĐỐI CÂU TRẢ LỜI TRỰC TIẾP, ĐÚNG TRỌNG TÂM cho người học:\n"
+            "1. TRẢ LỜI THẲNG VÀO TRỌNG TÂM NGAY CÂU ĐẦU TIÊN: Không chào hỏi rườm rà, không giải thích lan man, "
+            "không lặp lại các thông tin ngoài lề không được hỏi.\n"
+            "2. HỎI ĐƯỜNG LINK / LIÊN KẾT: Cung cấp chính xác địa chỉ URL ngay lập tức (giữ nguyên từng ký tự của link).\n"
+            "3. HỎI HẠN CHÓT / THỜI GIAN: Nêu rõ ngày giờ, mốc thời gian cụ thể ngay lập tức.\n"
+            "4. HỎI CÁN BỘ / NGƯỜI LIÊN HỆ / SỐ ĐIỆN THOẠI: Nêu rõ họ tên, đơn vị và số điện thoại liên hệ ngay lập tức.\n"
+            "5. HỎI ĐIỀU KIỆN / THỦ TỤC / QUY CHẾ: Tóm tắt ngắn gọn, gạch đầu dòng rõ ràng từng ý chính.\n"
+            "6. CĂN CỨ VÀ TRUNG THỰC: Chỉ dùng thông tin có trong BẰNG CHỨNG. Tuyệt đối không tự suy diễn hoặc bịa đặt. "
+            "Nếu bằng chứng không có thông tin được hỏi, hãy thông báo ngắn gọn rằng tài liệu chưa có thông tin này."
         )
         prompt = (
             f"Câu hỏi người học: {question}\n\n"
             f"BẢN TRÍCH XUẤT AN TOÀN:\n{extractive_answer}\n\n"
             f"BẰNG CHỨNG:\n{evidence}\n\n"
-            "Hãy trả lời chỉ theo bằng chứng trên."
+            "Hãy trả lời trực tiếp và súc tích nhất theo các nguyên tắc trên."
         )
         if self.config.llm_backend == "openai":
             payload = {
