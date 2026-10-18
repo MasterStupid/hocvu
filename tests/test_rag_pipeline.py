@@ -1,9 +1,12 @@
 import unittest
+import io
 import json
 import tempfile
+import zipfile
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+from xml.sax.saxutils import escape
 
 from core.classifier import Classifier, Intent
 from core.corpus import build_corpus, build_qa
@@ -12,7 +15,7 @@ from core.generator import Generator
 from core.searcher import HybridSearcher
 from core.scenarios import expand_retrieval_query, is_attendance_training_scenario
 from core.settings import AppConfig
-from core.engine import HocVuEngine
+from core.engine import HocVuEngine, build_index
 from core.index_version import index_fingerprint
 from core.models import Reference, Response
 from core.nlp import accent_key, content_tokens
@@ -619,6 +622,95 @@ class RagPipelineTests(unittest.TestCase):
         self.assertNotIn("Con vịt có biết lập trình không?", response.card["suggestions"])
         suggested = {question for topic in engine.suggestion_topics() for question in topic["questions"]}
         self.assertTrue(set(response.card["suggestions"]).issubset(suggested))
+
+
+class UploadedFeatureEvidenceTests(unittest.TestCase):
+    @staticmethod
+    def service_docx(clause):
+        """Create a Word package, not pre-extracted text or search chunks."""
+        content = io.BytesIO()
+        with zipfile.ZipFile(content, "w", zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("[Content_Types].xml", (
+                '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+                '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+                '<Default Extension="xml" ContentType="application/xml"/>'
+                '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+                '</Types>'
+            ))
+            archive.writestr("_rels/.rels", (
+                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
+                '</Relationships>'
+            ))
+            archive.writestr("word/document.xml", (
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                '<w:body><w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr>'
+                '<w:r><w:t>Dịch vụ nội trú</w:t></w:r></w:p>'
+                f'<w:p><w:r><w:t>{escape(clause)}</w:t></w:r></w:p>'
+                '</w:body></w:document>'
+            ))
+        return content.getvalue()
+
+    def test_descriptive_wifi_answers_require_support_in_uploaded_docx(self):
+        questions = (
+            "Wifi ở ký túc xá thế nào?", "wifi o ky tuc xa the nao",
+            "Wifi tại ký túc xá như thế nào ạ?", "wifi tai ky tuc xa nhu the nao a",
+            "Wifi trong ký túc xá ra sao?", "wifi trong ky tuc xa ra sao",
+            "Wifi của ký túc xá thế nào?", "wifi cua ky tuc xa the nao",
+            "Wifi ký túc xá thế nào?", "wifi ky tuc xa the nao",
+        )
+        for supported, clause in (
+            (False, "Sinh viên chấp hành nội quy ký túc xá."),
+            (True, "Ký túc xá có wifi miễn phí cho sinh viên ở ký túc xá."),
+        ):
+            with self.subTest(supported=supported), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                index = root / "index" / "chunks.json"
+                config = AppConfig(semantic_enabled=False, llm_backend="local", seed=20262027)
+                with (
+                    patch("core.engine.DOCS", root / "documents"),
+                    patch("core.engine.SESSION_DB", root / "sessions.db"),
+                    patch("core.engine.AUD", root / "audio"),
+                    # Redirect the default index path bound by build_index,
+                    # while still running the real rebuild implementation.
+                    patch("core.engine.build_index", side_effect=lambda cfg, **kw: build_index(
+                        cfg, index_path=index, **kw,
+                    )),
+                ):
+                    engine = HocVuEngine(config, HybridSearcher(config))
+                    uploaded = engine.documents.add(
+                        "dich-vu-noi-tru.docx", self.service_docx(clause),
+                        metadata={"document_date": "2026-01-01"},
+                    )
+                    extracted = root / "documents" / "extracted" / f"{uploaded['id']}.txt"
+                    self.assertIn(clause, extracted.read_text(encoding="utf-8"))
+                    self.assertEqual(engine.rebuild_index()["uploaded"], 1)
+                    self.assertTrue(index.is_file())
+                    engine = HocVuEngine.load(config, index)
+                    self.assertEqual(engine.searcher.provider, "bm25")
+                    self.assertTrue(any(
+                        chunk.rid == uploaded["rid"] and clause in chunk.text
+                        for chunk in engine.searcher.chunks
+                    ))
+                    for question in questions:
+                        with self.subTest(question=question):
+                            response = engine.ask(
+                                question, "uploaded-wifi", ref_date="2026-10-18",
+                                use_context=False, record_session=False,
+                            )
+                            self.assertEqual(response.refused, not supported)
+                            if not supported:
+                                self.assertFalse(response.references)
+                                continue
+                            self.assertIn("wifi miễn phí", response.answer.lower())
+                            self.assertTrue(response.references)
+                            for reference in response.references:
+                                self.assertEqual(reference.rid, uploaded["rid"])
+                                self.assertEqual(reference.reg_title, uploaded["title"])
+                                self.assertEqual(reference.aid, "Mục 1")
+                                self.assertEqual(reference.art_heading, "Dịch vụ nội trú")
+                                self.assertEqual(reference.clause_ids, ["1"])
+                                self.assertIn(clause, reference.excerpt)
 
 
 class SemanticFeatureEvidenceTests(unittest.TestCase):
