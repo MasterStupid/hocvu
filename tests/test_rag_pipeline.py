@@ -377,6 +377,77 @@ class RagPipelineTests(unittest.TestCase):
                 self.assertNotIn("TOEIC", response.answer)
                 self.assertNotIn("chuyển khoản", response.answer)
 
+    def test_scholarship_threshold_clauses_reach_coverage_reranking(self):
+        engine = HocVuEngine(self.config, self.searcher)
+        rid = "QD-HBHT-HPU-2026"
+        for question in ("dieu kien nhan hoc bong", "Điều kiện nhận học bổng"):
+            with self.subTest(question=question):
+                # Reproduce the recall gap: the old pool loses every detailed
+                # threshold, even though the general eligibility basis survives.
+                old_pool = self.searcher.search(question, 12, "2026-10-05")
+                self.assertFalse(any(
+                    hit.chunk.rid == rid and hit.chunk.aid == "Điều 2"
+                    for hit in old_pool
+                ))
+                with patch.object(
+                    self.searcher, "rerank_by_coverage",
+                    wraps=self.searcher.rerank_by_coverage,
+                ) as rerank:
+                    response = engine.ask(
+                        question, "scholarship-thresholds", use_context=False,
+                        record_session=False, ref_date="2026-10-05",
+                    )
+                rerank.assert_called_once()
+                candidates = rerank.call_args.args[1]
+                self.assertEqual(len(candidates), 20)
+                expected = {"1": "3.6", "2": "3.2", "3": "2.5", "4": "15 tín chỉ"}
+                for pool in (candidates, response.retrieved):
+                    thresholds = {
+                        cid: hit.chunk.text
+                        for hit in pool
+                        if hit.chunk.rid == rid and hit.chunk.aid == "Điều 2"
+                        for cid in hit.chunk.clause_ids
+                    }
+                    self.assertEqual(set(thresholds), set(expected))
+                    for cid, value in expected.items():
+                        self.assertIn(value, thresholds[cid])
+                self.assertFalse(response.refused)
+                self.assertEqual(response.references[0].rid, rid)
+                self.assertEqual(response.references[0].aid, "Điều 1")
+
+    def test_candidate_pool_is_bounded_and_honours_larger_top_k(self):
+        for top_k in (5, 24):
+            with self.subTest(top_k=top_k):
+                engine = HocVuEngine(replace(self.config, top_k=top_k), self.searcher)
+                with patch.object(
+                    self.searcher, "search", wraps=self.searcher.search,
+                ) as search:
+                    response = engine.ask(
+                        "Điều kiện nhận học bổng", "bounded-pool",
+                        use_context=False, record_session=False,
+                        ref_date="2026-10-05",
+                    )
+                search.assert_called_once()
+                self.assertEqual(search.call_args.args[1], max(top_k, 20))
+                self.assertLessEqual(len(response.retrieved), max(top_k, 20))
+
+    def test_larger_candidate_pool_keeps_unsupported_questions_refused(self):
+        engine = HocVuEngine(self.config, self.searcher)
+        for question in (
+            "Điều kiện nhận học bổng bóng đá là gì?",
+            "Wifi ở ký túc xá thế nào?",
+            "Trường có tổ chức giải bóng đá sinh viên không?",
+        ):
+            with self.subTest(question=question):
+                response = engine.ask(
+                    question, "larger-pool-refusal", use_context=False,
+                    record_session=False, ref_date="2026-10-05",
+                )
+                self.assertTrue(response.retrieved)
+                self.assertTrue(response.refused)
+                self.assertFalse(response.references)
+                self.assertEqual(response.refusal_reason, "Insufficient grounded context")
+
     def test_evidence_matching_respects_vietnamese_diacritics(self):
         self.assertEqual(accent_key("hoà"), accent_key("hòa"))
         self.assertNotEqual(accent_key("bóng"), accent_key("bổng"))

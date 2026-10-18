@@ -95,7 +95,11 @@ class HocVuEngine:
             historical = comparison or is_historical_query(question)
             retrieval_question = expand_retrieval_query(question)
             is_follow_up = follow_up or is_contextual_follow_up(question)
-            retrieval_limit = max(self.config.top_k, 20) if scenario or comparison or historical else max(self.config.top_k, 12)
+            # Coverage can only rerank clauses present in this bounded pool.
+            # Eligibility thresholds can rank below the first 12 BM25 hits
+            # when generic "conditions/receive" wording favours other rules.
+            # Keep recall separate from the unchanged evidence/refusal gates.
+            retrieval_limit = max(self.config.top_k, 20)
             today_str = ref_date or date.today().isoformat()
             using_semantic = self.searcher.provider != "bm25"
 
