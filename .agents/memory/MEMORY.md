@@ -1,0 +1,1 @@
+- [API origin protection](api-origin-protection.md) — API changes need same or exact trusted origin; Netlify site must be in HV_TRUSTED_ORIGINS.

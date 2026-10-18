@@ -148,3 +148,80 @@ class BrowserAuthenticationTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(server, "browser_auth_enabled", False):
             self.assertEqual((await self.client.get("/")).status_code, 200)
             self.assertEqual((await self.client.get("/api/documents")).status_code, 401)
+
+
+class NetlifyProxyOriginTests(unittest.IsolatedAsyncioTestCase):
+    """Netlify forwards the browser's site Origin to the separate API host."""
+
+    async def asyncSetUp(self):
+        self.patches = [
+            patch.object(server.config, "api_token", "test-access-only"),
+            patch.object(server, "requires_api_token", True),
+            patch.object(server, "browser_auth_enabled", False),
+            patch.object(
+                server, "trusted_origins",
+                server.parse_trusted_origins("https://hocvu-site.netlify.app"),
+            ),
+        ]
+        for item in self.patches:
+            item.start()
+        self.client = httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=server.app),
+            base_url="https://hocvu-api.onrender.com",
+        )
+        self.proxy_headers = {
+            "X-HocVu-Token": "test-access-only",
+            "X-Forwarded-Proto": "https",
+        }
+
+    async def asyncTearDown(self):
+        await self.client.aclose()
+        for item in reversed(self.patches):
+            item.stop()
+
+    async def test_trusted_netlify_site_can_ask_and_upload(self):
+        headers = {
+            **self.proxy_headers,
+            "Origin": "https://hocvu-site.netlify.app",
+            "Sec-Fetch-Site": "same-origin",
+        }
+        ask = await self.client.post(
+            "/api/ask", headers=headers,
+            json={"question": "Điều kiện bảo lưu kết quả học tập là gì?"},
+        )
+        self.assertEqual(ask.status_code, 200)
+        with patch.object(server, "get_engine") as get_engine:
+            get_engine.return_value.add_document.return_value = {"id": "test-upload"}
+            upload = await self.client.post(
+                "/api/documents/upload", headers=headers,
+                files={"file": ("regulation.docx", b"synthetic document")},
+            )
+            self.assertEqual(upload.status_code, 201)
+
+    async def test_attacker_cannot_use_netlify_proxy_token(self):
+        for extra in [
+            {"Origin": "https://attacker.example"},
+            {"Origin": "https://hocvu-site.netlify.app.attacker.example"},
+            {"Origin": "https://hocvu-site.netlify.app", "Sec-Fetch-Site": "cross-site"},
+        ]:
+            with self.subTest(headers=extra):
+                with patch.object(server, "get_engine") as get_engine:
+                    response = await self.client.post(
+                        "/api/documents/upload",
+                        headers={**self.proxy_headers, **extra},
+                        files={"file": ("poison.docx", b"malicious regulation")},
+                    )
+                    self.assertEqual(response.status_code, 403)
+                    get_engine.assert_not_called()
+
+    def test_invalid_trusted_origin_configuration_fails_clearly(self):
+        for value in ["*.netlify.app", "https://*.netlify.app", "https://site.netlify.app/path", "hocvu.netlify.app"]:
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(RuntimeError, "HV_TRUSTED_ORIGINS"):
+                    server.parse_trusted_origins(value)
+
+    def test_trusted_origins_are_normalized(self):
+        self.assertEqual(
+            server.parse_trusted_origins(" https://Site.Netlify.app/ , http://localhost:8888 "),
+            frozenset({"https://site.netlify.app", "http://localhost:8888"}),
+        )

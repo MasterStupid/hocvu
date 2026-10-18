@@ -13,6 +13,7 @@ import uuid
 import webbrowser
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlsplit
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, Response, UploadFile, File, Form, Query, status
@@ -32,6 +33,34 @@ voice_manager: VoiceManager | None = None
 requires_api_token = False
 config = load_config()
 browser_auth_enabled = os.environ.get("HV_BROWSER_AUTH", "0") == "1"
+
+
+def parse_trusted_origins(value: str) -> frozenset[str]:
+    """Parse exact browser origins allowed to make proxied API changes."""
+    origins = set()
+    for raw in value.split(","):
+        raw = raw.strip()
+        if not raw:
+            continue
+        parts = urlsplit(raw)
+        if (
+            parts.scheme not in {"http", "https"}
+            or not parts.netloc
+            or "*" in parts.netloc
+            or parts.username
+            or parts.password
+            or parts.path not in {"", "/"}
+            or parts.query
+            or parts.fragment
+        ):
+            raise RuntimeError(
+                "HV_TRUSTED_ORIGINS phải là danh sách origin đầy đủ, ví dụ https://hocvu.netlify.app"
+            )
+        origins.add(f"{parts.scheme}://{parts.netloc}".lower())
+    return frozenset(origins)
+
+
+trusted_origins = parse_trusted_origins(os.environ.get("HV_TRUSTED_ORIGINS", ""))
 
 
 def valid_browser_credentials(authorization: str) -> bool:
@@ -131,10 +160,11 @@ async def rate_limit_and_auth_middleware(request: Request, call_next):
         # Replit terminates HTTPS at its proxy and forwards the original scheme.
         scheme = request.headers.get("X-Forwarded-Proto", request.url.scheme).split(",")[0].strip()
         expected_origin = f"{scheme}://{request.url.netloc}"
+        allowed_origins = trusted_origins | {expected_origin.lower()}
         origin = request.headers.get("Origin")
         if (
             request.headers.get("Sec-Fetch-Site") == "cross-site"
-            or (origin is not None and origin != expected_origin)
+            or (origin is not None and origin.lower() not in allowed_origins)
             or (browser_authenticated and origin is None)
         ):
             return JSONResponse(status_code=403, content={"error": "Cross-site changes are not allowed."})

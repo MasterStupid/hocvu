@@ -98,6 +98,11 @@ proxy keeps the API token out of the browser.
 5. In Netlify's **Environment variables**, set `HOCVU_API_URL` to the Render
    HTTPS address (without a trailing slash) and `HOCVU_API_TOKEN` to the exact
    same value as `HV_API_TOKEN` on Render. Trigger a new deploy.
+6. Copy the Netlify site's address, such as `https://hocvu.netlify.app`, and
+   add it on Render as `HV_TRUSTED_ORIGINS` (comma-separate multiple exact
+   origins, no wildcards or paths). Redeploy Render. Without it, the API
+   rejects proxied questions, uploads, deletes, and reindexing to prevent other
+   websites from using the Netlify proxy's token.
 
 Netlify publishes the `ui` directory and rewrites every `/api/*` request to
 Render with the private `X-HocVu-Token` header. Do not put either token in
