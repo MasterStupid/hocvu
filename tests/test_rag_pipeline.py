@@ -621,5 +621,118 @@ class RagPipelineTests(unittest.TestCase):
         self.assertTrue(set(response.card["suggestions"]).issubset(suggested))
 
 
+class SemanticFeatureEvidenceTests(unittest.TestCase):
+    questions = (
+        "Wifi ở ký túc xá thế nào?", "wifi o ky tuc xa the nao",
+        "Wifi tại ký túc xá như thế nào ạ?", "wifi tai ky tuc xa nhu the nao a",
+        "Wifi trong ký túc xá ra sao?", "wifi trong ky tuc xa ra sao",
+        "Wifi của ký túc xá thế nào?", "wifi cua ky tuc xa the nao",
+        "Wifi ký túc xá thế nào?", "wifi ky tuc xa the nao",
+    )
+    ref_date = "2026-10-05"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.chunks = [
+            chunk for regulation in build_corpus()
+            for chunk in split_regulation(regulation, 800, 1)
+        ]
+
+    def make_searcher(self, chunks):
+        config = AppConfig(max_units=2, semantic_enabled=True)
+        # Stub only the encoder, not retrieval or evidence checks. Even
+        # unsupported clauses receive near-perfect semantic similarity.
+        with patch("core.searcher.SemanticEncoder") as encoder_type:
+            encoder = encoder_type.return_value
+            encoder.available = True
+            encoder.cache_error = ""
+            encoder.build.return_value = True
+            encoder.similarities.return_value = [0.99] * len(chunks)
+            searcher = HybridSearcher(config)
+            searcher.build(chunks)
+            encoder_type.assert_called_once()
+            encoder.build.assert_called_once_with(
+                [f"{chunk.art_heading}\n{chunk.text}" for chunk in chunks],
+                index_fingerprint=index_fingerprint(config),
+            )
+        self.assertEqual(searcher.provider, "bm25+multilingual-e5")
+        self.assertEqual(searcher.semantic_error, "")
+        return searcher, encoder
+
+    def ask(self, searcher, encoder, question):
+        encoder.similarities.reset_mock()
+        with patch("core.engine.SessionStore", return_value=MagicMock()):
+            engine = HocVuEngine(searcher.config, searcher)
+        response = engine.ask(
+            question, "semantic-feature", use_context=False,
+            record_session=False, ref_date=self.ref_date,
+        )
+        encoder.similarities.assert_called_once_with(expand_retrieval_query(question))
+        engine.session.add_turn.assert_not_called()
+        self.assertEqual(response.providers["retrieval"], "bm25+multilingual-e5")
+        self.assertTrue(response.retrieved)
+        self.assertTrue(all(hit.vec == 0.99 for hit in response.retrieved))
+        return response
+
+    def test_high_semantic_scores_do_not_ground_unsupported_builtin_features(self):
+        searcher, encoder = self.make_searcher(self.chunks)
+        for question in self.questions + (
+            "Máy giặt ở ký túc xá thế nào?", "may giat o ky tuc xa the nao",
+        ):
+            with self.subTest(question=question):
+                hits = searcher.search(question, len(self.chunks), self.ref_date)
+                self.assertTrue(hits)
+                self.assertTrue(all(hit.vec == 0.99 for hit in hits))
+                peak = max(hit.bm25 for hit in hits)
+                self.assertGreater(peak, 0)
+                for hit in hits:
+                    self.assertAlmostEqual(
+                        hit.score,
+                        searcher.config.bm25_weight * hit.bm25 / peak
+                        + (1 - searcher.config.bm25_weight) * hit.vec,
+                    )
+                dorm = next(hit for hit in hits if "ký túc xá" in hit.chunk.text.lower())
+                self.assertGreaterEqual(searcher.lexical_coverage(question, dorm), 0.5)
+                self.assertFalse(searcher.has_specific_evidence(question, hits))
+                response = self.ask(searcher, encoder, question)
+                self.assertTrue(response.refused)
+                self.assertFalse(response.references)
+                self.assertEqual(response.refusal_reason, "Insufficient grounded context")
+
+    def test_semantic_feature_answers_require_support_in_the_same_clause(self):
+        template = self.chunks[0]
+        dorm_only = replace(
+            template, cid="feature-dorm", art_heading="Nội trú",
+            text="Sinh viên chấp hành nội quy ký túc xá.",
+        )
+        wifi_only = replace(
+            template, cid="feature-library", art_heading="Thư viện",
+            text="Thư viện có wifi miễn phí.",
+        )
+        grounded = replace(
+            template, cid="feature-supported", art_heading="Dịch vụ nội trú",
+            text="Ký túc xá có wifi miễn phí.",
+        )
+        for supported, chunks in (
+            (False, [dorm_only, wifi_only]),
+            (True, [dorm_only, wifi_only, grounded]),
+        ):
+            searcher, encoder = self.make_searcher(chunks)
+            for question in self.questions:
+                with self.subTest(question=question, supported=supported):
+                    response = self.ask(searcher, encoder, question)
+                    self.assertEqual(
+                        searcher.has_specific_evidence(question, response.retrieved), supported,
+                    )
+                    self.assertEqual(response.refused, not supported)
+                    if supported:
+                        self.assertTrue(response.references)
+                        self.assertIn(grounded.text, response.references[0].excerpt)
+                        self.assertIn("wifi miễn phí", response.answer.lower())
+                    else:
+                        self.assertFalse(response.references)
+                        self.assertEqual(response.refusal_reason, "Insufficient grounded context")
+
+
 if __name__ == "__main__":
     unittest.main()
