@@ -67,6 +67,17 @@ addition to the AI runtime). The application falls back to keyword search if
 the model cannot be downloaded. Set `HV_EMBEDDING_MODEL` to use a different
 Sentence Transformers model.
 
+Passage embeddings are cached under `HV_DATA_DIR/models/embeddings` (by default
+`data/models/embeddings`). Unchanged server starts and CLI commands reuse them;
+the model still loads to encode new questions. Changes to passage text/order,
+chunking rules/settings, the embedding model, or encoder/runtime versions
+produce a new cache. Missing or corrupt caches rebuild automatically. Cache
+write failures are reported through the existing semantic status while search
+continues with in-memory vectors. These are disposable derived files: stop
+semantic-search processes before manually clearing the directory to free disk
+space. Old cache generations are retained, not automatically pruned.
+`HV_SEMANTIC=0` does not read or write embedding caches or load embedding libraries.
+
 ## Add and manage regulations
 
 Open **Quản lý tài liệu** from the top navigation or visit `http://127.0.0.1:8000/documents.html`. Select multiple PDF, DOCX or image files (up to 25 MB each), set the order number, decision number, article/clause and effective date for each file, then upload the queue. The page immediately rebuilds the retrieval index, can show the normalized extracted text and number of indexed chunks, and supports selecting and removing queued or previously uploaded files. Encrypted PDFs are rejected.

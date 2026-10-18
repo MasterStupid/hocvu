@@ -5,3 +5,4 @@
 - [Wrapped subject safety](wrapped-subject-safety.md) — favor excluding body text over guessing ambiguous capitalized subject continuations.
 - [Vietnamese PDF fixture fonts](vietnamese-pdf-fixture-fonts.md) — base and bundled CJK fonts may omit Vietnamese glyphs; use Unicode font fallback for portable fixtures.
 - [Process-interruption tests](process-interruption-tests.md) — spawned-process synchronization objects need retained parent references; killed workers can leave Event locks unusable.
+- [Embedding cache lifecycle](embedding-cache-lifecycle.md) — whole-collection generations protect vector row ordering; pruning must coordinate with concurrent users.

@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 from core.corpus import build_corpus
 from core.engine import HocVuEngine
+from core.index_version import index_fingerprint
 from core.scenarios import expand_retrieval_query
 from core.searcher import HybridSearcher
 from core.settings import AppConfig, MODELS
@@ -36,6 +37,7 @@ class SemanticEligibilityTests(unittest.TestCase):
         with patch("core.searcher.SemanticEncoder") as encoder_type:
             encoder = encoder_type.return_value
             encoder.available = True
+            encoder.cache_error = ""
             encoder.build.return_value = True
             scores = [
                 0.99 if self.identity(chunk) == distractor else
@@ -50,7 +52,7 @@ class SemanticEligibilityTests(unittest.TestCase):
             encoder_type.assert_called_once_with(config.embedding_model, MODELS)
             encoder.build.assert_called_once_with([
                 f"{chunk.art_heading}\n{chunk.text}" for chunk in self.chunks
-            ])
+            ], index_fingerprint=index_fingerprint(config))
         self.assertEqual(searcher.provider, "bm25+multilingual-e5")
         self.assertEqual(searcher.semantic_error, "")
         return searcher, encoder

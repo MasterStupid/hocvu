@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .models import Chunk, RankedChunk
 from .index_storage import atomic_write, index_write_lock
+from .index_version import index_fingerprint
 from .nlp import ACADEMIC_TOKEN_ALIASES, accent_key, accented_content_tokens, content_tokens, has_diacritics, normalize, strip_accents
 from .semantic import SemanticEncoder
 from .settings import MODELS
@@ -58,8 +59,10 @@ class HybridSearcher:
             return
         self.semantic = SemanticEncoder(self.config.embedding_model, MODELS)
         passages = [f"{chunk.art_heading}\n{chunk.text}" for chunk in chunks]
-        if not self.semantic.build(passages):
+        if not self.semantic.build(passages, index_fingerprint=index_fingerprint(self.config)):
             self.semantic_error = self.semantic.error
+        else:
+            self.semantic_error = self.semantic.cache_error
 
     def save(self, path: str, article_version: str | None = None, index_fingerprint: str | None = None) -> None:
         destination = Path(path)
