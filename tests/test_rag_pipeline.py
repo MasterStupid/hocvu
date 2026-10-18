@@ -65,12 +65,40 @@ class RagPipelineTests(unittest.TestCase):
                 self.assertIn(amount, response.references[0].excerpt)
         engine.session.add_turn.assert_not_called()
 
+    def test_retaken_credits_cite_the_graduation_classification_consequence(self):
+        engine = HocVuEngine(self.config, self.searcher)
+        engine.session = MagicMock()
+        questions = (
+            "Học lại 15% tín chỉ có ảnh hưởng đến bằng tốt nghiệp không?",
+            "Nếu em học lại 15% tổng số tín chỉ thì bằng tốt nghiệp có bị ảnh hưởng không?",
+        )
+        for question in questions:
+            with self.subTest(question=question):
+                response = engine.ask(
+                    question, "retaken-credits", ref_date="2026-10-18",
+                    use_context=False, record_session=False,
+                )
+                self.assertFalse(response.refused)
+                self.assertEqual(
+                    [(ref.rid, ref.aid) for ref in response.references],
+                    [("QD-TTTN-HPU-2026", "Điều 5")],
+                )
+                self.assertIn("Hạng tốt nghiệp sẽ bị giảm một bậc", response.answer)
+                self.assertIn("vượt quá 10% tổng số tín chỉ", response.answer)
+                self.assertIn("giảm một bậc", response.references[0].excerpt)
+                self.assertNotIn("30 ngày", response.answer)
+                self.assertTrue(self.searcher.has_specific_evidence(
+                    question, response.retrieved[:1],
+                ))
+        engine.session.add_turn.assert_not_called()
+
     def test_evaluation_rejects_wrong_articles_in_expected_regulation(self):
         questions = build_qa(build_corpus())
         cases = {
             "Điểm TOEIC tối thiểu để học tiếng Anh chuyên ngành là bao nhiêu?": "Điều 2",
             "Nghỉ học bao nhiêu phần trăm thì bị cấm thi?": "Điều 3",
             "Sinh viên được bảo lưu tối đa bao nhiêu học kỳ?": "Điều 5",
+            "Học lại 15% tín chỉ có ảnh hưởng đến bằng tốt nghiệp không?": "Điều 5",
         }
         for question, expected_aid in cases.items():
             item = next(item for item in questions if item.question == question)
@@ -152,6 +180,7 @@ class RagPipelineTests(unittest.TestCase):
             "Sinh viên được bảo lưu tối đa bao nhiêu học kỳ?",
             "Sinh viên cần bao nhiêu tín chỉ đại cương?",
             "Số tín chỉ tốt nghiệp hệ cử nhân là bao nhiêu?",
+            "Học lại 15% tín chỉ có ảnh hưởng đến bằng tốt nghiệp không?",
         }
         supported_rows = [
             row for row in report["rows"]

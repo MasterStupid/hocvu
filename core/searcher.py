@@ -343,6 +343,11 @@ class HybridSearcher:
 
         BM25 remains the retrieval score; coverage is a transparent second
         stage that fixes a broad document winning over the exact clause.
+        For focused questions, put individually supported clauses first:
+        the engine's pool-level evidence gate must not let a weaker first
+        hit borrow subject/predicate support from a later clause when the
+        generator selects its primary passage. Other lookups retain their
+        topic/quantity ranking (e.g. generic "điều kiện nhận" wording).
         """
         peak_score = max((hit.score for hit in hits), default=0.0) or 1.0
         peak_bm25 = max((hit.bm25 for hit in hits), default=0.0) or 1.0
@@ -361,6 +366,7 @@ class HybridSearcher:
         graduation_total = {"tot", "nghiep"}.issubset(credit_terms) and not (
             credit_terms & {"an", "khoa", "luan", "thuc", "tap", "lai"}
         )
+        has_focus = bool(cls._question_focus(query))
 
         def rank(hit: RankedChunk) -> float:
             base_rel = (hit.score / peak_score) if hit.score > 0 else (hit.bm25 / peak_bm25)
@@ -390,7 +396,10 @@ class HybridSearcher:
             return value
         return sorted(
             hits,
-            key=rank,
+            key=lambda hit: (
+                cls.has_specific_evidence(query, [hit]) if has_focus else True,
+                rank(hit),
+            ),
             reverse=True,
         )
 
