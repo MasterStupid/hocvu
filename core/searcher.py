@@ -306,18 +306,28 @@ class HybridSearcher:
         peak_bm25 = max((hit.bm25 for hit in hits), default=0.0) or 1.0
         query_terms = set(content_tokens(query))
         asks_for_conditions = {"dieu", "kien"}.issubset(query_terms)
+        # "Điều kiện nhận ..." describes the requested kind of rule, not
+        # its subject. Matching those words must not outweigh the topic
+        # (e.g. scholarship criteria vs foreign-language requirements).
+        topic_query = " ".join(
+            word for word in cls._raw_words(query)
+            if strip_accents(word) not in {"dieu", "kien", "nhan"}
+        ) if asks_for_conditions else query
+        topic_query = topic_query if cls._query_forms(topic_query) else query
 
         def rank(hit: RankedChunk) -> float:
             base_rel = (hit.score / peak_score) if hit.score > 0 else (hit.bm25 / peak_bm25)
             value = (
-                (0.40 * cls.lexical_coverage(query, hit))
-                + (0.30 * cls.phrase_coverage(query, hit))
+                (0.40 * cls.lexical_coverage(topic_query, hit))
+                + (0.30 * cls.phrase_coverage(topic_query, hit))
                 + (0.30 * base_rel)
             )
             if asks_for_conditions:
-                evidence = hit.chunk.text.lower()
-                if any(marker in evidence for marker in ("khi ", "từ ", "tối thiểu", "không được", "phải", "đủ điều kiện")):
-                    value += 0.18
+                evidence = cls._clause_body(hit.chunk).lower()
+                # "Từ" alone also occurs in funding/payment descriptions,
+                # so it does not establish an eligibility condition.
+                if any(marker in evidence for marker in ("khi ", "tối thiểu", "không được", "phải", "điều kiện", "được xét", "chỉ xét")):
+                    value += 0.18 * cls.lexical_coverage(topic_query, hit)
             return value
         return sorted(
             hits,

@@ -212,6 +212,27 @@ class RagPipelineTests(unittest.TestCase):
                 self.assertEqual(response.references[0].rid, rid)
                 self.assertIn(expected, response.answer)
 
+    def test_scholarship_conditions_cite_criteria_not_language_or_payment_rules(self):
+        engine = HocVuEngine(self.config, self.searcher)
+        for question in ("dieu kien nhan hoc bong", "Điều kiện nhận học bổng"):
+            with self.subTest(question=question):
+                hits = self.searcher.rerank_by_coverage(
+                    question, self.searcher.search(question, 12, "2026-10-05"),
+                )
+                self.assertEqual(hits[0].chunk.rid, "QD-HBHT-HPU-2026")
+                self.assertEqual(hits[0].chunk.aid, "Điều 1")
+                self.assertIn("kết quả học tập và điểm rèn luyện", hits[0].chunk.text)
+                response = engine.ask(
+                    question, "scholarship-conditions", use_context=False,
+                    record_session=False, ref_date="2026-10-05",
+                )
+                self.assertFalse(response.refused)
+                self.assertEqual(response.references[0].rid, "QD-HBHT-HPU-2026")
+                self.assertEqual(response.references[0].aid, "Điều 1")
+                self.assertIn("kết quả học tập và điểm rèn luyện", response.answer)
+                self.assertNotIn("TOEIC", response.answer)
+                self.assertNotIn("chuyển khoản", response.answer)
+
     def test_evidence_matching_respects_vietnamese_diacritics(self):
         self.assertEqual(accent_key("hoà"), accent_key("hòa"))
         self.assertNotEqual(accent_key("bóng"), accent_key("bổng"))
