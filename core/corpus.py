@@ -352,6 +352,10 @@ def build_corpus(seed: int = 42) -> List[Regulation]:
 def build_qa(corpus: List[Regulation], seed: int = 42) -> List[TestQuestion]:
     """
     Extract QA from specs and add out-of-scope questions.
+
+    Each supported question retains its source regulation and article for
+    both levels of citation evaluation. Article IDs are local to a regulation,
+    not globally unique. Refusal questions have neither source annotation.
     """
     random.seed(seed)
     questions = []

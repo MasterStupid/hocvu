@@ -120,7 +120,7 @@ python manage.py ask "Điều kiện bảo lưu kết quả học tập là gì?
 python manage.py evaluate
 ```
 
-`evaluate` writes `data/eval_result.json`, reporting citation-grounding accuracy and refusal accuracy. WER, TTS quality, response latency, and user satisfaction must be recorded with real participant data during the pilot, as stated in the proposal.
+`evaluate` writes `data/eval_result.json`, reporting citation-grounding accuracy and refusal accuracy. The existing `grounded_retrieval_accuracy` checks regulation IDs only. The additional `article_grounded_retrieval_accuracy` requires one citation to match both the expected regulation and article; `article_grounded_retrieval_total` counts the annotated, non-refusal questions included. Rows retain `correct` for the legacy check and add `expected_aids`, paired `cited_articles`, and `article_correct` (`null` for refusal questions or questions without article annotations). These metrics check for at least one matching citation, not the correctness of every claim or every citation. WER, TTS quality, response latency, and user satisfaction must be recorded with real participant data during the pilot, as stated in the proposal.
 
 ## Important data note
 

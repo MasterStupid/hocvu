@@ -6,14 +6,15 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from core.classifier import Classifier, Intent
-from core.corpus import build_corpus
+from core.corpus import build_corpus, build_qa
+from core.evaluation import evaluate
 from core.generator import Generator
 from core.searcher import HybridSearcher
 from core.scenarios import expand_retrieval_query, is_attendance_training_scenario
 from core.settings import AppConfig
 from core.engine import HocVuEngine
 from core.index_version import index_fingerprint
-from core.models import Response
+from core.models import Reference, Response
 from core.nlp import accent_key, content_tokens
 from core.splitter import split_regulation
 
@@ -31,6 +32,113 @@ class RagPipelineTests(unittest.TestCase):
         self.assertTrue(hits)
         self.assertEqual(hits[0].chunk.aid, "Điều 5")
         self.assertIn("Bảo lưu", hits[0].chunk.art_heading)
+
+    def test_evaluation_rejects_wrong_articles_in_expected_regulation(self):
+        questions = build_qa(build_corpus())
+        cases = {
+            "Điểm TOEIC tối thiểu để học tiếng Anh chuyên ngành là bao nhiêu?": "Điều 2",
+            "Nghỉ học bao nhiêu phần trăm thì bị cấm thi?": "Điều 3",
+            "Sinh viên được bảo lưu tối đa bao nhiêu học kỳ?": "Điều 5",
+        }
+        for question, expected_aid in cases.items():
+            item = next(item for item in questions if item.question == question)
+            self.assertEqual(item.source_aids, [expected_aid])
+            expected_ref = Reference(
+                rid=item.source_rids[0], reg_title="", aid=expected_aid,
+                art_heading="", clause_ids=[], excerpt="",
+            )
+            wrong_article = replace(expected_ref, aid="Điều 8")
+            wrong_regulation = replace(expected_ref, rid="unrelated-regulation")
+            scenarios = [
+                ("correct", [expected_ref], False, True, True),
+                ("wrong article", [wrong_article], False, True, False),
+                ("wrong regulation", [wrong_regulation], False, False, False),
+                ("split match", [wrong_article, wrong_regulation], False, True, False),
+                ("no references", [], False, False, False),
+                ("refused with citation", [expected_ref], True, False, False),
+                ("support plus distractor", [wrong_article, expected_ref], False, True, True),
+            ]
+            for name, references, refused, legacy, article in scenarios:
+                with self.subTest(question=question, scenario=name), tempfile.TemporaryDirectory() as tmp:
+                    engine = MagicMock(config=self.config)
+                    engine.ask.return_value = Response(
+                        query=question, answer="", references=references, refused=refused,
+                    )
+                    path = Path(tmp) / "report.json"
+                    with patch("core.evaluation.build_qa", return_value=[item]):
+                        report = evaluate(engine, path)
+                    row = report["rows"][0]
+                    self.assertEqual(row["correct"], legacy)
+                    self.assertEqual(row["article_correct"], article)
+                    self.assertEqual(row["expected_aids"], [expected_aid])
+                    self.assertEqual(row["cited_articles"], [
+                        {"rid": rid, "aid": aid}
+                        for rid, aid in sorted({(ref.rid, ref.aid) for ref in references})
+                    ])
+                    self.assertEqual(report["grounded_retrieval_accuracy"], float(legacy))
+                    self.assertEqual(report["article_grounded_retrieval_accuracy"], float(article))
+                    self.assertEqual(report["article_grounded_retrieval_total"], 1)
+                    self.assertEqual(json.loads(path.read_text(encoding="utf-8")), report)
+                    engine.ask.assert_called_once_with(
+                        question, session_id=f"evaluation-{item.qid}",
+                        use_context=False, record_session=False,
+                    )
+
+    def test_article_evaluation_excludes_unannotated_and_refusal_questions(self):
+        questions = build_qa(build_corpus())
+        supported = next(item for item in questions if not item.should_refuse)
+        refusal = next(item for item in questions if item.should_refuse)
+        engine = MagicMock(config=self.config)
+        engine.ask.return_value = Response(query="", answer="", refused=True)
+        with tempfile.TemporaryDirectory() as tmp, patch(
+            "core.evaluation.build_qa",
+            return_value=[replace(supported, source_aids=[]), refusal],
+        ):
+            report = evaluate(engine, Path(tmp) / "report.json")
+        self.assertEqual(report["article_grounded_retrieval_total"], 0)
+        self.assertEqual(report["article_grounded_retrieval_accuracy"], 0.0)
+        self.assertEqual(report["grounded_retrieval_accuracy"], 0.0)
+        self.assertEqual(report["out_of_scope_refusal_accuracy"], 1.0)
+        self.assertTrue(all(row["article_correct"] is None for row in report["rows"]))
+
+    def test_builtin_evaluation_preserves_supported_answers_and_legacy_metrics(self):
+        engine = HocVuEngine(self.config, self.searcher)
+        engine.session = MagicMock()
+        questions = build_qa(build_corpus())
+        for item in questions:
+            if not item.should_refuse:
+                self.assertTrue(item.source_aids, item.question)
+        with tempfile.TemporaryDirectory() as tmp:
+            report = evaluate(engine, Path(tmp) / "report.json")
+        self.assertEqual(report["grounded_retrieval_accuracy"], 1.0)
+        # The stronger metric must not inherit the legacy metric's false
+        # positives. Check genuinely supported examples without requiring
+        # unrelated retrieval bugs to pass or pinning their current failures.
+        representative_questions = {
+            "Điểm TOEIC tối thiểu để học tiếng Anh chuyên ngành là bao nhiêu?",
+            "Nghỉ học bao nhiêu phần trăm thì bị cấm thi?",
+            "Sinh viên được bảo lưu tối đa bao nhiêu học kỳ?",
+        }
+        supported_rows = [
+            row for row in report["rows"]
+            if row["question"] in representative_questions
+        ]
+        self.assertEqual(len(supported_rows), len(representative_questions))
+        self.assertTrue(all(row["article_correct"] is True for row in supported_rows))
+        article_rows = [row for row in report["rows"] if row["article_correct"] is not None]
+        self.assertEqual(report["article_grounded_retrieval_accuracy"], round(
+            sum(row["article_correct"] for row in article_rows) / len(article_rows), 4,
+        ))
+        for row in article_rows:
+            expected_match = not row["refused"] and any(
+                ref["rid"] in row["expected_rids"] and ref["aid"] in row["expected_aids"]
+                for ref in row["cited_articles"]
+            )
+            self.assertEqual(row["article_correct"], expected_match, row["question"])
+        self.assertEqual(report["out_of_scope_refusal_accuracy"], 1.0)
+        self.assertEqual(report["article_grounded_retrieval_total"],
+                         sum(not item.should_refuse for item in questions))
+        engine.session.add_turn.assert_not_called()
 
     def test_filters_expired_regulations_for_current_query(self):
         hits = self.searcher.search("Quy định cũ có cho phép thi lại không", 10, "2026-10-04")
