@@ -76,6 +76,39 @@ class DocumentRepositoryTests(unittest.TestCase):
         self.assertEqual(regulation.title, entry["title"])
         self.assertEqual(regulation.version, "Quyết định 34/QĐ-ĐHKT")
 
+    def test_subject_line_variants_take_precedence_over_heading_and_filename(self):
+        for index, prefix in enumerate((
+            "V/v ", "V/v: ", "Về việc ", "Về việc: ", "Tiêu đề: ",
+            "  v/V:\t", "\tVỀ VIỆC ",
+        )):
+            with self.subTest(prefix=prefix):
+                text = "\n".join([
+                    "Số: 34/QĐ-ĐHKT",
+                    "## QUYẾT ĐỊNH",
+                    f"{prefix}ban hành Quy chế học bổng",
+                    "## Điều 1. Phạm vi áp dụng",
+                    "Sinh viên đạt điểm trung bình từ 3.2 được xét học bổng.",
+                ])
+                with patch.object(self.repository, "extract", return_value=(text, 1)):
+                    entry = self.repository.add(
+                        "scan_001.pdf", f"%PDF-1.7 subject {index}".encode(), metadata={},
+                    )
+                self.assertEqual(
+                    entry["title"], "Thông báo 34/QĐ-ĐHKT - ban hành Quy chế học bổng",
+                )
+                self.assertEqual(self.repository.get_text(entry["id"])["title"], entry["title"])
+
+    def test_subject_words_in_body_are_not_subject_lines(self):
+        for index, phrase in enumerate(("V/v", "Về việc", "V/văn")):
+            with self.subTest(phrase=phrase):
+                text = f"## Quy chế học bổng\nNội dung {phrase} xét học bổng cho sinh viên."
+                with patch.object(self.repository, "extract", return_value=(text, 1)):
+                    entry = self.repository.add(
+                        "scan_001.pdf", f"%PDF-1.7 body {index}".encode(),
+                        metadata={"decision_number": "34/QĐ-ĐHKT"},
+                    )
+                self.assertEqual(entry["title"], "Văn bản 34/QĐ-ĐHKT - Quy chế học bổng")
+
     def test_title_without_subject_line_or_heading_uses_filename(self):
         text = "Nội dung quy định về lịch thi cuối kỳ, không có tiêu đề riêng."
         with patch.object(self.repository, "extract", return_value=(text, 1)):

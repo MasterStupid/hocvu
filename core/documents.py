@@ -173,7 +173,12 @@ class DocumentRepository:
             if date_m:
                 d, m, y = date_m.group(1).zfill(2), date_m.group(2).zfill(2), date_m.group(3)
                 metadata["document_date"] = f"{y}-{m}-{d}"
-        title_m = re.search(r"\b(?:Tiêu đề|Về việc):\s*([^\n]+)", text, re.IGNORECASE)
+        title_m = re.search(
+            r"(?:\b(?:Tiêu đề|Về việc):\s*"
+            r"|^[ \t]*(?:V/v|Về việc)(?:[ \t]*:[ \t]*|[ \t]+))([^\r\n]+)",
+            text,
+            re.IGNORECASE | re.MULTILINE,
+        )
         if metadata.get("decision_number") and title_m:
             title = f"Thông báo {metadata['decision_number']} - {title_m.group(1).strip()}"[:150]
         elif metadata.get("decision_number"):
