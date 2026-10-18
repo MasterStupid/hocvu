@@ -1,10 +1,77 @@
+import io
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
+from xml.sax.saxutils import escape
 
 from core.documents import DocumentError, DocumentRepository
 from core.splitter import split_regulation
+
+
+def make_subject_docx(paragraphs):
+    """Build a small Word package with real paragraph styles and text runs."""
+    blocks = []
+    for text, heading in paragraphs:
+        style = f'<w:pPr><w:pStyle w:val="Heading{heading}"/></w:pPr>' if heading else ""
+        blocks.append(f"<w:p>{style}<w:r><w:t>{escape(text)}</w:t></w:r></w:p>")
+    content = io.BytesIO()
+    with zipfile.ZipFile(content, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", (
+            '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+            '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+            '<Default Extension="xml" ContentType="application/xml"/>'
+            '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+            '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>'
+            '</Types>'
+        ))
+        archive.writestr("_rels/.rels", (
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
+            '</Relationships>'
+        ))
+        archive.writestr("word/_rels/document.xml.rels", (
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+            '</Relationships>'
+        ))
+        archive.writestr("word/styles.xml", (
+            '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+            + "".join(
+                f'<w:style w:type="paragraph" w:styleId="Heading{level}">'
+                f'<w:name w:val="heading {level}"/><w:pPr><w:outlineLvl w:val="{level - 1}"/></w:pPr></w:style>'
+                for level in (1, 2)
+            ) + '</w:styles>'
+        ))
+        archive.writestr("word/document.xml", (
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+            f'<w:body>{"".join(blocks)}<w:sectPr/></w:body></w:document>'
+        ))
+    return content.getvalue()
+
+
+def make_subject_pdf(paragraphs):
+    """Render actual Vietnamese text with embedded fonts, without system fonts."""
+    import pymupdf
+
+    content = io.BytesIO()
+    writer = pymupdf.DocumentWriter(content)
+    html = "".join(
+        f"<h{heading}>{escape(text)}</h{heading}>" if heading else f"<p>{escape(text)}</p>"
+        for text, heading in paragraphs
+    )
+    story = pymupdf.Story(html=html)
+    device = writer.begin_page(pymupdf.Rect(0, 0, 595, 842))
+    more, _ = story.place(pymupdf.Rect(40, 40, 555, 802))
+    if more:
+        raise AssertionError("Subject fixture must fit on one PDF page")
+    story.draw(device)
+    writer.end_page()
+    writer.close()
+    with pymupdf.open(stream=content.getvalue(), filetype="pdf") as document:
+        document.subset_fonts()
+        return document.tobytes(garbage=4, deflate=True)
 
 
 class DocumentRepositoryTests(unittest.TestCase):
@@ -97,6 +164,44 @@ class DocumentRepositoryTests(unittest.TestCase):
                     entry["title"], "Thông báo 34/QĐ-ĐHKT - ban hành Quy chế học bổng",
                 )
                 self.assertEqual(self.repository.get_text(entry["id"])["title"], entry["title"])
+
+    def test_subject_titles_survive_real_docx_and_pdf_extraction(self):
+        subject = "ban hành Quy chế học bổng"
+        for extension, generate in (("docx", make_subject_docx), ("pdf", make_subject_pdf)):
+            for prefix, heading in (("Về việc ", 0), ("V/v ", 0), ("Về việc ", 2), ("V/v ", 2)):
+                with self.subTest(format=extension, prefix=prefix, heading=heading):
+                    paragraphs = [
+                        ("Số: 34/QĐ-ĐHKT", 0),
+                        ("QUYẾT ĐỊNH", 1),
+                        (f"{prefix}{subject}", heading),
+                        ("Điều 1. Phạm vi áp dụng", 2),
+                        ("Sinh viên đạt điểm trung bình từ 3.2 được xét học bổng.", 0),
+                    ]
+                    # Each case has its own manifest so identical extracted text
+                    # in differently styled files cannot trigger duplicate checks.
+                    with tempfile.TemporaryDirectory() as root:
+                        repository = DocumentRepository(Path(root))
+                        entry = repository.add(f"lich_thi_cuoi_ky.{extension}", generate(paragraphs))
+                        expected = f"Thông báo 34/QĐ-ĐHKT - {subject}"
+                        self.assertEqual(entry["title"], expected)
+                        self.assertEqual(entry["decision_number"], "34/QĐ-ĐHKT")
+                        self.assertEqual(entry["format"], extension.upper())
+                        self.assertEqual(entry["pages"], 1)
+                        self.assertFalse(entry["ocr"])
+
+                        # Read a new repository instance, not just add()'s return
+                        # value, to check manifest and extracted-text persistence.
+                        reopened = DocumentRepository(Path(root))
+                        self.assertEqual(reopened.list()[0]["title"], expected)
+                        preview = reopened.get_text(entry["id"])
+                        self.assertEqual(preview["title"], expected)
+                        extracted_subject = f"{prefix}{subject}"
+                        if extension == "docx" and heading:
+                            extracted_subject = f"## {extracted_subject}"
+                        self.assertIn(extracted_subject, preview["text"])
+                        self.assertIn("QUYẾT ĐỊNH", preview["text"])
+                        self.assertIn("Điều 1. Phạm vi áp dụng", preview["text"])
+                        self.assertEqual(reopened.regulations()[0].title, expected)
 
     def test_subject_words_in_body_are_not_subject_lines(self):
         for index, phrase in enumerate(("V/v", "Về việc", "V/văn")):

@@ -217,7 +217,9 @@ class DocumentRepository:
         """
         match = re.search(
             r"(?:\b(?:Tiêu đề|Về việc):[ \t]*"
-            r"|^[ \t]*(?:V/v|Về việc)(?:[ \t]*:[ \t]*|[ \t]+))([^\r\n]+)",
+            # DOCX heading styles become Markdown during extraction. Allow
+            # that marker only at line start, not before subject words in body.
+            r"|^[ \t]*(?:#{1,6}[ \t]+)?(?:V/v|Về việc)(?:[ \t]*:[ \t]*|[ \t]+))([^\r\n]+)",
             text,
             re.IGNORECASE | re.MULTILINE,
         )

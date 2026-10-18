@@ -3,3 +3,4 @@
 - [Vietnamese evidence matching](vietnamese-evidence-matching.md) — diacritic-aware evidence checks, abbreviations as phrases; heading down-weighting breaks terse clauses.
 - [Index freshness policy](index-freshness-policy.md) — prefer automatic source fingerprints over manual version bumps for built-in regulation and chunking changes.
 - [Wrapped subject safety](wrapped-subject-safety.md) — favor excluding body text over guessing ambiguous capitalized subject continuations.
+- [Vietnamese PDF fixture fonts](vietnamese-pdf-fixture-fonts.md) — base and bundled CJK fonts may omit Vietnamese glyphs; use Unicode font fallback for portable fixtures.
