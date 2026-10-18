@@ -10,6 +10,7 @@ from .cards import best_suggestions, build_card, build_suggestion_topics
 from .corpus import build_corpus
 from .documents import DocumentRepository
 from .generator import DECLINE_MSG, Generator
+from .index_version import index_fingerprint
 from .llm import GroundedLLM, LLMError
 from .models import Response
 from .searcher import HybridSearcher, StaleIndexError
@@ -20,13 +21,14 @@ from .splitter import split_regulation
 from .voice import VoiceManager
 
 
-def build_index(config: AppConfig, *, return_searcher: bool = False):
+def build_index(config: AppConfig, *, return_searcher: bool = False, index_path: Path = INDEX_JSON):
+    fingerprint = index_fingerprint(config)
     repository = DocumentRepository(DOCS)
     corpus = build_corpus(seed=config.seed) + repository.regulations()
     chunks = [chunk for regulation in corpus for chunk in split_regulation(regulation, config.max_chunk_chars, config.overlap_sents)]
     searcher = HybridSearcher(config)
     searcher.build(chunks)
-    searcher.save(str(INDEX_JSON), article_version=DocumentRepository.article_build_version())
+    searcher.save(str(index_path), article_version=DocumentRepository.article_build_version(), index_fingerprint=fingerprint)
     result = {"chunks": len(chunks), "documents": len(corpus), "uploaded": len(repository.list())}
     # Reuse this instance after upload/reindex. Loading a just-saved index
     # would build semantic embeddings a second time on the same corpus.
@@ -53,17 +55,21 @@ class HocVuEngine:
     def load_or_build(cls, config: AppConfig, index_path: Path):
         """Load the saved index, rebuilding it when missing or stale.
 
-        Uploaded documents' article headings are produced while indexing, so
-        an index saved by an older article builder would keep serving old
-        citations until a manual reindex. A matching index is loaded as is.
+        Check uploaded-document extraction versions and a fingerprint of the
+        built-in corpus, splitter, and chunking settings. A matching index is
+        loaded as is; older indexes without metadata are rebuilt once.
         """
         if index_path.exists():
             try:
-                searcher = HybridSearcher.load(str(index_path), config, article_version=DocumentRepository.article_build_version())
+                searcher = HybridSearcher.load(
+                    str(index_path), config,
+                    article_version=DocumentRepository.article_build_version(),
+                    index_fingerprint=index_fingerprint(config),
+                )
                 return cls(config, searcher)
             except StaleIndexError as exc:
                 print(f"Rebuilding search index: {exc}")
-        _, searcher = build_index(config, return_searcher=True)
+        _, searcher = build_index(config, return_searcher=True, index_path=index_path)
         return cls(config, searcher)
 
     def ask(self, question: str, session_id: str, ref_date: str | None = None, with_audio: bool = False, use_context: bool = True, use_ai: bool = False, record_session: bool = True) -> Response:

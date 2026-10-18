@@ -84,8 +84,8 @@ def get_engine() -> HocVuEngine:
     global engine
     if engine is None:
         ensure_dirs()
-        # Rebuilds automatically when the index is missing or was built by an
-        # older article builder (e.g. after a heading-format change).
+        # Refresh missing indexes or outdated corpus, chunking, and uploaded
+        # document extraction versions before answering students.
         engine = HocVuEngine.load_or_build(config, INDEX_JSON)
     return engine
 

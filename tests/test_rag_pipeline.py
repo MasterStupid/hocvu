@@ -12,6 +12,7 @@ from core.searcher import HybridSearcher
 from core.scenarios import expand_retrieval_query, is_attendance_training_scenario
 from core.settings import AppConfig
 from core.engine import HocVuEngine
+from core.index_version import index_fingerprint
 from core.models import Response
 from core.nlp import accent_key, content_tokens
 from core.splitter import split_regulation
@@ -336,7 +337,7 @@ class RagPipelineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             index_path = Path(directory) / "index.json"
             for saved_version in (None, "extraction-0.articles-0"):
-                self.searcher.save(index_path, article_version=saved_version)
+                self.searcher.save(index_path, article_version=saved_version, index_fingerprint=index_fingerprint(self.config))
                 with patch("core.engine.build_index", return_value=({"chunks": 0}, replacement)) as build:
                     engine = HocVuEngine.load_or_build(self.config, index_path)
                 build.assert_called_once()
@@ -346,7 +347,7 @@ class RagPipelineTests(unittest.TestCase):
         from core.documents import DocumentRepository
         with tempfile.TemporaryDirectory() as directory:
             index_path = Path(directory) / "index.json"
-            self.searcher.save(index_path, article_version=DocumentRepository.article_build_version())
+            self.searcher.save(index_path, article_version=DocumentRepository.article_build_version(), index_fingerprint=index_fingerprint(self.config))
             with patch("core.engine.build_index") as build:
                 engine = HocVuEngine.load_or_build(self.config, index_path)
             build.assert_not_called()

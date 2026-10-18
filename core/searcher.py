@@ -19,7 +19,7 @@ INDEX_SCHEMA_VERSION = 2
 
 
 class StaleIndexError(ValueError):
-    """The saved index was built with a different article-building version."""
+    """The saved chunks were built with outdated source or extraction rules."""
 
 
 class HybridSearcher:
@@ -61,13 +61,14 @@ class HybridSearcher:
         if not self.semantic.build(passages):
             self.semantic_error = self.semantic.error
 
-    def save(self, path: str, article_version: str | None = None) -> None:
+    def save(self, path: str, article_version: str | None = None, index_fingerprint: str | None = None) -> None:
         destination = Path(path)
         destination.parent.mkdir(parents=True, exist_ok=True)
         temporary = destination.with_suffix(".tmp")
         temporary.write_text(json.dumps({
             "schema_version": INDEX_SCHEMA_VERSION,
             "article_version": article_version,
+            "index_fingerprint": index_fingerprint,
             "chunks": [chunk.to_dict() for chunk in self.chunks],
         }, ensure_ascii=False, indent=2), encoding="utf-8")
         if destination.exists():
@@ -75,12 +76,12 @@ class HybridSearcher:
         temporary.replace(destination)
 
     @classmethod
-    def load(cls, path: str, config, article_version: str | None = None):
+    def load(cls, path: str, config, article_version: str | None = None, index_fingerprint: str | None = None):
         """Load a saved index.
 
-        When ``article_version`` is given, an index recorded with a different
-        (or no) version raises ``StaleIndexError`` before any embeddings are
-        built, so the caller can rebuild instead.
+        When an expected article version or fingerprint is given, a missing
+        or mismatched value raises ``StaleIndexError`` before any embeddings
+        are built, so the caller can rebuild instead.
         """
         def read_index(index_path: Path):
             try:
@@ -103,6 +104,8 @@ class HybridSearcher:
             raise StaleIndexError(
                 f"Index article version {data.get('article_version')!r} khác phiên bản hiện tại {article_version!r}."
             )
+        if index_fingerprint is not None and data.get("index_fingerprint") != index_fingerprint:
+            raise StaleIndexError("Built-in corpus or chunking rules/settings have changed.")
         if not isinstance(data.get("chunks"), list):
             raise ValueError("Index không hợp lệ: thiếu danh sách chunks. Hãy chạy lại 'python manage.py ingest'.")
         try:

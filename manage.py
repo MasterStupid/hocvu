@@ -47,18 +47,12 @@ def main():
         print("Done.")
         
     elif args.command == "ask":
-        if not INDEX_JSON.exists():
-            print("Index not found. Run 'ingest' first.")
-            return
-        engine = HocVuEngine.load(config, INDEX_JSON)
+        engine = HocVuEngine.load_or_build(config, INDEX_JSON)
         resp = engine.ask(args.question, str(uuid.uuid4()))
         print(f"\nQ: {resp.query}\nA: {resp.answer}\nConfidence: {resp.confidence:.2f}")
         
     elif args.command == "chat":
-        if not INDEX_JSON.exists():
-            print("Index not found. Run 'ingest' first.")
-            return
-        engine = HocVuEngine.load(config, INDEX_JSON)
+        engine = HocVuEngine.load_or_build(config, INDEX_JSON)
         session_id = str(uuid.uuid4())
         print("HocVu AI Chat (type 'exit' to quit)")
         try:
@@ -85,9 +79,7 @@ def main():
         print(f"Total chunks: {len(chunks)}")
         
     elif args.command == "evaluate":
-        if not INDEX_JSON.exists():
-            build_index(config)
-        report = evaluate(HocVuEngine.load(config, INDEX_JSON), EVAL_JSON)
+        report = evaluate(HocVuEngine.load_or_build(config, INDEX_JSON), EVAL_JSON)
         print(f"Grounded retrieval accuracy: {report['grounded_retrieval_accuracy']:.1%}")
         print(f"Out-of-scope refusal accuracy: {report['out_of_scope_refusal_accuracy']:.1%}")
         print(f"Detailed report: {EVAL_JSON}")
