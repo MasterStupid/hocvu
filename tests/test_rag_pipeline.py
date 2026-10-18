@@ -106,6 +106,47 @@ class RagPipelineTests(unittest.TestCase):
                 self.assertTrue(response.refused)
                 self.assertFalse(response.references)
 
+    def test_unaccented_off_topic_questions_abstain(self):
+        # Without diacritics "bong" also reads as "bổng" and "da" as "đa";
+        # a lone syllable must not ground an answer in the scholarship text.
+        engine = HocVuEngine(self.config, self.searcher)
+        for question in (
+            "truong co to chuc giai bong da sinh vien khong",
+            "Truong co to chuc giai bong da cho sinh vien khong?",
+            "giai bong da sinh vien cua truong to chuc khi nao",
+            "truong co doi bong da sinh vien khong",
+            "truong co to chuc giai bong chuyen sinh vien khong",
+            "truong co san bong da khong",
+            "bong ban",
+            "can tin truong co mon gi",
+            "gia com o can tin la bao nhieu",
+            "xe bus tuyen nao di ngang qua cong chinh cua dai hoc hai phong",
+        ):
+            with self.subTest(question=question):
+                response = engine.ask(question, "unaccented-off-topic", use_context=False, record_session=False)
+                self.assertTrue(response.refused)
+                self.assertFalse(response.references)
+
+    def test_unaccented_academic_paraphrases_are_answered_with_citations(self):
+        engine = HocVuEngine(self.config, self.searcher)
+        cases = {
+            "dieu kien bao luu ket qua hoc tap": ("QD-DTDC-HPU-2026", "Điều kiện bảo lưu"),
+            "diem ren luyen toi da la bao nhieu": ("QD-RLSV-HPU-2026", "100 điểm"),
+            "diem rl toi da la bao nhieu": ("QD-RLSV-HPU-2026", "100 điểm"),
+            "bao luu": ("QD-DTDC-HPU-2026", "bảo lưu"),
+            "hoc bong khuyen khich hoc tap": ("QD-HBHT-HPU-2026", "HBKKHT"),
+            "nghi hoc bao nhieu phan tram thi bi cam thi": ("QD-DTDC-HPU-2026", "25%"),
+            "tan sinh vien chua hoc xong ky 1 co duoc bao luu khong": ("QD-DTDC-HPU-2026", "bảo lưu"),
+            "diem duoi bao nhieu thi phai hoc lai": ("QD-DTDC-HPU-2026", "học lại"),
+            "thuc tap toi thieu bao nhieu tuan": ("QD-TTTN-HPU-2026", "12 tuần"),
+        }
+        for question, (rid, expected) in cases.items():
+            with self.subTest(question=question):
+                response = engine.ask(question, "unaccented-academic", use_context=False, record_session=False)
+                self.assertFalse(response.refused)
+                self.assertEqual(response.references[0].rid, rid)
+                self.assertIn(expected, response.answer)
+
     def test_evidence_matching_respects_vietnamese_diacritics(self):
         self.assertEqual(accent_key("hoà"), accent_key("hòa"))
         self.assertNotEqual(accent_key("bóng"), accent_key("bổng"))

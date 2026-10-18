@@ -3,13 +3,14 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import shutil
 from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
 
 from .models import Chunk, RankedChunk
-from .nlp import ACADEMIC_TOKEN_ALIASES, accent_key, accented_content_tokens, content_tokens, has_diacritics, strip_accents
+from .nlp import ACADEMIC_TOKEN_ALIASES, accent_key, accented_content_tokens, content_tokens, has_diacritics, normalize, strip_accents
 from .semantic import SemanticEncoder
 from .settings import MODELS
 
@@ -191,16 +192,34 @@ class HybridSearcher:
     def _evidence_text(cls, chunk: Chunk) -> str:
         return f"{chunk.art_heading}\n{cls._clause_body(chunk)}"
 
+    @staticmethod
+    def _raw_words(text: str) -> list[str]:
+        """Every lowercase word, stopwords included, for adjacency checks."""
+        return re.findall(r"\w+", normalize(text).lower())
+
     @classmethod
     def _supported_terms(cls, query: str, chunk: Chunk) -> set[str]:
-        """Query word forms that a clause (with its heading) states.
+        """Query word forms that a clause (with its heading) states."""
+        return cls._evidence_support(query, chunk)[0]
+
+    @classmethod
+    def _evidence_support(cls, query: str, chunk: Chunk) -> tuple[set[str], set[str]]:
+        """Supported query word forms, and those that also anchor the topic.
 
         An abbreviation such as "ĐRL" stands for the whole phrase "điểm rèn
         luyện". It supports a query word only when the query uses at least
         two consecutive words of that phrase, so the syllable "điểm" of
         "điểm danh" is not credited to a clause that only mentions ĐRL.
+
+        A supported word anchors the topic when its reading is unambiguous:
+        it was typed with diacritics, or, typed without them, the clause also
+        has it next to one of its neighbours in the question. A lone
+        unaccented syllable is ambiguous ("bong" is both "bóng" and "bổng");
+        the neighbour tells the readings apart ("giai bong da" never occurs
+        in "học bổng ... tối đa"). Numbers never anchor a topic.
         """
-        tokens = accented_content_tokens(cls._evidence_text(chunk), expand_aliases=False)
+        evidence = cls._evidence_text(chunk)
+        tokens = accented_content_tokens(evidence, expand_aliases=False)
         words = set(cls._index_forms(tokens))
         alias_phrases: set[tuple[str, str]] = set()
         for token in tokens:
@@ -209,10 +228,27 @@ class HybridSearcher:
                 alias_phrases |= cls._phrase_index(list(expansion))
         sequence = [cls._query_form(term) for term in accented_content_tokens(query)]
         supported = {form for form in sequence if form in words}
+        in_phrase: set[str] = set()
         for left, right in zip(sequence, sequence[1:]):
             if (left, right) in alias_phrases:
                 supported.update((left, right))
-        return supported
+                in_phrase.update((left, right))
+        raw_sequence = [cls._query_form(word) for word in cls._raw_words(query)]
+        if len(set(raw_sequence)) == 1:
+            # A one-word question has no neighbour to disambiguate with.
+            in_phrase |= supported
+        else:
+            # Adjacency is checked both on content words (so a stopword
+            # between them does not matter) and on the raw wording (so a
+            # neighbour that is a stopword, e.g. "bao" in "bao luu", counts).
+            evidence_pairs = cls._phrase_index(tokens) | cls._phrase_index(cls._raw_words(evidence))
+            for pairs in (zip(sequence, sequence[1:]), zip(raw_sequence, raw_sequence[1:])):
+                in_phrase.update(form for pair in pairs if pair in evidence_pairs for form in pair)
+        anchored = {
+            form for form in supported
+            if not form[2:].isdigit() and (form.startswith("a:") or form in in_phrase)
+        }
+        return supported, anchored
 
     @classmethod
     def _query_forms(cls, query: str) -> list[str]:
@@ -282,26 +318,38 @@ class HybridSearcher:
     )
     _conversational_words = ("em", "mình", "gặp", "xin", "ạ", "dạ")
 
+    # Unaccented spellings of a non-specific word that are also meaningful
+    # words: "da" is "dạ" (particle) but also "đá" (bóng đá) and "đa" (tối đa).
+    _ambiguous_unaccented = frozenset({"da"})
+
     @classmethod
     def _is_non_specific(cls, term: str) -> bool:
         words = cls._generic_institutional_words + cls._conversational_words
         if has_diacritics(term):
             return accent_key(term) in {accent_key(word) for word in words}
+        if term in cls._ambiguous_unaccented:
+            return False
         return term in {strip_accents(word) for word in words}
 
     @classmethod
     def has_specific_evidence(cls, query: str, hits: list[RankedChunk]) -> bool:
-        """Reject coincidental overlap on only university-generic words."""
+        """Reject coincidental overlap on only university-generic words.
+
+        The clause must state at least half of the specific query words, and
+        at least one of them unambiguously (see ``_evidence_support``), so an
+        unaccented "giai bong da" is not answered from "học bổng ... tối đa".
+        """
         specific = list(dict.fromkeys(
             cls._query_form(term) for term in accented_content_tokens(query) if not cls._is_non_specific(term)
         ))
         if not specific:
             return False
-        best = 0.0
         for hit in hits:
-            supported = cls._supported_terms(query, hit.chunk)
-            best = max(best, sum(form in supported for form in specific) / len(specific))
-        return best >= 0.5
+            supported, anchored = cls._evidence_support(query, hit.chunk)
+            covered = sum(form in supported for form in specific) / len(specific)
+            if covered >= 0.5 and any(form in anchored for form in specific):
+                return True
+        return False
 
     @staticmethod
     def _is_valid(chunk: Chunk, ref_date: str | None, include_expired: bool = False) -> bool:
