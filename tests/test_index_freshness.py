@@ -2,6 +2,8 @@
 import contextlib
 import io
 import json
+import multiprocessing
+import os
 import tempfile
 import unittest
 from dataclasses import replace
@@ -15,6 +17,49 @@ from core.engine import HocVuEngine, build_index
 from core.index_version import INDEX_SOURCE_FILES, index_fingerprint
 from core.searcher import HybridSearcher, StaleIndexError
 from core.settings import AppConfig
+
+
+def _rebuild_worker(root, role, seed, entered, paused, release, stage="primary"):
+    """Run real server startup/CLI ingest with a controlled commit boundary."""
+    root = Path(root)
+    index = root / "custom" / "index.json"
+    config = AppConfig(semantic_enabled=False, seed=seed)
+    original_save = HybridSearcher.save
+    original_replace = os.replace
+
+    def save(searcher, *args, **kwargs):
+        entered.set()
+        return original_save(searcher, *args, **kwargs)
+
+    def replace_file(source, destination):
+        target = index.with_suffix(".json.bak") if stage == "backup" else index
+        if Path(destination) == target:
+            if stage == "committed":
+                original_replace(source, destination)
+            paused.set()
+            if not release.wait(20):
+                raise RuntimeError("Test did not release paused index writer")
+            if stage == "committed":
+                return
+        return original_replace(source, destination)
+
+    with (
+        patch("core.engine.DOCS", root / "documents"),
+        patch("core.engine.SESSION_DB", root / f"sessions-{role}.db"),
+        patch("core.engine.AUD", root / "audio"),
+        patch.object(HybridSearcher, "save", save),
+        patch("core.index_storage.os.replace", replace_file),
+    ):
+        if role == "server":
+            HocVuEngine.load_or_build(config, index)
+        else:
+            with (
+                patch("sys.argv", ["manage.py", "ingest"]),
+                patch("manage.load_config", return_value=config),
+                patch("manage.ensure_dirs"),
+                patch("manage.build_index", side_effect=lambda cfg: build_index(cfg, index_path=index)),
+            ):
+                manage.main()
 
 
 class IndexFreshnessTests(unittest.TestCase):
@@ -168,6 +213,123 @@ class IndexFreshnessTests(unittest.TestCase):
                     evaluate.assert_called_once_with(engine, manage.EVAL_JSON)
                 elif arguments[0] == "ask":
                     engine.ask.assert_called_once()
+
+    def _writer(self, role, seed, stage="primary", blocked=True):
+        context = multiprocessing.get_context("spawn")
+        entered, paused, release = (context.Event() for _ in range(3))
+        if not blocked:
+            release.set()
+        process = context.Process(
+            target=_rebuild_worker,
+            args=(str(self.root), role, seed, entered, paused, release, stage),
+        )
+        process.start()
+
+        # Spawned children must unpickle every semaphore before the parent
+        # drops its references (callers may ignore some returned events).
+        def cleanup(events=(entered, paused, release)):
+            # A forcibly killed child can leave an Event's internal lock
+            # held. Do not touch its synchronization objects after exit.
+            if process.is_alive():
+                release.set()
+            process.join(5)
+            if process.is_alive():
+                process.terminate()
+                process.join(5)
+
+        self.addCleanup(cleanup)
+        return process, entered, paused, release
+
+    def _assert_generation(self, path, seed):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(data["index_fingerprint"], index_fingerprint(replace(self.config, seed=seed)))
+        self.assertEqual(data["article_version"], DocumentRepository.article_build_version())
+        restored = HybridSearcher.load(path, self.config)
+        self.assertTrue(restored.chunks)
+        self.assertEqual([chunk.to_dict() for chunk in restored.chunks], data["chunks"])
+
+    def test_server_startup_and_cli_ingest_overlap_without_losing_either_save(self):
+        for existing in (False, True):
+            with self.subTest(existing=existing):
+                self.index.unlink(missing_ok=True)
+                self.index.with_suffix(".json.bak").unlink(missing_ok=True)
+                if existing:
+                    build_index(self.config, index_path=self.index)
+                server, _, paused, release = self._writer("server", 11)
+                self.assertTrue(paused.wait(15), "Server never reached the commit boundary")
+                cli, entered, _, _ = self._writer("cli", 22, blocked=False)
+                self.assertTrue(entered.wait(15), "CLI never reached save while server was paused")
+                # No timing sleeps: both processes are in save before releasing.
+                release.set()
+                for process in (server, cli):
+                    process.join(20)
+                    self.assertEqual(process.exitcode, 0)
+                self._assert_generation(self.index, 22)
+                self._assert_generation(self.index.with_suffix(".json.bak"), 11)
+                self.assertFalse(list(self.index.parent.glob("*.tmp")))
+
+    def test_killed_writer_preserves_committed_files_and_releases_lock(self):
+        for stage in ("backup", "primary", "committed"):
+            with self.subTest(stage=stage):
+                build_index(self.config, index_path=self.index)
+                build_index(replace(self.config, seed=33), index_path=self.index)
+                process, _, paused, _ = self._writer("server", 11, stage=stage)
+                self.assertTrue(paused.wait(15), f"Writer never reached {stage}")
+                process.terminate()
+                process.join(10)
+                self.assertIsNotNone(process.exitcode)
+                self._assert_generation(self.index, 11 if stage == "committed" else 33)
+                self._assert_generation(
+                    self.index.with_suffix(".json.bak"),
+                    self.config.seed if stage == "backup" else 33,
+                )
+                # A killed process must not leave a permanently held lock.
+                cli, _, _, _ = self._writer("cli", 22, blocked=False)
+                cli.join(20)
+                self.assertEqual(cli.exitcode, 0)
+                self._assert_generation(self.index, 22)
+
+    def test_failed_replace_keeps_primary_and_valid_backup_and_cleans_temps(self):
+        from core.index_storage import atomic_write
+
+        for stage in ("backup", "primary"):
+            with self.subTest(stage=stage):
+                build_index(self.config, index_path=self.index)
+                build_index(self.config, index_path=self.index)
+                before = self.index.read_bytes()
+                target = self.index.with_suffix(".json.bak") if stage == "backup" else self.index
+                original_replace = os.replace
+
+                def fail_replace(source, destination):
+                    if Path(destination) == target:
+                        raise OSError("Injected interrupted commit")
+                    return original_replace(source, destination)
+
+                with patch("core.index_storage.os.replace", side_effect=fail_replace):
+                    with self.assertRaisesRegex(OSError, "Injected"):
+                        build_index(replace(self.config, seed=11), index_path=self.index)
+                self.assertEqual(self.index.read_bytes(), before)
+                self._assert_generation(self.index.with_suffix(".json.bak"), self.config.seed)
+                self.assertFalse(list(self.index.parent.glob("*.tmp")))
+        # The same cleanup applies if a flush fails before publication.
+        with patch("core.index_storage.os.fsync", side_effect=OSError("Injected flush failure")):
+            with self.assertRaisesRegex(OSError, "flush failure"):
+                atomic_write(self.index, b"not committed")
+        self.assertEqual(self.index.read_bytes(), before)
+        self.assertFalse(list(self.index.parent.glob("*.tmp")))
+
+    def test_rebuild_does_not_replace_good_backup_with_corrupt_primary(self):
+        build_index(self.config, index_path=self.index)
+        build_index(self.config, index_path=self.index)
+        backup = self.index.with_suffix(".json.bak")
+        good_backup = backup.read_bytes()
+        for corrupt in ("{broken", "[]", '{"chunks": [] , "schema_version": 999}',
+                        '{"chunks": [{}]}', '{"chunks": "not a list"}'):
+            with self.subTest(corrupt=corrupt):
+                self.index.write_text(corrupt, encoding="utf-8")
+                build_index(replace(self.config, seed=11), index_path=self.index)
+                self.assertEqual(backup.read_bytes(), good_backup)
+                self._assert_generation(self.index, 11)
 
 
 if __name__ == "__main__":

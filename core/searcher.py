@@ -4,12 +4,12 @@ from __future__ import annotations
 import json
 import math
 import re
-import shutil
 from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
 
 from .models import Chunk, RankedChunk
+from .index_storage import atomic_write, index_write_lock
 from .nlp import ACADEMIC_TOKEN_ALIASES, accent_key, accented_content_tokens, content_tokens, has_diacritics, normalize, strip_accents
 from .semantic import SemanticEncoder
 from .settings import MODELS
@@ -64,16 +64,34 @@ class HybridSearcher:
     def save(self, path: str, article_version: str | None = None, index_fingerprint: str | None = None) -> None:
         destination = Path(path)
         destination.parent.mkdir(parents=True, exist_ok=True)
-        temporary = destination.with_suffix(".tmp")
-        temporary.write_text(json.dumps({
+        content = json.dumps({
             "schema_version": INDEX_SCHEMA_VERSION,
             "article_version": article_version,
             "index_fingerprint": index_fingerprint,
             "chunks": [chunk.to_dict() for chunk in self.chunks],
-        }, ensure_ascii=False, indent=2), encoding="utf-8")
-        if destination.exists():
-            shutil.copy2(destination, destination.with_suffix(".json.bak"))
-        temporary.replace(destination)
+        }, ensure_ascii=False, indent=2).encode("utf-8")
+        with index_write_lock(destination):
+            try:
+                previous = destination.read_bytes()
+            except FileNotFoundError:
+                previous = None
+            if previous is not None:
+                try:
+                    data = json.loads(previous)
+                    valid = (
+                        isinstance(data, dict)
+                        and data.get("schema_version", 1) in {1, INDEX_SCHEMA_VERSION}
+                        and isinstance(data.get("chunks"), list)
+                    )
+                    if valid:
+                        for chunk in data["chunks"]:
+                            Chunk.from_dict(chunk)
+                except (ValueError, TypeError, KeyError):
+                    valid = False
+                # A rebuild after corruption must not destroy a good backup.
+                if valid:
+                    atomic_write(destination.with_suffix(".json.bak"), previous)
+            atomic_write(destination, content)
 
     @classmethod
     def load(cls, path: str, config, article_version: str | None = None, index_fingerprint: str | None = None):
