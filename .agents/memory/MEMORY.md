@@ -1,2 +1,3 @@
+- [Hosting and access decision](hosting-and-access-decision.md) — Replit-only hosting; public chat, password only for document management; persist via App Storage + Postgres.
 - [API origin protection](api-origin-protection.md) — API changes need same or exact trusted origin; Netlify site must be in HV_TRUSTED_ORIGINS.
 - [Vietnamese evidence matching](vietnamese-evidence-matching.md) — diacritic-aware evidence checks, abbreviations as phrases; heading down-weighting breaks terse clauses.
