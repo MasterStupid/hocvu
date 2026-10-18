@@ -12,7 +12,7 @@ from core.scenarios import expand_retrieval_query, is_attendance_training_scenar
 from core.settings import AppConfig
 from core.engine import HocVuEngine
 from core.models import Response
-from core.nlp import content_tokens
+from core.nlp import accent_key, content_tokens
 from core.splitter import split_regulation
 
 
@@ -77,6 +77,49 @@ class RagPipelineTests(unittest.TestCase):
                 self.assertFalse(response.refused)
                 self.assertEqual(response.references[0].rid, rid)
                 self.assertIn(expected, response.answer)
+
+    def test_proxy_attendance_paraphrases_cite_the_attendance_clause(self):
+        engine = HocVuEngine(self.config, self.searcher)
+        for question in (
+            "Nếu điểm danh hộ thì bị xử lý như thế nào?",
+            "Hình thức xử lý khi điểm danh hộ là gì?",
+            "Sinh viên điểm danh hộ sẽ bị gì?",
+            "Điểm danh hộ cho bạn thì bị phạt thế nào?",
+            "diem danh ho bi xu ly ra sao",
+        ):
+            with self.subTest(question=question):
+                response = engine.ask(question, "proxy-attendance", use_context=False, record_session=False)
+                self.assertFalse(response.refused)
+                self.assertEqual(response.references[0].rid, "QD-DTDC-HPU-2026")
+                self.assertIn("trừ toàn bộ", response.answer)
+
+    def test_sports_paraphrases_abstain_without_supporting_regulation(self):
+        engine = HocVuEngine(self.config, self.searcher)
+        for question in (
+            "Trường có tổ chức giải bóng đá cho sinh viên không?",
+            "Giải bóng đá sinh viên của trường tổ chức khi nào?",
+            "Trường có đội bóng đá sinh viên không?",
+            "Trường có tổ chức giải bóng chuyền sinh viên không?",
+        ):
+            with self.subTest(question=question):
+                response = engine.ask(question, "sports", use_context=False, record_session=False)
+                self.assertTrue(response.refused)
+                self.assertFalse(response.references)
+
+    def test_evidence_matching_respects_vietnamese_diacritics(self):
+        self.assertEqual(accent_key("hoà"), accent_key("hòa"))
+        self.assertNotEqual(accent_key("bóng"), accent_key("bổng"))
+        self.assertNotEqual(accent_key("đá"), accent_key("đa"))
+        scholarship = next(hit for hit in self.searcher.search("học bổng doanh nghiệp", 5) if "bổng" in hit.chunk.text)
+        self.assertEqual(HybridSearcher.lexical_coverage("bóng", scholarship), 0.0)
+        # A student typing without diacritics still matches the accented text.
+        self.assertEqual(HybridSearcher.lexical_coverage("hoc bong", scholarship), 1.0)
+        self.assertEqual(HybridSearcher.lexical_coverage("học bổng", scholarship), 1.0)
+
+    def test_abbreviation_supports_its_whole_phrase_not_a_lone_syllable(self):
+        weak_training = next(hit for hit in self.searcher.search("ĐRL xếp loại Yếu", 5) if "ĐRL xếp loại Yếu" in hit.chunk.text)
+        self.assertEqual(HybridSearcher.lexical_coverage("điểm rèn luyện", weak_training), 1.0)
+        self.assertEqual(HybridSearcher.lexical_coverage("điểm danh", weak_training), 0.0)
 
     def test_coverage_uses_the_best_retrieved_clause_not_only_rank_one(self):
         engine = HocVuEngine(self.config, self.searcher)

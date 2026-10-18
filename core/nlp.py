@@ -38,11 +38,18 @@ NORMALIZED_VI_STOPWORDS: Set[str] = {
     strip_accents(word).lower() for word in VI_STOPWORDS
     if strip_accents(word).lower() not in _AMBIGUOUS_ASCII_STOPWORDS
 }
+# Keys are unaccented abbreviations; values keep their Vietnamese spelling so
+# accent-aware evidence checks can match them (``content_tokens`` strips them).
 ACADEMIC_TOKEN_ALIASES = {
-    "drl": ("diem", "ren", "luyen"),
-    "rl": ("diem", "ren", "luyen"),
-    "hbkkht": ("hoc", "bong", "khuyen", "khich", "hoc", "tap"),
+    "drl": ("điểm", "rèn", "luyện"),
+    "rl": ("điểm", "rèn", "luyện"),
+    "hbkkht": ("học", "bổng", "khuyến", "khích", "học", "tập"),
 }
+
+# Vietnamese tone marks (NFD combining characters). Vowel-quality marks such as
+# the circumflex, breve and horn are deliberately not listed: they are part of
+# the letter, while tone marks may be placed on different vowels ("hoà"/"hòa").
+_TONE_MARKS = {"\u0300": "1", "\u0301": "2", "\u0303": "3", "\u0309": "4", "\u0323": "5"}
 
 
 def expand_academic_terms(text: str) -> str:
@@ -84,18 +91,50 @@ def tokenize(text: str) -> List[str]:
     tokens = re.findall(r'\w+', text)
     return tokens
 
-def content_tokens(text: str) -> List[str]:
-    # Decide whether a token is a stopword while its accents are intact, then
-    # strip accents for retrieval. This preserves "tối đa" and "thi lại"
-    # while still making "là", "bao", "nhiêu" harmless.
+def accented_content_tokens(text: str, expand_aliases: bool = True) -> List[str]:
+    """Meaningful lowercase tokens with their Vietnamese diacritics kept.
+
+    Uses exactly the stopword and alias rules of ``content_tokens``; the two
+    differ only in whether diacritics are stripped. ``expand_aliases=False``
+    keeps abbreviations such as "đrl" as written.
+    """
     raw_tokens = re.findall(r"\w+", normalize(text).lower())
     result = []
     for token in raw_tokens:
         if token in VI_STOPWORDS or (token.isascii() and token in NORMALIZED_VI_STOPWORDS):
             continue
-        normalized_token = strip_accents(token)
-        result.extend(ACADEMIC_TOKEN_ALIASES.get(normalized_token, (normalized_token,)))
+        expansion = ACADEMIC_TOKEN_ALIASES.get(strip_accents(token)) if expand_aliases else None
+        result.extend(expansion or (token,))
     return result
+
+
+def content_tokens(text: str) -> List[str]:
+    # Decide whether a token is a stopword while its accents are intact, then
+    # strip accents for retrieval. This preserves "tối đa" and "thi lại"
+    # while still making "là", "bao", "nhiêu" harmless.
+    return [strip_accents(token) for token in accented_content_tokens(text)]
+
+
+def has_diacritics(token: str) -> bool:
+    return strip_accents(token) != token
+
+
+def accent_key(token: str) -> str:
+    """Accent-sensitive comparison key that ignores tone-mark placement.
+
+    Stripping accents conflates distinct Vietnamese words ("bóng"/"bổng",
+    "đá"/"đa", "hộ"/"họ"). This key keeps the letters and the tone, but not
+    the vowel the tone was typed on, so "hoà" and "hòa" still match.
+    """
+    tone = ""
+    letters = []
+    for char in unicodedata.normalize("NFD", token.lower()):
+        if char in _TONE_MARKS:
+            tone = _TONE_MARKS[char]
+        else:
+            letters.append(char)
+    base = unicodedata.normalize("NFC", "".join(letters))
+    return f"{base}~{tone}" if tone else base
 
 def ngrams(tokens: List[str], n: int) -> List[str]:
     if n <= 0:

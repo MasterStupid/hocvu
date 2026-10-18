@@ -9,7 +9,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from .models import Chunk, RankedChunk
-from .nlp import content_tokens, ngrams
+from .nlp import ACADEMIC_TOKEN_ALIASES, accent_key, accented_content_tokens, content_tokens, has_diacritics, strip_accents
 from .semantic import SemanticEncoder
 from .settings import MODELS
 
@@ -18,14 +18,11 @@ INDEX_SCHEMA_VERSION = 2
 
 
 class HybridSearcher:
-    _generic_institutional_terms = {
-        "dai", "hoc", "truong", "sinh", "vien", "quy", "dinh", "van", "ban",
-        "to", "chuc", "co", "so", "yeu", "cau", "bo", "lam", "vao", "o",
-    }
     def __init__(self, config):
         self.config = config
         self.chunks: list[Chunk] = []
         self._freqs: list[Counter] = []
+        self._lengths: list[int] = []
         self._idf: dict[str, float] = {}
         self._avg_len = 0.0
         self.semantic: SemanticEncoder | None = None
@@ -37,8 +34,15 @@ class HybridSearcher:
 
     def build(self, chunks: list[Chunk]) -> None:
         self.chunks = chunks
-        token_lists = [content_tokens(f"{chunk.version} {chunk.reg_title} {chunk.art_heading} {chunk.text}") for chunk in chunks]
-        self._freqs = [Counter(tokens) for tokens in token_lists]
+        # The splitter prepends the heading to every clause; index it once so
+        # heading words are not counted twice on top of the heading boost.
+        token_lists = [accented_content_tokens(f"{chunk.version} {chunk.reg_title} {chunk.art_heading} {self._clause_body(chunk)}") for chunk in chunks]
+        # Each indexed word is counted under two forms: unaccented, for a
+        # query typed without diacritics, and accent-sensitive, so that a
+        # query typed with diacritics is not credited with (or diluted by)
+        # different words that merely share an unaccented spelling.
+        self._freqs = [Counter(self._index_forms(tokens)) for tokens in token_lists]
+        self._lengths = [len(tokens) for tokens in token_lists]
         self._avg_len = sum(map(len, token_lists)) / max(1, len(token_lists))
         df = Counter(token for freq in self._freqs for token in freq)
         total = len(self.chunks)
@@ -99,7 +103,7 @@ class HybridSearcher:
         q_tokens = content_tokens(query)
         if not q_tokens:
             return []
-        q_freq = Counter(q_tokens)
+        q_freq = Counter(self._query_form(token) for token in accented_content_tokens(query))
         try:
             semantic_scores = self.semantic.similarities(query) if self.semantic and self.semantic.available else []
         except Exception as exc:
@@ -114,13 +118,13 @@ class HybridSearcher:
         for index, (chunk, freq) in enumerate(zip(self.chunks, self._freqs)):
             if not self._is_valid(chunk, ref_date, include_expired):
                 continue
-            length = sum(freq.values())
+            length = self._lengths[index]
             bm25 = 0.0
             for token, q_count in q_freq.items():
                 term_freq = freq.get(token, 0)
                 if term_freq:
                     bm25 += self._idf.get(token, 0.0) * (term_freq * (k1 + 1) / (term_freq + k1 * (1 - b + b * length / max(1, self._avg_len))) * min(q_count, 2))
-            heading_terms = set(content_tokens(f"{chunk.version} {chunk.reg_title} {chunk.art_heading}"))
+            heading_terms = set(self._index_forms(accented_content_tokens(f"{chunk.version} {chunk.reg_title} {chunk.art_heading}")))
             bm25 += sum(self._idf.get(token, 0.0) * 2.0 for token in q_freq if token in heading_terms)
             normalized_query = " ".join(q_tokens)
             normalized_text = " ".join(content_tokens(chunk.text))
@@ -146,8 +150,76 @@ class HybridSearcher:
         results.sort(key=lambda item: item.score, reverse=True)
         return results[: top_k or self.config.top_k]
 
+    # Evidence checks compare words with their diacritics. Stripping accents
+    # merges unrelated Vietnamese words ("bóng đá" vs "học bổng ... tối đa",
+    # "hộ" vs "họ"), which must not count as support for an answer. A query
+    # word typed without diacritics still matches on its unaccented form.
+
     @staticmethod
-    def lexical_coverage(query: str, hit: RankedChunk | list[RankedChunk]) -> float:
+    def _term_forms(term: str) -> tuple[str, str]:
+        """The accent-sensitive ("a:") and unaccented ("s:") forms of a word."""
+        return f"a:{accent_key(term)}", f"s:{strip_accents(term)}"
+
+    @staticmethod
+    def _query_form(term: str) -> str:
+        """Compare with diacritics only when the student typed them."""
+        return f"a:{accent_key(term)}" if has_diacritics(term) else f"s:{term}"
+
+    @classmethod
+    def _index_forms(cls, tokens: list[str]) -> list[str]:
+        return [form for token in tokens for form in cls._term_forms(token)]
+
+    @classmethod
+    def _phrase_index(cls, tokens: list[str]) -> set[tuple[str, str]]:
+        return {
+            (left, right)
+            for first, second in zip(tokens, tokens[1:])
+            for left in cls._term_forms(first)
+            for right in cls._term_forms(second)
+        }
+
+    @staticmethod
+    def _clause_body(chunk: Chunk) -> str:
+        """Clause text without the article heading the splitter prepends."""
+        text = chunk.text
+        heading = (chunk.art_heading or "").strip()
+        if heading and text.startswith(heading):
+            return text[len(heading):].lstrip()
+        return text
+
+    @classmethod
+    def _evidence_text(cls, chunk: Chunk) -> str:
+        return f"{chunk.art_heading}\n{cls._clause_body(chunk)}"
+
+    @classmethod
+    def _supported_terms(cls, query: str, chunk: Chunk) -> set[str]:
+        """Query word forms that a clause (with its heading) states.
+
+        An abbreviation such as "ĐRL" stands for the whole phrase "điểm rèn
+        luyện". It supports a query word only when the query uses at least
+        two consecutive words of that phrase, so the syllable "điểm" of
+        "điểm danh" is not credited to a clause that only mentions ĐRL.
+        """
+        tokens = accented_content_tokens(cls._evidence_text(chunk), expand_aliases=False)
+        words = set(cls._index_forms(tokens))
+        alias_phrases: set[tuple[str, str]] = set()
+        for token in tokens:
+            expansion = ACADEMIC_TOKEN_ALIASES.get(strip_accents(token))
+            if expansion:
+                alias_phrases |= cls._phrase_index(list(expansion))
+        sequence = [cls._query_form(term) for term in accented_content_tokens(query)]
+        supported = {form for form in sequence if form in words}
+        for left, right in zip(sequence, sequence[1:]):
+            if (left, right) in alias_phrases:
+                supported.update((left, right))
+        return supported
+
+    @classmethod
+    def _query_forms(cls, query: str) -> list[str]:
+        return list(dict.fromkeys(cls._query_form(term) for term in accented_content_tokens(query)))
+
+    @classmethod
+    def lexical_coverage(cls, query: str, hit: RankedChunk | list[RankedChunk]) -> float:
         """Fraction of meaningful query terms directly supported by a hit.
 
         Raw BM25 values depend on corpus size and cannot be used as a global
@@ -155,27 +227,25 @@ class HybridSearcher:
         a document that merely shares one generic word with a long query.
         """
         if isinstance(hit, list):
-            return max((HybridSearcher.lexical_coverage(query, item) for item in hit), default=0.0)
-        query_tokens = list(dict.fromkeys(content_tokens(query)))
-        query_terms = set(query_tokens)
-        if not query_terms:
+            return max((cls.lexical_coverage(query, item) for item in hit), default=0.0)
+        query_forms = cls._query_forms(query)
+        if not query_forms:
             return 0.0
-        evidence_terms = set(content_tokens(f"{hit.chunk.art_heading} {hit.chunk.text}"))
-        return len(query_terms & evidence_terms) / len(query_terms)
+        supported = cls._supported_terms(query, hit.chunk)
+        return sum(form in supported for form in query_forms) / len(query_forms)
 
-    @staticmethod
-    def phrase_coverage(query: str, hit: RankedChunk) -> float:
+    @classmethod
+    def phrase_coverage(cls, query: str, hit: RankedChunk) -> float:
         """Measure adjacent query terms for reranking only, never refusal."""
-        query_tokens = list(dict.fromkeys(content_tokens(query)))
-        evidence_tokens = content_tokens(f"{hit.chunk.art_heading} {hit.chunk.text}")
-        query_phrases = set(ngrams(query_tokens, 2))
+        query_tokens = cls._query_forms(query)
+        query_phrases = set(zip(query_tokens, query_tokens[1:]))
         if not query_phrases:
             return 0.0
-        evidence_phrases = set(ngrams(evidence_tokens, 2))
+        evidence_phrases = cls._phrase_index(accented_content_tokens(cls._evidence_text(hit.chunk)))
         return len(query_phrases & evidence_phrases) / len(query_phrases)
 
-    @staticmethod
-    def rerank_by_coverage(query: str, hits: list[RankedChunk]) -> list[RankedChunk]:
+    @classmethod
+    def rerank_by_coverage(cls, query: str, hits: list[RankedChunk]) -> list[RankedChunk]:
         """Prefer the evidence that covers most of the student's question.
 
         BM25 remains the retrieval score; coverage is a transparent second
@@ -189,8 +259,8 @@ class HybridSearcher:
         def rank(hit: RankedChunk) -> float:
             base_rel = (hit.score / peak_score) if hit.score > 0 else (hit.bm25 / peak_bm25)
             value = (
-                (0.40 * HybridSearcher.lexical_coverage(query, hit))
-                + (0.30 * HybridSearcher.phrase_coverage(query, hit))
+                (0.40 * cls.lexical_coverage(query, hit))
+                + (0.30 * cls.phrase_coverage(query, hit))
                 + (0.30 * base_rel)
             )
             if asks_for_conditions:
@@ -204,18 +274,33 @@ class HybridSearcher:
             reverse=True,
         )
 
-    _conversational_terms = {"em", "minh", "gap", "xin", "a", "da"}
+    # Written with diacritics so that, e.g., "dạ" (a polite particle) does not
+    # also discard "đá"; unaccented query words compare on stripped forms.
+    _generic_institutional_words = (
+        "đại", "học", "trường", "sinh", "viên", "quy", "định", "văn", "bản",
+        "tổ", "chức", "có", "cơ", "sở", "số", "yêu", "cầu", "bộ", "làm", "vào", "ở",
+    )
+    _conversational_words = ("em", "mình", "gặp", "xin", "ạ", "dạ")
+
+    @classmethod
+    def _is_non_specific(cls, term: str) -> bool:
+        words = cls._generic_institutional_words + cls._conversational_words
+        if has_diacritics(term):
+            return accent_key(term) in {accent_key(word) for word in words}
+        return term in {strip_accents(word) for word in words}
 
     @classmethod
     def has_specific_evidence(cls, query: str, hits: list[RankedChunk]) -> bool:
         """Reject coincidental overlap on only university-generic words."""
-        query_terms = set(content_tokens(query)) - cls._generic_institutional_terms - cls._conversational_terms
-        if not query_terms:
+        specific = list(dict.fromkeys(
+            cls._query_form(term) for term in accented_content_tokens(query) if not cls._is_non_specific(term)
+        ))
+        if not specific:
             return False
         best = 0.0
         for hit in hits:
-            evidence_terms = set(content_tokens(f"{hit.chunk.art_heading} {hit.chunk.text}"))
-            best = max(best, len(query_terms & evidence_terms) / len(query_terms))
+            supported = cls._supported_terms(query, hit.chunk)
+            best = max(best, sum(form in supported for form in specific) / len(specific))
         return best >= 0.5
 
     @staticmethod
