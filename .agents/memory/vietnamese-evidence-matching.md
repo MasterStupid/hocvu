@@ -13,4 +13,7 @@ description: Why retrieval/abstention compares words with diacritics and treats 
 - For yes/no question focus, require an anchored predicate term rather than imposing a second half-coverage threshold on the predicate.
   **Why:** a half-coverage threshold rejected the valid graduation paraphrase "Học lại 15% tín chỉ có ảnh hưởng đến bằng tốt nghiệp không?": the rule says "tốt nghiệp" but not "ảnh hưởng" or "bằng".
   **How to apply:** keep the whole-query specificity threshold; use predicate support to stop a long matching subject from hiding a completely unsupported requested feature.
+- Descriptive feature/location questions need the same separate focus check: a matching location alone does not support the feature being asked about.
+  **Why:** "Wifi ở ký túc xá thế nào?" passed whole-query coverage on the dormitory words despite no wifi evidence.
+  **How to apply:** recognize question structure with accent-aware markers, not topic blacklists; require whole-query and focus support in the same clause, and allow new supporting documents. Descriptive asks must support their leading specific topic even when a preposition is omitted; check it with its neighbours intact so abbreviation expansions still work. Keep the focus-level anchor, and distinguish generic request prefixes such as "chính sách" from the subject itself.
 - How to apply: before changing ranking, compare answers and citations for the evaluation set, the suggestion questions, and paraphrases.

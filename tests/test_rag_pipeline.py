@@ -116,6 +116,18 @@ class RagPipelineTests(unittest.TestCase):
             "Ký túc xá có WiFi không ạ?",
             "Ký túc xá có máy giặt không?",
             "ky tuc xa co may giat khong",
+            "Wifi ở ký túc xá thế nào?",
+            "wifi o ky tuc xa the nao",
+            "Wifi tại ký túc xá như thế nào ạ?",
+            "wifi tai ky tuc xa nhu the nao a",
+            "Wifi trong ký túc xá ra sao?",
+            "wifi trong ky tuc xa ra sao",
+            "Wifi của ký túc xá thế nào?",
+            "wifi cua ky tuc xa the nao",
+            "Wifi ký túc xá thế nào?",
+            "wifi ky tuc xa the nao",
+            "Máy giặt ở ký túc xá thế nào?",
+            "may giat o ky tuc xa the nao",
         ):
             with self.subTest(question=question):
                 hits = self.searcher.search(question, 15)
@@ -130,7 +142,7 @@ class RagPipelineTests(unittest.TestCase):
         dorm = next(hit for hit in self.searcher.search(question, 15) if "ký túc xá" in hit.chunk.text.lower())
         self.assertEqual(self.searcher.lexical_coverage(question, dorm), 0.75)
 
-    def test_yes_no_focus_can_be_grounded_in_new_documents(self):
+    def test_question_focus_can_be_grounded_in_new_documents(self):
         template = self.searcher.search("điểm rèn luyện", 1)[0]
         dorm_only = replace(template, chunk=replace(
             template.chunk, art_heading="Nội trú", text="Sinh viên chấp hành nội quy ký túc xá.",
@@ -141,7 +153,14 @@ class RagPipelineTests(unittest.TestCase):
         grounded = replace(template, chunk=replace(
             template.chunk, art_heading="Dịch vụ nội trú", text="Ký túc xá có wifi miễn phí.",
         ))
-        for question in ("Ký túc xá có wifi không?", "ky tuc xa co wifi khong"):
+        for question in (
+            "Ký túc xá có wifi không?", "ky tuc xa co wifi khong",
+            "Wifi ở ký túc xá thế nào?", "wifi o ky tuc xa the nao",
+            "Wifi tại ký túc xá như thế nào ạ?", "wifi tai ky tuc xa nhu the nao a",
+            "Wifi trong ký túc xá ra sao?", "wifi trong ky tuc xa ra sao",
+            "Wifi của ký túc xá thế nào?", "wifi cua ky tuc xa the nao",
+            "Wifi ký túc xá thế nào?", "wifi ky tuc xa the nao",
+        ):
             with self.subTest(question=question):
                 # Do not combine an unrelated feature clause with a subject
                 # clause to manufacture support.
@@ -153,6 +172,22 @@ class RagPipelineTests(unittest.TestCase):
                 self.assertFalse(response.refused)
                 self.assertTrue(response.references)
                 self.assertIn("wifi", response.answer.lower())
+
+    def test_descriptive_focus_preserves_diacritics_and_abbreviation_rules(self):
+        self.assertEqual(self.searcher._question_focus("Wifi ở ký túc xá thế nào?"), "wifi")
+        self.assertEqual(self.searcher._question_focus("wifi o ky tuc xa the nao"), "wifi")
+        self.assertEqual(self.searcher._question_focus("Wifi ở ký túc xá thẻ nào?"), "")
+        template = self.searcher.search("điểm rèn luyện", 1)[0]
+        for question, text, expected in (
+            ("Bóng ở ký túc xá thế nào?", "Ký túc xá có học bổng.", False),
+            ("Điểm danh ở ký túc xá thế nào?", "Ký túc xá xét ĐRL.", False),
+            ("diem danh o ky tuc xa the nao", "Ký túc xá xét ĐRL.", False),
+            ("Điểm rèn luyện ở ký túc xá thế nào?", "Ký túc xá xét ĐRL.", True),
+            ("diem ren luyen o ky tuc xa the nao", "Ký túc xá xét ĐRL.", True),
+        ):
+            with self.subTest(question=question):
+                hit = replace(template, chunk=replace(template.chunk, art_heading="Nội trú", text=text))
+                self.assertEqual(self.searcher.has_specific_evidence(question, [hit]), expected)
 
     def test_yes_no_focus_preserves_permissions_and_diacritics(self):
         self.assertEqual(self.searcher._yes_no_focus("Cơ sở có wifi không?"), "wifi")

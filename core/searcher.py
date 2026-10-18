@@ -379,31 +379,78 @@ class HybridSearcher:
         return ""
 
     @classmethod
+    def _question_focus(cls, query: str) -> str:
+        """Separate a requested feature from its location in descriptive asks.
+
+        In "Wifi ở ký túc xá thế nào?", the location is not evidence about
+        wifi. Recognize question structure, never a list of feature topics.
+        Match markers with the same accent rules as evidence words.
+        """
+        yes_no = cls._yes_no_focus(query)
+        if yes_no:
+            return yes_no
+        words = cls._raw_words(query)
+        polite = set(form for word in cls._conversational_words for form in cls._term_forms(word))
+        while words and cls._query_form(words[-1]) in polite:
+            words.pop()
+        forms = [cls._query_form(word) for word in words]
+        for ending in (("như", "thế", "nào"), ("thế", "nào"), ("ra", "sao"), ("như", "nào")):
+            if len(words) <= len(ending):
+                continue
+            if not all(form in cls._term_forms(marker) for form, marker in zip(forms[-len(ending):], ending)):
+                continue
+            topic = words[:-len(ending)]
+            # These introduce a request for rules/information, rather than
+            # naming the requested subject ("Chính sách học phí ...").
+            for prefix in (("chính", "sách"), ("quy", "định"), ("thông", "tin")):
+                if all(cls._query_form(word) in cls._term_forms(marker) for word, marker in zip(topic, prefix)) and len(topic) > len(prefix):
+                    topic = topic[len(prefix):]
+                    break
+            locations = set(form for word in ("ở", "tại", "trong", "của") for form in cls._term_forms(word))
+            for index, word in enumerate(topic):
+                if index and cls._query_form(word) in locations:
+                    return " ".join(topic[:index])
+            return " ".join(topic)
+        return ""
+
+    @classmethod
     def has_specific_evidence(cls, query: str, hits: list[RankedChunk]) -> bool:
         """Reject coincidental overlap on only university-generic words.
 
         The clause must state at least half of the specific query words, and
         at least one of them unambiguously (see ``_evidence_support``), so an
         unaccented "giai bong da" is not answered from "học bổng ... tối đa".
-        For "có ... không", that same clause must also anchor a specific
-        word of the proposition, not just the subject before "có". Do not
+        For "có ... không" and descriptive feature/location questions, that
+        same clause must also anchor a specific word of the focus, not just
+        the subject or location. Do not
         impose another ratio on the predicate: paraphrased verbs such as
         "ảnh hưởng" need not appear verbatim in a clause about graduation.
         """
         groups = []
-        for text, minimum in ((query, 0.5), (cls._yes_no_focus(query), 0.0)):
-            specific = set(
+        focus = cls._question_focus(query)
+        descriptive = bool(focus) and not cls._yes_no_focus(query)
+        for text, minimum in ((query, 0.5), (focus, 0.0)):
+            ordered_specific = list(dict.fromkeys(
                 cls._query_form(term) for term in accented_content_tokens(text) if not cls._is_non_specific(term)
-            )
+            ))
+            specific = set(ordered_specific)
             if text == query and not specific:
                 return False
             if specific:
-                groups.append((text, specific, minimum))
+                groups.append((text, specific, minimum, True))
+                if text == focus and descriptive:
+                    # With an omitted preposition ("Wifi ký túc xá thế
+                    # nào"), any later location words must not hide a
+                    # missing leading topic. A single requested term need
+                    # only be supported here; the full focus still needs
+                    # its normal accent/phrase anchor. Keep neighbours for
+                    # abbreviation support rather than testing it alone.
+                    groups.append((text, {ordered_specific[0]}, 1.0, False))
         for hit in hits:
-            for text, specific, minimum in groups:
+            for text, specific, minimum, require_anchor in groups:
                 supported, anchored = cls._evidence_support(text, hit.chunk)
                 covered = len(specific & supported) / len(specific)
-                if covered < minimum or not specific & anchored:
+                if covered < minimum or (require_anchor and not specific & anchored):
                     break
             else:
                 return True
