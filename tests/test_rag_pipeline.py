@@ -1,6 +1,7 @@
 import unittest
 import json
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -105,6 +106,70 @@ class RagPipelineTests(unittest.TestCase):
                 response = engine.ask(question, "sports", use_context=False, record_session=False)
                 self.assertTrue(response.refused)
                 self.assertFalse(response.references)
+
+    def test_dormitory_subject_does_not_ground_an_unsupported_feature(self):
+        engine = HocVuEngine(self.config, self.searcher)
+        for question in (
+            "Ký túc xá có wifi không?",
+            "ky tuc xa co wifi khong",
+            "Ký túc xá có WiFi không ạ?",
+            "Ký túc xá có máy giặt không?",
+            "ky tuc xa co may giat khong",
+        ):
+            with self.subTest(question=question):
+                hits = self.searcher.search(question, 15)
+                self.assertFalse(self.searcher.has_specific_evidence(question, hits))
+                response = engine.ask(question, "dormitory-feature", use_context=False, record_session=False)
+                self.assertTrue(response.refused)
+                self.assertFalse(response.references)
+
+        # The old ratio admits the subject's three syllables out of four;
+        # ranking/coverage alone must not be treated as specific evidence.
+        question = "Ký túc xá có wifi không?"
+        dorm = next(hit for hit in self.searcher.search(question, 15) if "ký túc xá" in hit.chunk.text.lower())
+        self.assertEqual(self.searcher.lexical_coverage(question, dorm), 0.75)
+
+    def test_yes_no_focus_can_be_grounded_in_new_documents(self):
+        template = self.searcher.search("điểm rèn luyện", 1)[0]
+        dorm_only = replace(template, chunk=replace(
+            template.chunk, art_heading="Nội trú", text="Sinh viên chấp hành nội quy ký túc xá.",
+        ))
+        wifi_only = replace(template, chunk=replace(
+            template.chunk, art_heading="Thư viện", text="Thư viện có wifi miễn phí.",
+        ))
+        grounded = replace(template, chunk=replace(
+            template.chunk, art_heading="Dịch vụ nội trú", text="Ký túc xá có wifi miễn phí.",
+        ))
+        for question in ("Ký túc xá có wifi không?", "ky tuc xa co wifi khong"):
+            with self.subTest(question=question):
+                # Do not combine an unrelated feature clause with a subject
+                # clause to manufacture support.
+                self.assertFalse(self.searcher.has_specific_evidence(question, [dorm_only, wifi_only]))
+                self.assertTrue(self.searcher.has_specific_evidence(question, [grounded]))
+                engine = HocVuEngine(self.config, HybridSearcher(self.config))
+                engine.searcher.build([grounded.chunk])
+                response = engine.ask(question, "grounded-wifi", use_context=False, record_session=False)
+                self.assertFalse(response.refused)
+                self.assertTrue(response.references)
+                self.assertIn("wifi", response.answer.lower())
+
+    def test_yes_no_focus_preserves_permissions_and_diacritics(self):
+        self.assertEqual(self.searcher._yes_no_focus("Cơ sở có wifi không?"), "wifi")
+        self.assertEqual(self.searcher._yes_no_focus("Cơ sở không đủ điều kiện"), "")
+        engine = HocVuEngine(self.config, self.searcher)
+        cases = {
+            "Sinh viên có được bảo lưu không?": "QD-DTDC-HPU-2026",
+            "sinh vien co duoc bao luu khong": "QD-DTDC-HPU-2026",
+            "Bảo lưu có được không?": "QD-DTDC-HPU-2026",
+            "bao luu co duoc khong": "QD-DTDC-HPU-2026",
+            "Học lại 15% tín chỉ có ảnh hưởng đến bằng tốt nghiệp không?": "QD-TTTN-HPU-2026",
+        }
+        for question, rid in cases.items():
+            with self.subTest(question=question):
+                response = engine.ask(question, "yes-no-permission", use_context=False, record_session=False)
+                self.assertFalse(response.refused)
+                self.assertTrue(response.references)
+                self.assertEqual(response.references[0].rid, rid)
 
     def test_unaccented_off_topic_questions_abstain(self):
         # Without diacritics "bong" also reads as "bổng" and "da" as "đa";

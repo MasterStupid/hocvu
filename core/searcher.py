@@ -347,22 +347,52 @@ class HybridSearcher:
         return term in {strip_accents(word) for word in words}
 
     @classmethod
+    def _yes_no_focus(cls, query: str) -> str:
+        """The proposition asked about in Vietnamese ``có ... không``.
+
+        A long subject (e.g. "ký túc xá") must not hide an unsupported
+        predicate ("wifi"). Keep accents: "cơ" is not the question marker
+        "có", although both may be typed as "co" without diacritics.
+        """
+        words = cls._raw_words(query)
+        starts = set(cls._term_forms("có"))
+        ends = set(cls._term_forms("không"))
+        for start, word in enumerate(words):
+            if cls._query_form(word) in starts:
+                for end in range(start + 1, len(words)):
+                    if cls._query_form(words[end]) in ends:
+                        return " ".join(words[start + 1:end])
+                break
+        return ""
+
+    @classmethod
     def has_specific_evidence(cls, query: str, hits: list[RankedChunk]) -> bool:
         """Reject coincidental overlap on only university-generic words.
 
         The clause must state at least half of the specific query words, and
         at least one of them unambiguously (see ``_evidence_support``), so an
         unaccented "giai bong da" is not answered from "học bổng ... tối đa".
+        For "có ... không", that same clause must also anchor a specific
+        word of the proposition, not just the subject before "có". Do not
+        impose another ratio on the predicate: paraphrased verbs such as
+        "ảnh hưởng" need not appear verbatim in a clause about graduation.
         """
-        specific = list(dict.fromkeys(
-            cls._query_form(term) for term in accented_content_tokens(query) if not cls._is_non_specific(term)
-        ))
-        if not specific:
-            return False
+        groups = []
+        for text, minimum in ((query, 0.5), (cls._yes_no_focus(query), 0.0)):
+            specific = set(
+                cls._query_form(term) for term in accented_content_tokens(text) if not cls._is_non_specific(term)
+            )
+            if text == query and not specific:
+                return False
+            if specific:
+                groups.append((text, specific, minimum))
         for hit in hits:
-            supported, anchored = cls._evidence_support(query, hit.chunk)
-            covered = sum(form in supported for form in specific) / len(specific)
-            if covered >= 0.5 and any(form in anchored for form in specific):
+            for text, specific, minimum in groups:
+                supported, anchored = cls._evidence_support(text, hit.chunk)
+                covered = len(specific & supported) / len(specific)
+                if covered < minimum or not specific & anchored:
+                    break
+            else:
                 return True
         return False
 
