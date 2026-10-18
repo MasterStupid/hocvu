@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import io
+import base64
+import binascii
 import json
 import os
 import re
+import secrets
 import time
 import uuid
 import webbrowser
@@ -13,7 +16,6 @@ from typing import Any, Dict, List, Optional
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, Response, UploadFile, File, Form, Query, status
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -29,6 +31,24 @@ engine: HocVuEngine | None = None
 voice_manager: VoiceManager | None = None
 requires_api_token = False
 config = load_config()
+browser_auth_enabled = os.environ.get("HV_BROWSER_AUTH", "0") == "1"
+
+
+def valid_browser_credentials(authorization: str) -> bool:
+    """Accept a browser's native HTTP Basic login without exposing the API token."""
+    if not config.api_token:
+        return False
+    try:
+        scheme, encoded = authorization.split(" ", 1)
+        if scheme.lower() != "basic":
+            return False
+        username, password = base64.b64decode(encoded, validate=True).split(b":", 1)
+        return (
+            secrets.compare_digest(username, b"hocvu")
+            and secrets.compare_digest(password, config.api_token.encode("utf-8"))
+        )
+    except (ValueError, binascii.Error):
+        return False
 
 
 def get_engine() -> HocVuEngine:
@@ -74,13 +94,8 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# The bundled UI and Netlify's API proxy are same-origin. Do not enable
+# credentialed cross-origin browser access to the editable regulation corpus.
 
 _request_times: dict[str, list[float]] = {}
 
@@ -90,11 +105,45 @@ async def rate_limit_and_auth_middleware(request: Request, call_next):
     client_ip = request.client.host if request.client else "127.0.0.1"
     path = request.url.path
 
+    # Opt-in browser authentication for a single-origin hosted UI. Header-token
+    # clients remain compatible; the public health endpoint remains available.
+    browser_authenticated = False
+    if browser_auth_enabled and path != "/api/health":
+        browser_authenticated = valid_browser_credentials(request.headers.get("Authorization", ""))
+        api_authenticated = (
+            path.startswith("/api/")
+            and bool(config.api_token)
+            and secrets.compare_digest(
+                request.headers.get("X-HocVu-Token", "").encode("utf-8"),
+                config.api_token.encode("utf-8"),
+            )
+        )
+        if not browser_authenticated and not api_authenticated:
+            return JSONResponse(
+                status_code=401,
+                content={"error": "Sign in with username hocvu and your access password."},
+                headers={"WWW-Authenticate": 'Basic realm="HocVu AI", charset="UTF-8"'},
+            )
+
+    if path.startswith("/api/") and request.method not in {"GET", "HEAD", "OPTIONS"}:
+        # HTTP Basic credentials are ambient browser authority, so authentication
+        # alone cannot protect uploads/deletes from cross-site form submissions.
+        # Replit terminates HTTPS at its proxy and forwards the original scheme.
+        scheme = request.headers.get("X-Forwarded-Proto", request.url.scheme).split(",")[0].strip()
+        expected_origin = f"{scheme}://{request.url.netloc}"
+        origin = request.headers.get("Origin")
+        if (
+            request.headers.get("Sec-Fetch-Site") == "cross-site"
+            or (origin is not None and origin != expected_origin)
+            or (browser_authenticated and origin is None)
+        ):
+            return JSONResponse(status_code=403, content={"error": "Cross-site changes are not allowed."})
+
     # Kiểm tra bảo vệ API nếu mở ra mạng công cộng
     if path.startswith("/api/") and path != "/api/health":
-        if requires_api_token:
+        if requires_api_token and not browser_authenticated:
             token = request.headers.get("X-HocVu-Token", "")
-            if token != config.api_token:
+            if not config.api_token or not secrets.compare_digest(token.encode("utf-8"), config.api_token.encode("utf-8")):
                 return JSONResponse(status_code=401, content={"error": "API token is required for network access."})
 
         # Rate limiting

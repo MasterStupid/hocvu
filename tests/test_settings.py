@@ -7,7 +7,14 @@ from core.settings import load_config
 
 class SettingsTests(unittest.TestCase):
     def test_example_defaults_match_runtime_defaults(self):
-        config = load_config()
+        # Test defaults independently of the hosting environment's overrides.
+        with patch.dict(os.environ):
+            for name in (
+                "HV_TOP_K", "HV_BM25_WEIGHT", "HV_SEMANTIC_FLOOR",
+                "HV_LEXICAL_COVERAGE_FLOOR", "HV_SEMANTIC", "HV_WHISPER_SIZE",
+            ):
+                os.environ.pop(name, None)
+            config = load_config()
         self.assertEqual(config.top_k, 5)
         self.assertEqual(config.bm25_weight, 0.10)
         self.assertEqual(config.semantic_floor, 0.20)
