@@ -109,6 +109,81 @@ class DocumentRepositoryTests(unittest.TestCase):
                     )
                 self.assertEqual(entry["title"], "Văn bản 34/QĐ-ĐHKT - Quy chế học bổng")
 
+    def test_wrapped_subject_stops_before_headings_or_body(self):
+        endings = (
+            "## Điều 1. Phạm vi áp dụng",
+            "**Điều 1. Phạm vi áp dụng**",
+            "Điều 1. Phạm vi áp dụng",
+            "điều 1. phạm vi áp dụng",
+            "CHƯƠNG I. QUY ĐỊNH CHUNG",
+            "1. Phạm vi áp dụng",
+            "a) Phạm vi áp dụng",
+            "- Sinh viên nộp hồ sơ trước ngày 20.",
+            "Căn cứ Quy chế đào tạo hiện hành;",
+            "căn cứ Quy chế đào tạo hiện hành;",
+            "Sinh viên nộp hồ sơ trước ngày 20.",
+            "sinh viên nộp hồ sơ trước ngày 20.",
+            "nội dung chi tiết của thông báo.",
+            "",
+        )
+        for index, ending in enumerate(endings):
+            with self.subTest(ending=ending):
+                text = "\n".join([
+                    "Số: 34/QĐ-ĐHKT",
+                    "Về việc: ban hành Quy chế học bổng",
+                    "  khuyến khích học tập năm 2026",
+                    ending,
+                    "không được đưa nội dung này vào tiêu đề",
+                ])
+                with patch.object(self.repository, "extract", return_value=(text, 1)):
+                    entry = self.repository.add(
+                        "scan_001.pdf", f"%PDF-1.7 wrapped {index}".encode(),
+                    )
+                self.assertEqual(
+                    entry["title"],
+                    "Thông báo 34/QĐ-ĐHKT - ban hành Quy chế học bổng khuyến khích học tập năm 2026",
+                )
+                self.assertEqual(self.repository.get_text(entry["id"])["title"], entry["title"])
+                self.assertEqual(self.repository.regulations()[-1].title, entry["title"])
+
+    def test_wrapped_subject_prefixes_and_line_endings(self):
+        for index, prefix in enumerate(("V/v ", "V/v: ", "Về việc ", "Về việc: ", "Tiêu đề: ")):
+            for newline in ("\n", "\r\n", "\r"):
+                with self.subTest(prefix=prefix, newline=repr(newline)):
+                    text = newline.join([
+                        f"{prefix}ban hành Quy chế",
+                        "học bổng khuyến khích học tập",
+                        "cho năm học 2026.",
+                        "không lấy thêm văn bản sau dấu chấm",
+                    ])
+                    with patch.object(self.repository, "extract", return_value=(text, 1)):
+                        entry = self.repository.add(
+                            "scan_001.pdf", f"%PDF-1.7 prefix {index} {newline!r}".encode(),
+                            metadata={"decision_number": "34/QĐ-ĐHKT"},
+                        )
+                    self.assertEqual(
+                        entry["title"],
+                        "Thông báo 34/QĐ-ĐHKT - ban hành Quy chế học bổng khuyến khích học tập cho năm học 2026.",
+                    )
+
+    def test_single_line_subject_does_not_consume_body_or_blank_lines(self):
+        for index, (subject, following) in enumerate((
+            ("ban hành Quy chế học bổng", "Sinh viên nộp hồ sơ trước ngày 20."),
+            ("ban hành Quy chế học bổng", "nội dung chi tiết của thông báo."),
+            ("ban hành Quy chế học bổng", "\nkhuyến khích học tập"),
+            ("ban hành Quy chế học bổng", "\fkhuyến khích học tập"),
+            ("ban hành Quy chế học bổng.", "không lấy thêm văn bản"),
+            ("ban hành Quy chế học bổng;", "không lấy thêm văn bản"),
+        )):
+            with self.subTest(subject=subject, following=following):
+                text = f"V/v {subject}\n{following}"
+                with patch.object(self.repository, "extract", return_value=(text, 1)):
+                    entry = self.repository.add(
+                        "scan_001.pdf", f"%PDF-1.7 single {index}".encode(),
+                        metadata={"decision_number": "34/QĐ-ĐHKT"},
+                    )
+                self.assertEqual(entry["title"], f"Thông báo 34/QĐ-ĐHKT - {subject}")
+
     def test_title_without_subject_line_or_heading_uses_filename(self):
         text = "Nội dung quy định về lịch thi cuối kỳ, không có tiêu đề riêng."
         with patch.object(self.repository, "extract", return_value=(text, 1)):

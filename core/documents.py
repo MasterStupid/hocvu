@@ -173,14 +173,9 @@ class DocumentRepository:
             if date_m:
                 d, m, y = date_m.group(1).zfill(2), date_m.group(2).zfill(2), date_m.group(3)
                 metadata["document_date"] = f"{y}-{m}-{d}"
-        title_m = re.search(
-            r"(?:\b(?:Tiêu đề|Về việc):\s*"
-            r"|^[ \t]*(?:V/v|Về việc)(?:[ \t]*:[ \t]*|[ \t]+))([^\r\n]+)",
-            text,
-            re.IGNORECASE | re.MULTILINE,
-        )
-        if metadata.get("decision_number") and title_m:
-            title = f"Thông báo {metadata['decision_number']} - {title_m.group(1).strip()}"[:150]
+        explicit_subject = self._explicit_subject(text)
+        if metadata.get("decision_number") and explicit_subject:
+            title = f"Thông báo {metadata['decision_number']} - {explicit_subject}"[:150]
         elif metadata.get("decision_number"):
             # Without an explicit subject line, still name the topic: use the
             # first meaningful heading, else the filename. The decision number
@@ -209,6 +204,52 @@ class DocumentRepository:
         entries.append(entry)
         self._write_manifest(entries)
         return entry
+
+    @staticmethod
+    def _explicit_subject(text: str) -> str:
+        """Join likely soft wraps, not the following administrative body.
+
+        Continuations must be adjacent lowercase fragments. Blank lines,
+        capitalized text, markup, lists, section labels and common body/preamble
+        openings end the subject. Sentence-ending punctuation ends it too.
+        Ambiguous capitalized wraps are deliberately left alone rather than
+        risking pulling a body paragraph into a single-line subject.
+        """
+        match = re.search(
+            r"(?:\b(?:Tiêu đề|Về việc):[ \t]*"
+            r"|^[ \t]*(?:V/v|Về việc)(?:[ \t]*:[ \t]*|[ \t]+))([^\r\n]+)",
+            text,
+            re.IGNORECASE | re.MULTILINE,
+        )
+        if not match:
+            return ""
+        subject = match.group(1).strip()
+        # Do not skip a blank line (or a page break) while looking for wraps.
+        remainder = text[match.end():]
+        remainder = re.sub(r"^(?:\r\n|\r|\n)", "", remainder, count=1)
+        body_start = re.compile(
+            r"^(?:(?:điều|chương|mục|phần|khoản)\s+(?:\d+|[ivxlcdm]+)\b"
+            r"|(?:căn cứ|xét đề nghị|quyết định|kính gửi|nơi nhận|nội dung"
+            r"|sinh viên|nhà trường|đề nghị|yêu cầu|thực hiện|hiệu trưởng"
+            r"|trường|phòng|các đơn vị|đối tượng|thời gian|số|tiêu đề|về việc)\b"
+            r"|v/v\b)",
+            re.IGNORECASE,
+        )
+        for raw_line in remainder.splitlines():
+            line = raw_line.strip()
+            if (
+                not line
+                or subject.endswith((".", ";", "!", "?", ":"))
+                or not line[0].islower()
+                or re.match(r"^[a-zđ][.)]\s", line)
+                or body_start.match(line)
+            ):
+                break
+            subject += " " + line
+            # add() already caps the complete title at 150 characters.
+            if len(subject) >= 150:
+                break
+        return subject
 
     # Headings that appear at the top of most Vietnamese administrative
     # documents but say nothing about the document's subject.
