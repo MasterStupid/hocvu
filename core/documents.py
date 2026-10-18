@@ -149,7 +149,9 @@ class DocumentRepository:
             raise
         title = Path(safe_name).stem
         if not metadata.get("decision_number"):
-            num_m = re.search(r"\b(?:Số|Số hiệu):\s*([0-9]+/[A-Z0-9_-]+)", text, re.IGNORECASE)
+            # Unicode-aware: Vietnamese decision numbers use letters such as
+            # "Đ" (12/QĐ-ĐH, 05/2026/TT-BGDĐT) that an ASCII class truncates.
+            num_m = re.search(r"\b(?:Số hiệu|Số)\s*:\s*([0-9]+(?:/[\w-]+)+)", text, re.IGNORECASE)
             if num_m:
                 metadata["decision_number"] = num_m.group(1).strip()
         if not metadata.get("document_date"):
@@ -459,9 +461,13 @@ class DocumentRepository:
             if current:
                 clauses.append(Clause(str(len(clauses) + 1), current))
             if clauses:
-                clean_heading = re.sub(r"^[\*#\s]+|\*+$", "", heading).strip()
-                full_heading = f"{document_title} - {clean_heading}" if document_title not in clean_heading else clean_heading
-                articles.append(Article(f"Mục {len(articles) + 1}", full_heading, clauses))
+                # An article heading names only its section. The document
+                # title (and its decision number) is regulation metadata that
+                # citations, the LLM context and the index already carry
+                # separately, so it is not repeated here. Text before the
+                # first section heading falls back to the document title.
+                clean_heading = re.sub(r"^[\*#\s]+|\*+$", "", heading).strip() or document_title
+                articles.append(Article(f"Mục {len(articles) + 1}", clean_heading, clauses))
             buffer.clear()
 
         for paragraph in paragraphs:

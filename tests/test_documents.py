@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from core.documents import DocumentError, DocumentRepository
+from core.splitter import split_regulation
 
 
 class DocumentRepositoryTests(unittest.TestCase):
@@ -34,6 +35,43 @@ class DocumentRepositoryTests(unittest.TestCase):
         self.assertEqual(entry["decision_number"], "12/QĐ-ĐH")
         self.assertEqual(regulations[0].version, "Quyết định 12/QĐ-ĐH")
         self.assertEqual(regulations[0].valid_from, "2026-10-04")
+        # The decision number is document metadata: it stays in the title,
+        # version and every citation, but is not repeated in section headings.
+        self.assertEqual(regulations[0].title, "Văn bản 12/QĐ-ĐH")
+        chunks = split_regulation(regulations[0], max_chars=800, overlap_sents=0)
+        self.assertTrue(chunks)
+        for chunk in chunks:
+            self.assertEqual(chunk.reg_title, "Văn bản 12/QĐ-ĐH")
+            self.assertEqual(chunk.version, "Quyết định 12/QĐ-ĐH")
+            self.assertEqual(chunk.art_heading, "Điều kiện bảo lưu")
+            self.assertNotIn("12/QĐ-ĐH", chunk.text)
+        # The text preview shows the extracted source, without the TOC.
+        preview = self.repository.get_text(entry["id"])
+        self.assertEqual(preview["title"], "Văn bản 12/QĐ-ĐH")
+        self.assertEqual(preview["text"], "## Điều kiện bảo lưu\nQuy chế đào tạo về điều kiện bảo lưu kết quả học tập của sinh viên.")
+
+    def test_detected_decision_number_keeps_vietnamese_letters(self):
+        text = "Số: 05/2026/TT-BGDĐT ngày 4 tháng 10 năm 2026\nVề việc: Đăng ký học phần học kỳ 1\nNội dung chi tiết."
+        with patch.object(self.repository, "extract", return_value=(text, 1)):
+            entry = self.repository.add("thong_bao.pdf", b"%PDF-1.7 detected", metadata={})
+        self.assertEqual(entry["decision_number"], "05/2026/TT-BGDĐT")
+        self.assertEqual(entry["document_date"], "2026-10-04")
+        self.assertEqual(entry["title"], "Thông báo 05/2026/TT-BGDĐT - Đăng ký học phần học kỳ 1")
+
+    def test_article_headings_name_sections_and_preamble_uses_document_title(self):
+        text = "\n".join([
+            "Nội dung mở đầu của văn bản trước mục đầu tiên.",
+            "## Thông báo 5/TB-ĐH - Lịch đăng ký",
+            "Sinh viên đăng ký học phần trước ngày 15.",
+            "**1. Lưu ý** Không nhận hồ sơ trễ hạn.",
+        ])
+        articles = DocumentRepository._make_articles(text, "Thông báo 5/TB-ĐH - Đăng ký học phần")
+        self.assertEqual([article.heading for article in articles], [
+            "Thông báo 5/TB-ĐH - Đăng ký học phần",
+            "Thông báo 5/TB-ĐH - Lịch đăng ký",
+            "1. Lưu ý",
+        ])
+        self.assertIn("Không nhận hồ sơ trễ hạn", articles[2].clauses[0].content)
 
     def test_pdf_reader_dependency_error_is_actionable(self):
         with patch.dict("sys.modules", {"pypdf": None}):
