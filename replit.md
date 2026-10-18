@@ -27,6 +27,11 @@ pages. No frontend build or separate service is needed.
   a new tab and sign in there.
 - `HV_SEMANTIC=0` uses the existing BM25 search without downloading embedding
   weights. Semantic retrieval is optional, not required to run.
+- API documentation and the OpenAPI schema are disabled by default. Set
+  `HV_API_DOCS=1` and restart only when you need `/docs`, `/redoc`, and
+  `/openapi.json` for development. Keep it off on a published service.
+- Questions sent to `/api/ask` are limited to 4000 characters; longer input
+  receives HTTP 422 before retrieval is invoked.
 - Optional Gemini/OpenAI rewriting remains off by default and requires its
   provider credentials and settings as documented in README.md.
 - Tesseract is installed with Vietnamese language data for local OCR.

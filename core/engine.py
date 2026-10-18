@@ -14,7 +14,7 @@ from .index_version import index_fingerprint
 from .llm import GroundedLLM, LLMError
 from .models import Response
 from .searcher import HybridSearcher, StaleIndexError
-from .scenarios import expand_retrieval_query, is_attendance_training_scenario, is_comparison_query, is_contextual_follow_up, is_historical_query
+from .scenarios import comparison_topic, expand_retrieval_query, is_attendance_training_scenario, is_comparison_query, is_contextual_follow_up, is_historical_query
 from .session import SessionStore
 from .settings import AUD, DOCS, INDEX_JSON, SESSION_DB, AppConfig
 from .splitter import split_regulation
@@ -49,7 +49,7 @@ class HocVuEngine:
 
     @classmethod
     def load(cls, config: AppConfig, index_path: Path):
-        return cls(config, HybridSearcher.load(str(index_path), config))
+        return cls.load_or_build(config, index_path)
 
     @classmethod
     def load_or_build(cls, config: AppConfig, index_path: Path):
@@ -93,7 +93,7 @@ class HocVuEngine:
             scenario = is_attendance_training_scenario(question)
             comparison = is_comparison_query(question)
             historical = comparison or is_historical_query(question)
-            retrieval_question = expand_retrieval_query(question)
+            retrieval_question = expand_retrieval_query(comparison_topic(question) if comparison else question)
             is_follow_up = follow_up or is_contextual_follow_up(question)
             # Coverage can only rerank clauses present in this bounded pool.
             # Eligibility thresholds can rank below the first 12 BM25 hits
@@ -101,7 +101,6 @@ class HocVuEngine:
             # Keep recall separate from the unchanged evidence/refusal gates.
             retrieval_limit = max(self.config.top_k, 20)
             today_str = ref_date or date.today().isoformat()
-            using_semantic = self.searcher.provider != "bm25"
 
             if is_follow_up and use_context:
                 retrieval_question, _ = self.session.contextualize(session_id, retrieval_question)
@@ -123,6 +122,9 @@ class HocVuEngine:
                 # expired source is the intended evidence, not a fallback.
                 expired = [hit for hit in hits if hit.chunk.valid_until]
                 hits = expired + [hit for hit in hits if not hit.chunk.valid_until]
+            # Query-time fallback is local to this response; the encoder stays
+            # available for a later retry. Do not use raw BM25 as cosine confidence.
+            using_semantic = any(hit.vec != 0 for hit in hits)
             lexical_coverage = self.searcher.lexical_coverage(retrieval_question, hits)
             confidence = min(1.0, hits[0].score) if using_semantic and hits else lexical_coverage
             floor = self.config.semantic_floor if using_semantic else self.config.lexical_coverage_floor
@@ -151,7 +153,7 @@ class HocVuEngine:
         response = Response(
             query=question, answer=answer, references=references, confidence=confidence,
             refused=refused, refusal_reason=reason, intent=intent.value, retrieved=hits,
-            audio_url=None, providers={"retrieval": self.searcher.provider, "voice": "browser", "llm": ai_status},
+            audio_url=None, providers={"retrieval": ("bm25" if hits and not using_semantic else self.searcher.provider), "voice": "browser", "llm": ai_status},
             timing={"total_ms": (time.perf_counter() - started) * 1000}, session_id=session_id,
             metadata={"grounded": bool(references), "ai_mode": ai_status, "lexical_coverage": round(lexical_coverage if 'lexical_coverage' in locals() else 0.0, 4)},
             card=build_card(answer, references, hits, confidence, best_suggestions(question, self._suggestion_topics) if refused else None),

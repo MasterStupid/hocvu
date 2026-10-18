@@ -41,7 +41,41 @@ def is_historical_query(question: str) -> bool:
 def is_comparison_query(question: str) -> bool:
     q = strip_accents(normalize(question)).lower()
     years = re.findall(r"\b20\d{2}\b", q)
-    return len(set(years)) >= 2 or any(phrase in q for phrase in ("so sanh", "khac gi", "khac nhau", "doi chieu"))
+    return len(set(years)) >= 2 or any(phrase in q for phrase in (
+        "so sanh", "khac gi", "khac nhau", "doi chieu",
+        "giua cac phien ban", "giua hai phien ban", "qua cac phien ban",
+    ))
+
+
+def comparison_topic(question: str) -> str:
+    """Remove version-comparison framing, not the subject or its predicates.
+
+    Keep accents for the ordinary evidence gates. In particular an unsupported
+    feature such as wifi must not be hidden by a supported location.
+    """
+    words = re.findall(r"\w+", normalize(question))
+    forms = [strip_accents(word).lower() for word in words]
+    for scope in ("giua cac phien ban", "giua hai phien ban", "qua cac phien ban"):
+        marker = scope.split()
+        for index in range(len(words) - len(marker) + 1):
+            if forms[index:index + len(marker)] != marker:
+                continue
+            tail = forms[index + len(marker):]
+            # Only strip comparison framing. Any additional requested feature
+            # must remain in the original query and pass the normal gate.
+            if any(word not in {"quy", "dinh", "khong", "nhu", "the", "nao", "a", "cu", "moi"} for word in tail):
+                return question
+            topic = words[:index]
+            topic_forms = forms[:index]
+            for ending in ("co thay doi", "thay doi", "co khac nhau", "khac nhau", "co khac", "khac"):
+                suffix = ending.split()
+                if topic_forms[-len(suffix):] == suffix:
+                    topic = topic[:-len(suffix)]
+                    break
+            # Retain descriptive focus semantics: "wifi ký túc xá" must still
+            # require evidence for wifi rather than passing on the location.
+            return " ".join(topic) + " như thế nào"
+    return question
 
 
 def expand_retrieval_query(question: str) -> str:

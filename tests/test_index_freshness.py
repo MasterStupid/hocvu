@@ -63,6 +63,14 @@ def _rebuild_worker(root, role, seed, entered, paused, release, stage="primary")
 
 
 class IndexFreshnessTests(unittest.TestCase):
+    def test_public_load_rebuilds_stale_index_once(self):
+        HocVuEngine.load(self.config, self.index)
+        self.sources[0].write_bytes(self.sources[0].read_bytes() + b"\n# changed source\n")
+        with patch("core.engine.build_index", wraps=build_index) as build:
+            HocVuEngine.load(self.config, self.index)
+            HocVuEngine.load(self.config, self.index)
+        build.assert_called_once()
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)

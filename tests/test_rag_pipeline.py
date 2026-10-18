@@ -653,13 +653,82 @@ class RagPipelineTests(unittest.TestCase):
         engine.session.add_turn.assert_not_called()
 
     def test_semantic_query_error_falls_back_to_bm25(self):
-        self.searcher.semantic = MagicMock()
-        self.searcher.semantic.available = True
-        self.searcher.semantic.similarities.side_effect = RuntimeError("model unavailable")
-        hits = self.searcher.search("điều kiện bảo lưu", 1)
-        self.assertTrue(hits)
-        self.assertIsNone(self.searcher.semantic)
-        self.assertIn("Semantic query fallback", self.searcher.semantic_error)
+        encoder = MagicMock()
+        encoder.available = True
+        encoder.similarities.side_effect = [
+            RuntimeError("temporary model failure"),
+            [0.6] * len(self.searcher.chunks),
+        ]
+        with patch.object(self.searcher, "semantic", encoder):
+            hits = self.searcher.search("điều kiện bảo lưu", 1)
+            self.assertTrue(hits)
+            self.assertEqual(hits[0].vec, 0)
+            self.assertIs(self.searcher.semantic, encoder)
+            self.assertIn("Semantic query fallback", self.searcher.semantic_error)
+            recovered = self.searcher.search("điều kiện bảo lưu", 1)
+            self.assertEqual(recovered[0].vec, 0.6)
+            self.assertEqual(self.searcher.semantic_error, "")
+            self.assertEqual(encoder.similarities.call_count, 2)
+
+    def test_version_change_question_reports_missing_version_without_false_refusal(self):
+        engine = HocVuEngine(self.config, self.searcher)
+        for question in (
+            "Điểm rèn luyện có thay đổi giữa các phiên bản quy định không?",
+            "Diem ren luyen co thay doi giua cac phien ban quy dinh khong?",
+            "Điểm rèn luyện thay đổi qua các phiên bản như thế nào?",
+        ):
+            with self.subTest(question=question):
+                response = engine.ask(question, "version-change", use_context=False, record_session=False)
+                self.assertFalse(response.refused)
+                self.assertIn("Chưa đủ các phiên bản", response.answer)
+                self.assertIn("100 điểm", response.answer)
+                self.assertEqual({ref.rid for ref in response.references}, {"QD-RLSV-HPU-2026"})
+
+    def test_version_comparison_uses_both_versions_when_available(self):
+        current = next(chunk for chunk in self.searcher.chunks
+                       if chunk.rid == "QD-RLSV-HPU-2026" and "100 điểm" in chunk.text)
+        old = replace(current, rid="QD-RLSV-HPU-2024", version="2024",
+                      valid_from="2024-01-01", valid_until="2026-07-31",
+                      text="Thang điểm và tiêu chí\nTổng điểm rèn luyện tối đa là 80 điểm.")
+        searcher = HybridSearcher(self.config)
+        searcher.build(self.searcher.chunks + [old])
+        response = HocVuEngine(self.config, searcher).ask(
+            "Điểm rèn luyện có thay đổi giữa các phiên bản quy định không?",
+            "two-training-versions", use_context=False, record_session=False,
+        )
+        self.assertFalse(response.refused)
+        self.assertEqual({ref.rid for ref in response.references},
+                         {"QD-RLSV-HPU-2024", "QD-RLSV-HPU-2026"})
+        self.assertIn("80 điểm", response.answer)
+        self.assertIn("100 điểm", response.answer)
+
+    def test_version_framing_does_not_authorize_unsupported_topics(self):
+        engine = HocVuEngine(self.config, self.searcher)
+        for topic in ("Wifi ký túc xá", "Giải bóng đá", "Wifi học bổng"):
+            response = engine.ask(
+                f"{topic} có thay đổi giữa các phiên bản quy định không?",
+                "unsupported-comparison", use_context=False, record_session=False,
+            )
+            self.assertTrue(response.refused, topic)
+
+    def test_semantic_failure_uses_lexical_confidence_then_recovers(self):
+        encoder = MagicMock()
+        encoder.available = True
+        encoder.similarities.side_effect = [
+            RuntimeError("transient model failure"),
+            [0.6] * len(self.searcher.chunks),
+        ]
+        with patch.object(self.searcher, "semantic", encoder):
+            engine = HocVuEngine(self.config, self.searcher)
+            fallback = engine.ask("Điều kiện bảo lưu kết quả học tập là gì?",
+                                  "semantic-retry", use_context=False, record_session=False)
+            self.assertFalse(fallback.refused)
+            self.assertEqual(fallback.providers["retrieval"], "bm25")
+            self.assertEqual(fallback.confidence, fallback.metadata["lexical_coverage"])
+            recovered = engine.ask("Điều kiện bảo lưu kết quả học tập là gì?",
+                                   "semantic-retry", use_context=False, record_session=False)
+            self.assertFalse(recovered.refused)
+            self.assertEqual(recovered.providers["retrieval"], "bm25+multilingual-e5")
 
     def test_grounded_response_includes_structured_answer_card(self):
         engine = HocVuEngine(self.config, self.searcher)

@@ -9,6 +9,7 @@ import os
 import re
 import secrets
 import time
+import threading
 import uuid
 import webbrowser
 from pathlib import Path
@@ -29,6 +30,7 @@ from core.voice import VoiceManager, clean_text_for_tts, DEFAULT_VOICE, MALE_VOI
 
 # ── Global Engine & Voice State ──────────────────────────────────────────────
 engine: HocVuEngine | None = None
+_engine_lock = threading.Lock()
 voice_manager: VoiceManager | None = None
 requires_api_token = False
 config = load_config()
@@ -83,10 +85,11 @@ def valid_browser_credentials(authorization: str) -> bool:
 def get_engine() -> HocVuEngine:
     global engine
     if engine is None:
-        ensure_dirs()
-        # Refresh missing indexes or outdated corpus, chunking, and uploaded
-        # document extraction versions before answering students.
-        engine = HocVuEngine.load_or_build(config, INDEX_JSON)
+        with _engine_lock:
+            if engine is None:
+                ensure_dirs()
+                # Refresh the index once, even during concurrent first requests.
+                engine = HocVuEngine.load_or_build(config, INDEX_JSON)
     return engine
 
 
@@ -99,7 +102,7 @@ def get_voice_manager() -> VoiceManager:
 
 # ── Pydantic Request / Response Models ───────────────────────────────────────
 class AskRequest(BaseModel):
-    question: str = Field(..., description="Câu hỏi quy chế của sinh viên")
+    question: str = Field(..., max_length=4000, description="Câu hỏi quy chế của sinh viên (tối đa 4000 ký tự)")
     session_id: Optional[str] = Field(None, description="Mã định danh phiên hội thoại")
     ref_date: Optional[str] = Field(None, description="Ngày tra cứu hiệu lực văn bản (YYYY-MM-DD)")
     with_audio: Optional[bool] = Field(False, description="Yêu cầu sinh kèm URL âm thanh phản hồi")
@@ -117,8 +120,9 @@ app = FastAPI(
     title="HocVu AI API",
     description="Hệ thống Trợ lý ảo tư vấn Quy chế Đào tạo Sinh viên (RAG & Voice Assistant) - ĐH Hải Phòng",
     version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url="/docs" if os.environ.get("HV_API_DOCS", "0") == "1" else None,
+    redoc_url="/redoc" if os.environ.get("HV_API_DOCS", "0") == "1" else None,
+    openapi_url="/openapi.json" if os.environ.get("HV_API_DOCS", "0") == "1" else None,
 )
 
 # The bundled UI and Netlify's API proxy are same-origin. Do not enable
@@ -339,7 +343,18 @@ async def tts_post(payload: TTSRequest):
 
 @app.get("/api/audio/{filename}", summary="Phát file âm thanh đã lưu")
 async def get_audio_file(filename: str):
-    file_path = AUD / filename
+    audio_root = AUD.resolve()
+    try:
+        file_path = (audio_root / filename).resolve()
+    except (ValueError, OSError, RuntimeError):
+        raise HTTPException(status_code=404, detail="Audio not found")
+    if (
+        not file_path.is_relative_to(audio_root)
+        or Path(filename).name != filename
+        or "\\" in filename
+        or file_path.suffix.lower() != ".mp3"
+    ):
+        raise HTTPException(status_code=404, detail="Audio not found")
     if not file_path.is_file():
         raise HTTPException(status_code=404, detail="Audio not found")
     return FileResponse(file_path, media_type="audio/mpeg")
@@ -374,7 +389,8 @@ def main(host: str = "127.0.0.1", port: int = 8000, verbose: bool = False, open_
     SERVER_META.write_text(json.dumps({"pid": os.getpid(), "port": port, "server": "FastAPI/Uvicorn"}), encoding="utf-8")
     url = f"http://{host}:{port}"
     print(f"HocVu AI (FastAPI + Edge-TTS) is running at {url}")
-    print(f"Interactive API Docs available at {url}/docs")
+    if app.docs_url:
+        print(f"Interactive API Docs available at {url}/docs")
 
     if open_browser:
         webbrowser.open(url)

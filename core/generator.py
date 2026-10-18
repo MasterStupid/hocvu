@@ -9,6 +9,7 @@ import re
 
 from .models import Reference, RankedChunk
 from .nlp import content_tokens
+from .scenarios import comparison_topic
 
 
 DECLINE_MSG = "Tôi chưa tìm được căn cứ đủ rõ trong cơ sở tri thức hiện có để trả lời chính xác. Bạn hãy thử nêu rõ hơn nội dung cần tra cứu hoặc bổ sung văn bản quy chế chính thức."
@@ -25,6 +26,18 @@ class Generator:
             compared = self._generate_comparison(question, hits)
             if compared:
                 return compared
+            # Never quietly answer a comparison as if both versions existed.
+            topic = comparison_topic(question)
+            from .searcher import HybridSearcher
+            supported = [hit for hit in hits if HybridSearcher.has_specific_evidence(topic, [hit])]
+            if not supported:
+                return DECLINE_MSG, []
+            best = supported[0]
+            return (
+                "Chưa đủ các phiên bản quy định liên quan để kết luận nội dung có thay đổi hay không. "
+                f"Nguồn hiện có (phiên bản {best.chunk.version}):\n\n{best.chunk.text}",
+                [self._reference(best)],
+            )
         numeric = self._generate_repeated_unit_total(question, hits)
         if numeric:
             return numeric
@@ -85,11 +98,15 @@ class Generator:
     def _generate_comparison(self, question: str, hits: list[RankedChunk]) -> tuple[str, list[Reference]] | None:
         """Return one directly relevant passage per regulation for comparison."""
         ignored = {"quy", "dinh", "phien", "ban", "cu", "moi", "khac", "so", "sanh", "voi", "va"}
-        topic_tokens = [term for term in content_tokens(question) if term not in ignored and not re.fullmatch(r"20\d{2}", term)]
+        topic = comparison_topic(question)
+        topic_tokens = [term for term in content_tokens(topic) if term not in ignored and not re.fullmatch(r"20\d{2}", term)]
         topic_terms = set(topic_tokens)
         topic_phrases = {" ".join(topic_tokens[index:index + 2]) for index in range(len(topic_tokens) - 1)}
         by_regulation: dict[str, tuple[tuple[int, int, float], RankedChunk]] = {}
+        from .searcher import HybridSearcher
         for hit in hits:
+            if not HybridSearcher.has_specific_evidence(topic, [hit]):
+                continue
             # A chunk repeats its article heading. For a comparison we need
             # the clause body to decide between neighbouring clauses under
             # one heading (for example "thi lại" vs "học lại").
@@ -103,9 +120,21 @@ class Generator:
             current = by_regulation.get(hit.chunk.rid)
             if current is None or rank > current[0]:
                 by_regulation[hit.chunk.rid] = (rank, hit)
-        selected = [item[1] for item in sorted(by_regulation.values(), key=lambda item: item[0], reverse=True)[:2]]
-        if len(selected) < 2:
+        ordered = [item[1] for item in sorted(by_regulation.values(), key=lambda item: item[0], reverse=True)]
+        if not ordered:
             return None
+        first = ordered[0]
+        # A second document mentioning the subject is not necessarily another
+        # version of the same rule (e.g. scholarship vs training-score rules).
+        def family(hit):
+            return re.sub(r"[-_]20\d{2}(?:$|[-_].*)", "", hit.chunk.rid)
+        other = next((hit for hit in ordered[1:] if (
+            family(hit) == family(first)
+            and hit.chunk.version != first.chunk.version
+        )), None)
+        if other is None:
+            return None
+        selected = [first, other]
         lines = [f"{hit.chunk.version}: {hit.chunk.text}" for hit in selected]
         return "\n\n".join(lines), [self._reference(hit) for hit in selected]
 

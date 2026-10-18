@@ -146,11 +146,14 @@ class HybridSearcher:
         q_freq = Counter(self._query_form(token) for token in accented_content_tokens(query))
         try:
             semantic_scores = self.semantic.similarities(query) if self.semantic and self.semantic.available else []
+            if semantic_scores:
+                self.semantic_error = ""
         except Exception as exc:
             # A runtime model/CPU error must degrade to BM25 instead of
             # dropping the user's request.
             self.semantic_error = f"Semantic query fallback: {type(exc).__name__}: {exc}"
-            self.semantic = None
+            # Keep the initialized encoder: one transient query failure must
+            # not disable semantic search for every subsequent request.
             semantic_scores = []
         lexical_scores: list[float] = []
         candidates = []
