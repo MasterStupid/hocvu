@@ -24,6 +24,20 @@ class DocumentRepository:
     image_extensions = {".png", ".jpg", ".jpeg", ".webp"}
     max_bytes = 25 * 1024 * 1024
     extraction_version = 4
+    # Bump whenever _make_articles (or anything else that changes article
+    # headings/clauses of uploaded documents) changes its output. The saved
+    # search index records this, and the server rebuilds a stale index at
+    # startup so earlier uploads pick up the new citations automatically.
+    article_version = 1
+
+    @classmethod
+    def article_build_version(cls) -> str:
+        """Identifies how uploaded documents are turned into articles.
+
+        Extraction changes alter the text articles are built from, so both
+        versions are part of the identifier stored in the search index.
+        """
+        return f"extraction-{cls.extraction_version}.articles-{cls.article_version}"
 
     def __init__(self, root: Path):
         self.root = root

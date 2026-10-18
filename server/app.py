@@ -21,7 +21,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from core.engine import HocVuEngine, build_index
+from core.engine import HocVuEngine
 from core.documents import DocumentError, DocumentRepository
 from core.settings import AUD, INDEX_JSON, SERVER_META, UI, ensure_dirs, load_config
 from core.voice import VoiceManager, clean_text_for_tts, DEFAULT_VOICE, MALE_VOICE
@@ -84,11 +84,9 @@ def get_engine() -> HocVuEngine:
     global engine
     if engine is None:
         ensure_dirs()
-        if not INDEX_JSON.exists():
-            _, searcher = build_index(config, return_searcher=True)
-            engine = HocVuEngine(config, searcher)
-        else:
-            engine = HocVuEngine.load(config, INDEX_JSON)
+        # Rebuilds automatically when the index is missing or was built by an
+        # older article builder (e.g. after a heading-format change).
+        engine = HocVuEngine.load_or_build(config, INDEX_JSON)
     return engine
 
 

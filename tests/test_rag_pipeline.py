@@ -243,6 +243,29 @@ class RagPipelineTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "schema version"):
                 HybridSearcher.load(str(index_path), self.config)
 
+    def test_startup_rebuilds_index_built_by_another_article_version(self):
+        from core.documents import DocumentRepository
+        current = DocumentRepository.article_build_version()
+        replacement = HybridSearcher(self.config)
+        with tempfile.TemporaryDirectory() as directory:
+            index_path = Path(directory) / "index.json"
+            for saved_version in (None, "extraction-0.articles-0"):
+                self.searcher.save(index_path, article_version=saved_version)
+                with patch("core.engine.build_index", return_value=({"chunks": 0}, replacement)) as build:
+                    engine = HocVuEngine.load_or_build(self.config, index_path)
+                build.assert_called_once()
+                self.assertIs(engine.searcher, replacement)
+
+    def test_startup_loads_current_index_without_rebuilding(self):
+        from core.documents import DocumentRepository
+        with tempfile.TemporaryDirectory() as directory:
+            index_path = Path(directory) / "index.json"
+            self.searcher.save(index_path, article_version=DocumentRepository.article_build_version())
+            with patch("core.engine.build_index") as build:
+                engine = HocVuEngine.load_or_build(self.config, index_path)
+            build.assert_not_called()
+            self.assertEqual(len(engine.searcher.chunks), len(self.searcher.chunks))
+
     def test_corrupt_index_uses_last_atomic_backup(self):
         with tempfile.TemporaryDirectory() as directory:
             index_path = Path(directory) / "index.json"

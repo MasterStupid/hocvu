@@ -12,7 +12,7 @@ from .documents import DocumentRepository
 from .generator import DECLINE_MSG, Generator
 from .llm import GroundedLLM, LLMError
 from .models import Response
-from .searcher import HybridSearcher
+from .searcher import HybridSearcher, StaleIndexError
 from .scenarios import expand_retrieval_query, is_attendance_training_scenario, is_comparison_query, is_contextual_follow_up, is_historical_query
 from .session import SessionStore
 from .settings import AUD, DOCS, INDEX_JSON, SESSION_DB, AppConfig
@@ -26,7 +26,7 @@ def build_index(config: AppConfig, *, return_searcher: bool = False):
     chunks = [chunk for regulation in corpus for chunk in split_regulation(regulation, config.max_chunk_chars, config.overlap_sents)]
     searcher = HybridSearcher(config)
     searcher.build(chunks)
-    searcher.save(str(INDEX_JSON))
+    searcher.save(str(INDEX_JSON), article_version=DocumentRepository.article_build_version())
     result = {"chunks": len(chunks), "documents": len(corpus), "uploaded": len(repository.list())}
     # Reuse this instance after upload/reindex. Loading a just-saved index
     # would build semantic embeddings a second time on the same corpus.
@@ -48,6 +48,23 @@ class HocVuEngine:
     @classmethod
     def load(cls, config: AppConfig, index_path: Path):
         return cls(config, HybridSearcher.load(str(index_path), config))
+
+    @classmethod
+    def load_or_build(cls, config: AppConfig, index_path: Path):
+        """Load the saved index, rebuilding it when missing or stale.
+
+        Uploaded documents' article headings are produced while indexing, so
+        an index saved by an older article builder would keep serving old
+        citations until a manual reindex. A matching index is loaded as is.
+        """
+        if index_path.exists():
+            try:
+                searcher = HybridSearcher.load(str(index_path), config, article_version=DocumentRepository.article_build_version())
+                return cls(config, searcher)
+            except StaleIndexError as exc:
+                print(f"Rebuilding search index: {exc}")
+        _, searcher = build_index(config, return_searcher=True)
+        return cls(config, searcher)
 
     def ask(self, question: str, session_id: str, ref_date: str | None = None, with_audio: bool = False, use_context: bool = True, use_ai: bool = False, record_session: bool = True) -> Response:
         started = time.perf_counter()
