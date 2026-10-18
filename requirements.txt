@@ -15,3 +15,11 @@ edge-tts>=7.0.0
 # Optional local OCR for uploaded PNG/JPG/WEBP images
 Pillow>=10.0.0
 pytesseract>=0.3.10
+edge-tts>=7.0.0
+fastapi>=0.115.0
+Pillow>=10.0.0
+PyMuPDF>=1.24.0
+pypdf>=5.0.0
+pytesseract>=0.3.10
+python-multipart>=0.0.9
+uvicorn>=0.30.0
