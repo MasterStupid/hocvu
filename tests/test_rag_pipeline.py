@@ -36,6 +36,35 @@ class RagPipelineTests(unittest.TestCase):
         self.assertEqual(hits[0].chunk.aid, "Điều 5")
         self.assertIn("Bảo lưu", hits[0].chunk.art_heading)
 
+    def test_credit_quantities_answer_from_the_requested_academic_rule(self):
+        engine = HocVuEngine(self.config, self.searcher)
+        engine.session = MagicMock()
+        cases = [
+            ("Sinh viên cần bao nhiêu tín chỉ đại cương?",
+             "QD-DTDC-HPU-2026", "Điều 1", "45 tín chỉ"),
+            ("Số tín chỉ tốt nghiệp hệ cử nhân là bao nhiêu?",
+             "QD-TTTN-HPU-2026", "Điều 4", "130 tín chỉ"),
+            ("Sinh vien can bao nhieu tin chi dai cuong?",
+             "QD-DTDC-HPU-2026", "Điều 1", "45 tín chỉ"),
+            ("So tin chi tot nghiep he cu nhan la bao nhieu?",
+             "QD-TTTN-HPU-2026", "Điều 4", "130 tín chỉ"),
+            ("Đồ án tốt nghiệp kỹ sư mấy tín chỉ?",
+             "QD-TTTN-HPU-2026", "Điều 3", "14 tín chỉ"),
+            ("Sinh viên hệ kỹ sư cần bao nhiêu tín chỉ để đi thực tập?",
+             "QD-TTTN-HPU-2026", "Điều 1", "135 tín chỉ"),
+        ]
+        for question, rid, aid, amount in cases:
+            with self.subTest(question=question):
+                response = engine.ask(
+                    question, "credit-quantity", ref_date="2026-10-18",
+                    use_context=False, record_session=False,
+                )
+                self.assertFalse(response.refused)
+                self.assertEqual([(ref.rid, ref.aid) for ref in response.references], [(rid, aid)])
+                self.assertIn(amount, response.answer)
+                self.assertIn(amount, response.references[0].excerpt)
+        engine.session.add_turn.assert_not_called()
+
     def test_evaluation_rejects_wrong_articles_in_expected_regulation(self):
         questions = build_qa(build_corpus())
         cases = {
@@ -121,6 +150,8 @@ class RagPipelineTests(unittest.TestCase):
             "Điểm TOEIC tối thiểu để học tiếng Anh chuyên ngành là bao nhiêu?",
             "Nghỉ học bao nhiêu phần trăm thì bị cấm thi?",
             "Sinh viên được bảo lưu tối đa bao nhiêu học kỳ?",
+            "Sinh viên cần bao nhiêu tín chỉ đại cương?",
+            "Số tín chỉ tốt nghiệp hệ cử nhân là bao nhiêu?",
         }
         supported_rows = [
             row for row in report["rows"]
@@ -440,6 +471,8 @@ class RagPipelineTests(unittest.TestCase):
             "Điều kiện nhận học bổng bóng đá là gì?",
             "Wifi ở ký túc xá thế nào?",
             "Trường có tổ chức giải bóng đá sinh viên không?",
+            "Sinh viên cần bao nhiêu tín chỉ xyzquux blabla nonsense?",
+            "Sinh vien can bao nhieu tin chi xyzquux blabla nonsense?",
         ):
             with self.subTest(question=question):
                 response = engine.ask(

@@ -320,6 +320,24 @@ class HybridSearcher:
         return len(query_phrases & evidence_phrases) / len(query_phrases)
 
     @classmethod
+    def _credit_quantity_topic(cls, query: str) -> str:
+        """Identify the topic of a credit-quantity lookup, not eligibility.
+
+        Keep the student's accents for coverage checks. Conversational
+        "sinh viên cần" and structural "số ... hệ" are not the requested
+        credit category; in particular "cần" must not favour "chuyên cần".
+        """
+        words = cls._raw_words(query)
+        forms = [strip_accents(word) for word in words]
+        text = " ".join(forms)
+        if "tin chi" not in text or not any(
+            marker in text for marker in ("bao nhieu", "may tin chi", "so tin chi")
+        ):
+            return ""
+        fillers = {"sinh", "vien", "can", "so", "he"}
+        return " ".join(word for word, form in zip(words, forms) if form not in fillers)
+
+    @classmethod
     def rerank_by_coverage(cls, query: str, hits: list[RankedChunk]) -> list[RankedChunk]:
         """Prefer the evidence that covers most of the student's question.
 
@@ -338,6 +356,11 @@ class HybridSearcher:
             if strip_accents(word) not in {"dieu", "kien", "nhan"}
         ) if asks_for_conditions else query
         topic_query = topic_query if cls._query_forms(topic_query) else query
+        credit_topic = cls._credit_quantity_topic(query)
+        credit_terms = set(content_tokens(credit_topic))
+        graduation_total = {"tot", "nghiep"}.issubset(credit_terms) and not (
+            credit_terms & {"an", "khoa", "luan", "thuc", "tap", "lai"}
+        )
 
         def rank(hit: RankedChunk) -> float:
             base_rel = (hit.score / peak_score) if hit.score > 0 else (hit.bm25 / peak_bm25)
@@ -352,6 +375,18 @@ class HybridSearcher:
                 # so it does not establish an eligibility condition.
                 if any(marker in evidence for marker in ("khi ", "tối thiểu", "không được", "phải", "điều kiện", "được xét", "chỉ xét")):
                     value += 0.18 * cls.lexical_coverage(topic_query, hit)
+            if credit_topic:
+                # A credit question needs an amount in the clause body.
+                # Heading/topic overlap alone cannot distinguish attendance,
+                # thesis credits, and the full graduation requirement.
+                body = strip_accents(cls._clause_body(hit.chunk)).lower()
+                if re.search(r"\b\d+(?:[.,]\d+)?\s+tin\s+chi\b", body):
+                    coverage = cls.lexical_coverage(credit_topic, hit)
+                    value += 0.45 * coverage
+                    if graduation_total and any(
+                        marker in body for marker in ("tich luy du", "chuong trinh dao tao")
+                    ):
+                        value += 0.30 * coverage
             return value
         return sorted(
             hits,
