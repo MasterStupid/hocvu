@@ -163,7 +163,13 @@ class DocumentRepository:
         if metadata.get("decision_number") and title_m:
             title = f"Thông báo {metadata['decision_number']} - {title_m.group(1).strip()}"[:150]
         elif metadata.get("decision_number"):
+            # Without an explicit subject line, still name the topic: use the
+            # first meaningful heading, else the filename. The decision number
+            # stays in the title prefix and in metadata (used for version).
+            subject = self._subject_from_text(text, metadata["decision_number"]) or self._subject_from_filename(safe_name)
             title = f"Văn bản {metadata['decision_number']}"
+            if subject:
+                title = f"{title} - {subject}"[:150]
 
         entry = {
             "id": item_id,
@@ -184,6 +190,49 @@ class DocumentRepository:
         entries.append(entry)
         self._write_manifest(entries)
         return entry
+
+    # Headings that appear at the top of most Vietnamese administrative
+    # documents but say nothing about the document's subject.
+    _boilerplate_heading = re.compile(
+        r"^(?:cộng hòa xã hội chủ nghĩa việt nam|độc lập\s*-\s*tự do\s*-\s*hạnh phúc"
+        r"|quyết định|thông báo|công văn|thông tư|nghị định|hướng dẫn|kế hoạch|tờ trình"
+        r"|mục lục|mở đầu|căn cứ\b.*)$",
+        re.IGNORECASE,
+    )
+
+    @classmethod
+    def _subject_from_text(cls, text: str, decision_number: str) -> str:
+        """First markdown heading that names the document's subject."""
+        for line in text.splitlines():
+            match = re.match(r"^#{1,6}\s+(.+)$", line.strip())
+            if not match:
+                continue
+            heading = re.sub(r"^[\*\s]+|[\*\s:]+$", "", match.group(1))
+            heading = re.sub(r"\s+", " ", heading).strip()
+            if len(heading) < 3 or cls._is_table_of_contents_line(heading):
+                continue
+            if decision_number and decision_number.lower() in heading.lower():
+                continue
+            if cls._boilerplate_heading.match(heading):
+                continue
+            return heading[:120]
+        return ""
+
+    @staticmethod
+    def _subject_from_filename(safe_name: str) -> str:
+        """Readable subject from a filename stem, ignoring meaningless names."""
+        stem = re.sub(r"[_\s]+", " ", Path(safe_name).stem).strip(" -.")
+        if len(stem) < 3 or not re.search(r"[^\W\d_]", stem):
+            return ""
+        if re.fullmatch(r"[0-9a-f]{16,}", stem, re.IGNORECASE):
+            return ""
+        # Scanner/camera/default names ("scan_001", "IMG_2041", "Document (3)",
+        # "tai_lieu") describe the file, not the document's subject.
+        generic = (r"(?:scan(?:ned)?|img|image|photo|picture|dsc|pxl|cam|camera|document|doc|file|untitled"
+                   r"|new document|tai lieu|van ban|tài liệu|văn bản|ảnh|anh)")
+        if re.fullmatch(rf"{generic}(?:[\s\-.()]*\d+)*[\s\-.()]*", stem, re.IGNORECASE):
+            return ""
+        return stem[:120]
 
     def remove(self, item_id: str) -> None:
         entries = self._read_manifest()

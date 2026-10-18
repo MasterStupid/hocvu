@@ -37,17 +37,19 @@ class DocumentRepositoryTests(unittest.TestCase):
         self.assertEqual(regulations[0].valid_from, "2026-10-04")
         # The decision number is document metadata: it stays in the title,
         # version and every citation, but is not repeated in section headings.
-        self.assertEqual(regulations[0].title, "Văn bản 12/QĐ-ĐH")
+        # Without a "Về việc" line the title still names the subject, taken
+        # from the first heading.
+        self.assertEqual(regulations[0].title, "Văn bản 12/QĐ-ĐH - Điều kiện bảo lưu")
         chunks = split_regulation(regulations[0], max_chars=800, overlap_sents=0)
         self.assertTrue(chunks)
         for chunk in chunks:
-            self.assertEqual(chunk.reg_title, "Văn bản 12/QĐ-ĐH")
+            self.assertEqual(chunk.reg_title, "Văn bản 12/QĐ-ĐH - Điều kiện bảo lưu")
             self.assertEqual(chunk.version, "Quyết định 12/QĐ-ĐH")
             self.assertEqual(chunk.art_heading, "Điều kiện bảo lưu")
             self.assertNotIn("12/QĐ-ĐH", chunk.text)
         # The text preview shows the extracted source, without the TOC.
         preview = self.repository.get_text(entry["id"])
-        self.assertEqual(preview["title"], "Văn bản 12/QĐ-ĐH")
+        self.assertEqual(preview["title"], "Văn bản 12/QĐ-ĐH - Điều kiện bảo lưu")
         self.assertEqual(preview["text"], "## Điều kiện bảo lưu\nQuy chế đào tạo về điều kiện bảo lưu kết quả học tập của sinh viên.")
 
     def test_detected_decision_number_keeps_vietnamese_letters(self):
@@ -57,6 +59,46 @@ class DocumentRepositoryTests(unittest.TestCase):
         self.assertEqual(entry["decision_number"], "05/2026/TT-BGDĐT")
         self.assertEqual(entry["document_date"], "2026-10-04")
         self.assertEqual(entry["title"], "Thông báo 05/2026/TT-BGDĐT - Đăng ký học phần học kỳ 1")
+
+    def test_title_without_subject_line_uses_first_meaningful_heading(self):
+        text = "\n".join([
+            "## CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
+            "## QUYẾT ĐỊNH",
+            "Số: 34/QĐ-ĐHKT",
+            "## Quy chế học bổng khuyến khích học tập",
+            "Sinh viên đạt điểm trung bình từ 3.2 được xét học bổng.",
+        ])
+        with patch.object(self.repository, "extract", return_value=(text, 1)):
+            entry = self.repository.add("scan_001.pdf", b"%PDF-1.7 heading", metadata={})
+        self.assertEqual(entry["decision_number"], "34/QĐ-ĐHKT")
+        self.assertEqual(entry["title"], "Văn bản 34/QĐ-ĐHKT - Quy chế học bổng khuyến khích học tập")
+        regulation = self.repository.regulations()[0]
+        self.assertEqual(regulation.title, entry["title"])
+        self.assertEqual(regulation.version, "Quyết định 34/QĐ-ĐHKT")
+
+    def test_title_without_subject_line_or_heading_uses_filename(self):
+        text = "Nội dung quy định về lịch thi cuối kỳ, không có tiêu đề riêng."
+        with patch.object(self.repository, "extract", return_value=(text, 1)):
+            entry = self.repository.add("lich_thi_cuoi_ky.pdf", b"%PDF-1.7 filename", metadata={"decision_number": "7/TB-ĐH"})
+        self.assertEqual(entry["decision_number"], "7/TB-ĐH")
+        self.assertEqual(entry["title"], "Văn bản 7/TB-ĐH - lich thi cuoi ky")
+
+    def test_title_keeps_subject_from_heading_that_starts_with_document_type(self):
+        text = "## THÔNG BÁO HỌC BỔNG\nSố: 5/TB-ĐH\nSinh viên nộp hồ sơ trước ngày 20."
+        with patch.object(self.repository, "extract", return_value=(text, 1)):
+            entry = self.repository.add("scan_001.pdf", b"%PDF-1.7 typed heading", metadata={})
+        self.assertEqual(entry["title"], "Văn bản 5/TB-ĐH - THÔNG BÁO HỌC BỔNG")
+
+    def test_generic_scan_filenames_are_not_used_as_subjects(self):
+        for name in ("scan_001.pdf", "IMG_2041.pdf", "Document (3).pdf", "tai_lieu.pdf"):
+            self.assertEqual(DocumentRepository._subject_from_filename(name), "", name)
+        self.assertEqual(DocumentRepository._subject_from_filename("lich_thi_cuoi_ky.pdf"), "lich thi cuoi ky")
+
+    def test_title_keeps_bare_decision_number_when_no_subject_is_available(self):
+        text = "Nội dung quy định đủ dài để lập chỉ mục an toàn."
+        with patch.object(self.repository, "extract", return_value=(text, 1)):
+            entry = self.repository.add("0123.pdf", b"%PDF-1.7 bare", metadata={"decision_number": "9/QĐ-ĐH"})
+        self.assertEqual(entry["title"], "Văn bản 9/QĐ-ĐH")
 
     def test_article_headings_name_sections_and_preamble_uses_document_title(self):
         text = "\n".join([
