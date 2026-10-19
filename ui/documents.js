@@ -7,7 +7,10 @@
   const formatSize = (bytes) => bytes < 1024 * 1024 ? `${Math.ceil(bytes / 1024)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   const setStatus = (message, type = '') => { dom.status.textContent = message; dom.status.className = `upload-status ${type}`; };
   const today = () => new Date().toISOString().slice(0, 10);
-  async function request(url, options = {}) { const response = await fetch(url, options); const data = await response.json().catch(() => ({})); if (!response.ok) throw new Error(data.error || 'Không thể hoàn tất yêu cầu.'); return data; }
+  async function request(url, options = {}) {
+    const response = await fetch(url, options);
+    return HocVuAPI.readResponse(response, 'Không thể hoàn tất yêu cầu.');
+  }
   function updateSelected() { dom.selected.textContent = queue.length ? `${queue.length} tệp trong hàng đợi` : 'Chưa chọn tệp'; dom.upload.disabled = !queue.length; dom.removeQueued.disabled = !queue.some((item) => item.selected); }
   function renderQueue() {
     dom.queue.innerHTML = queue.length ? `<h3>Hàng đợi tải lên</h3>${queue.map((item) => `<article class="queue-item"><label><input data-queue-select="${item.id}" type="checkbox" ${item.selected ? 'checked' : ''}> Chọn</label><strong>${escapeHTML(item.file.name)}</strong><small>${formatSize(item.file.size)}</small><div class="queue-fields"><label>STT<input data-queue-field="order" data-queue-id="${item.id}" type="number" min="1" value="${escapeHTML(item.order)}"></label><label>Số quyết định<input data-queue-field="decision_number" data-queue-id="${item.id}" value="${escapeHTML(item.decision_number)}"></label><label>Điều / khoản<input data-queue-field="article_clause" data-queue-id="${item.id}" value="${escapeHTML(item.article_clause)}"></label><label>Ngày áp dụng<input data-queue-field="document_date" data-queue-id="${item.id}" type="date" value="${escapeHTML(item.document_date)}"></label><label class="queue-ocr"><input data-queue-field="ocr" data-queue-id="${item.id}" type="checkbox" ${item.ocr ? 'checked' : ''}> OCR</label></div></article>`).join('')}` : '';

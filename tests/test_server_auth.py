@@ -27,14 +27,14 @@ class BrowserAuthenticationTests(unittest.IsolatedAsyncioTestCase):
             item.stop()
 
     async def test_pages_and_api_require_login(self):
-        for path in ["/", "/documents.html", "/main.js", "/api/documents", "/docs"]:
+        for path in ["/", "/documents.html", "/main.js", "/api-errors.js", "/api/documents", "/docs"]:
             with self.subTest(path=path):
                 response = await self.client.get(path)
                 self.assertEqual(response.status_code, 401)
                 self.assertIn("Basic", response.headers["www-authenticate"])
 
     async def test_browser_login_serves_pages_and_api(self):
-        for path in ["/", "/documents.html", "/main.js", "/api/suggestions"]:
+        for path in ["/", "/documents.html", "/main.js", "/api-errors.js", "/api/suggestions"]:
             with self.subTest(path=path):
                 response = await self.client.get(
                     path, auth=("hocvu", "test-access-only")

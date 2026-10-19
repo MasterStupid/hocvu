@@ -28,8 +28,7 @@
   const scrollBottom = () => { dom.thread.scrollTop = dom.thread.scrollHeight; };
   const api = async (url, options = {}) => {
     const response = await fetch(url, { ...options, headers: { 'Content-Type': 'application/json', ...(options.headers || {}) } });
-    if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || 'Không thể kết nối máy chủ.');
-    return response.json();
+    return HocVuAPI.readResponse(response, 'Không thể kết nối máy chủ.');
   };
   const setStatus = (online, message) => {
     dom.statusDot.className = `status-indicator ${online ? 'online' : 'offline'}`;
