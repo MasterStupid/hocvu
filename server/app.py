@@ -8,7 +8,6 @@ import json
 import os
 import re
 import secrets
-import time
 import threading
 import uuid
 import webbrowser
@@ -26,15 +25,17 @@ from core.engine import HocVuEngine
 from core.documents import DocumentError, DocumentRepository
 from core.settings import AUD, INDEX_JSON, SERVER_META, UI, ensure_dirs, load_config
 from core.voice import VoiceManager, clean_text_for_tts, DEFAULT_VOICE, MALE_VOICE
+from server.security import SlidingWindowLimiter, client_address, parse_trusted_proxies
 
 
 # ── Global Engine & Voice State ──────────────────────────────────────────────
 engine: HocVuEngine | None = None
 _engine_lock = threading.Lock()
 voice_manager: VoiceManager | None = None
-requires_api_token = False
+requires_api_token = True
 config = load_config()
 browser_auth_enabled = os.environ.get("HV_BROWSER_AUTH", "0") == "1"
+trusted_proxies = parse_trusted_proxies(os.environ.get("HV_TRUSTED_PROXIES", "127.0.0.1,::1"))
 
 
 def parse_trusted_origins(value: str) -> frozenset[str]:
@@ -128,13 +129,25 @@ app = FastAPI(
 # The bundled UI and Netlify's API proxy are same-origin. Do not enable
 # credentialed cross-origin browser access to the editable regulation corpus.
 
-_request_times: dict[str, list[float]] = {}
+request_limiter = SlidingWindowLimiter()
 
 
 @app.middleware("http")
 async def rate_limit_and_auth_middleware(request: Request, call_next):
-    client_ip = request.client.host if request.client else "127.0.0.1"
     path = request.url.path
+    # Count invalid credentials too, including Basic attempts against UI pages.
+    # The health probe stays public and does not consume a user's allowance.
+    protected_api = path.startswith("/api/") and path != "/api/health"
+    if protected_api or (browser_auth_enabled and path != "/api/health"):
+        retry_after = request_limiter.consume(
+            client_address(request, trusted_proxies), config.rate_limit_per_minute,
+        )
+        if retry_after:
+            return JSONResponse(
+                status_code=429,
+                content={"error": "Too many requests; try again later."},
+                headers={"Retry-After": str(retry_after)},
+            )
 
     # Opt-in browser authentication for a single-origin hosted UI. Header-token
     # clients remain compatible; the public health endpoint remains available.
@@ -177,15 +190,6 @@ async def rate_limit_and_auth_middleware(request: Request, call_next):
             token = request.headers.get("X-HocVu-Token", "")
             if not config.api_token or not secrets.compare_digest(token.encode("utf-8"), config.api_token.encode("utf-8")):
                 return JSONResponse(status_code=401, content={"error": "API token is required for network access."})
-
-        # Rate limiting
-        now = time.monotonic()
-        recent = [stamp for stamp in _request_times.get(client_ip, []) if now - stamp < 60]
-        if len(recent) >= config.rate_limit_per_minute:
-            _request_times[client_ip] = recent
-            return JSONResponse(status_code=429, content={"error": "Too many requests; try again in a minute."})
-        recent.append(now)
-        _request_times[client_ip] = recent
 
     response = await call_next(request)
     return response
@@ -377,10 +381,9 @@ app.mount("/", StaticFiles(directory=str(UI)), name="ui")
 
 # ── Hàm Khởi chạy Máy chủ Uvicorn ────────────────────────────────────────────
 def main(host: str = "127.0.0.1", port: int = 8000, verbose: bool = False, open_browser: bool = False):
-    global requires_api_token, engine
-    requires_api_token = host not in {"127.0.0.1", "localhost", "::1"}
+    global engine
     if requires_api_token and not config.api_token:
-        raise RuntimeError("Khi mở server ra mạng, hãy đặt HV_API_TOKEN để bảo vệ tài liệu và API.")
+        raise RuntimeError("Hãy đặt HV_API_TOKEN để bảo vệ tài liệu và API trước khi chạy server.")
 
     ensure_dirs()
     engine = get_engine()
@@ -397,7 +400,8 @@ def main(host: str = "127.0.0.1", port: int = 8000, verbose: bool = False, open_
 
     try:
         log_lvl = "debug" if verbose else "info"
-        uvicorn.run(app, host=host, port=port, log_level=log_lvl)
+        # Keep the transport peer intact for our explicit trusted-proxy policy.
+        uvicorn.run(app, host=host, port=port, log_level=log_lvl, proxy_headers=False)
     finally:
         SERVER_META.unlink(missing_ok=True)
 

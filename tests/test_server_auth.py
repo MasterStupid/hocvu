@@ -11,6 +11,7 @@ class BrowserAuthenticationTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         # Synthetic test credential only; never use a workspace secret in tests.
         self.patches = [
+            patch.object(server, "request_limiter", server.SlidingWindowLimiter()),
             patch.object(server.config, "api_token", "test-access-only"),
             patch.object(server, "requires_api_token", True),
             patch.object(server, "browser_auth_enabled", True),
@@ -155,6 +156,7 @@ class NetlifyProxyOriginTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
         self.patches = [
+            patch.object(server, "request_limiter", server.SlidingWindowLimiter()),
             patch.object(server.config, "api_token", "test-access-only"),
             patch.object(server, "requires_api_token", True),
             patch.object(server, "browser_auth_enabled", False),

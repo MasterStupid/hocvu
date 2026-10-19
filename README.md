@@ -19,9 +19,38 @@ Open `http://127.0.0.1:8000`. Use Chrome or Edge for Vietnamese browser speech r
 
 The date field below the chat box is optional: choose it only when you need to
 look up the regulation effective on a historical date. Leaving it blank always
-uses the current date. The server is intentionally local-only by default. If
-you bind it to a network address, set a strong `HV_API_TOKEN`; network API
-requests must then send it in the `X-HocVu-Token` header.
+uses the current date. Set a strong `HV_API_TOKEN` before starting the server.
+API authentication is enabled for every launch mode, including direct ASGI
+imports and local binds. API clients send `X-HocVu-Token`; with
+`HV_BROWSER_AUTH=1`, browsers can instead use the native Basic login.
+`/api/health` remains public. Missing credentials never open the API.
+
+### Reverse proxies and request limits
+
+The request limit (`HV_RATE_LIMIT_PER_MINUTE`, default 120) runs before
+authentication, including invalid Basic/token attempts. HTTP 429 includes
+`Retry-After`. Protected UI assets also count when browser login is enabled.
+
+`HV_TRUSTED_PROXIES` is a comma-separated list of immediate/internal proxy IPs
+or CIDRs. Only loopback (`127.0.0.1,::1`) is trusted by default; an empty value
+trusts no proxy. Add the real proxy networks when hosting behind another
+reverse proxy. The proxy must append the actual connecting client to
+`X-Forwarded-For`. The app walks the chain from right to left, stopping at the
+first untrusted hop. Never trust Internet-wide ranges or arbitrary forwarded
+headers: direct clients cannot select their own rate-limit identity.
+
+The bundled launcher disables Uvicorn's automatic proxy rewriting. For direct
+ASGI launches, preserve the original transport peer the same way:
+
+```bash
+uvicorn server.app:app --host 0.0.0.0 --port 5000 --no-proxy-headers
+```
+
+Do not combine this app's proxy policy with upstream ASGI middleware/server
+options that already replace `scope["client"]`. Limits are per process, not
+shared between workers or replicas. Expired client buckets are reclaimed;
+the bounded in-memory table rejects new clients at capacity instead of
+evicting active buckets and resetting their quotas.
 
 ## AI-assisted answers and Live conversation
 
