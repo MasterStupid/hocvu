@@ -23,3 +23,6 @@ description: Why retrieval/abstention compares words with diacritics and treats 
 - Version-comparison framing is not itself documentary evidence, but removing it must preserve descriptive subject/focus checks.
   **Why:** requiring clauses to repeat “thay đổi giữa các phiên bản” falsely refused supported training-score questions; reducing a query to bare topic words instead let unsupported wifi questions pass on dormitory words.
   **How to apply:** retain the requested feature and accent-aware evidence gates when extracting a comparison topic. Compare distinct versions of the same regulation, not merely two documents mentioning the topic; with only one version, cite what is known and explicitly say change cannot be established.
+- Arithmetic explanations must remain subordinate to the primary rule and preserve source-stated direction.
+  **Why:** scanning the whole retrieval pool for any per-occurrence rate replaced dismissal after repeated academic warnings with training points, and hardcoded reward language turned a penalty into a reward.
+  **How to apply:** calculate only requested point totals from the individually supported primary clause, with an explicit unambiguous rate/direction. Quote the source instead when negation, multiple rates, or a source cap makes linear multiplication unsafe.

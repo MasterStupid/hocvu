@@ -6,9 +6,10 @@ adapter must retain the retrieved passages and their citations.
 from __future__ import annotations
 
 import re
+from decimal import Decimal, localcontext
 
 from .models import Reference, RankedChunk
-from .nlp import content_tokens
+from .nlp import content_tokens, normalize, strip_accents
 from .scenarios import comparison_topic
 
 
@@ -139,22 +140,60 @@ class Generator:
         return "\n\n".join(lines), [self._reference(hit) for hit in selected]
 
     def _generate_repeated_unit_total(self, question: str, hits: list[RankedChunk]) -> tuple[str, list[Reference]] | None:
-        """Compute a repeated, source-stated per-occurrence score transparently."""
-        count = re.search(r"\b(\d+)\s+lần\b", question, re.IGNORECASE)
-        if not count:
+        """Compute only a requested point total from the primary grounded clause.
+
+        A mention of a repetition count is not a request for arithmetic. Never
+        search weaker hits for a rate that can override the primary rule.
+        """
+        query = strip_accents(normalize(question)).lower()
+        counts = re.findall(r"(?<![\w.,+\-])(\d+)\s+lan\b", query)
+        if (
+            len(counts) != 1
+            or not re.search(r"\bdiem\b", query)
+            or not re.search(r"\b(?:bao nhieu|may|tong|tong cong)\b", query)
+            or not hits
+        ):
             return None
-        occurrences = int(count.group(1))
-        for hit in hits:
-            unit = re.search(r"\b(\d+(?:[.,]\d+)?)\s*điểm\s*/\s*lần\b", hit.chunk.text, re.IGNORECASE)
-            if unit:
-                per_occurrence = float(unit.group(1).replace(",", "."))
-                total = occurrences * per_occurrence
-                total_text = str(int(total)) if total.is_integer() else f"{total:g}"
-                return (
-                    f"Theo quy định, mỗi lần được cộng {unit.group(1)} điểm. {occurrences} lần × {unit.group(1)} điểm/lần = {total_text} điểm.",
-                    [self._reference(hit)],
-                )
-        return None
+        from .searcher import HybridSearcher
+        hit = hits[0]
+        if not HybridSearcher.has_specific_evidence(question, [hit]):
+            return None
+        # The direction must be explicit in the same clause as the rate.
+        # Ambiguous/multiple rates remain extractive rather than being guessed.
+        body = HybridSearcher._clause_body(hit.chunk)
+        rates = list(re.finditer(
+            r"\b(?P<direction>cộng|trừ)\s+(?P<rate>\d+(?:[.,]\d+)?)\s*điểm\s*/\s*lần\b",
+            body, re.IGNORECASE,
+        ))
+        if len(rates) != 1:
+            return None
+        unit = rates[0]
+        # Do not turn a negated rule ("không được cộng ...") into a reward.
+        sentence_start = max(body.rfind(".", 0, unit.start()),
+                             body.rfind(";", 0, unit.start()),
+                             body.rfind("\n", 0, unit.start())) + 1
+        prefix = body[sentence_start:unit.start()].lower()
+        if re.search(r"\b(?:không|chưa|chẳng)\b", prefix):
+            return None
+        occurrences = int(counts[0])
+        rate_text = unit.group("rate").replace(",", ".")
+        with localcontext() as context:
+            context.prec = max(28, len(counts[0]) + len(rate_text))
+            total = Decimal(counts[0]) * Decimal(rate_text)
+        cap = re.search(r"\btối đa\s+(\d+(?:[.,]\d+)?)\s*điểm\b", body, re.IGNORECASE)
+        if cap and total > Decimal(cap.group(1).replace(",", ".")):
+            # A category cap is not an unlimited linear rule. Quote the
+            # original clause rather than claiming an unsupported total.
+            return None
+        total_text = format(total, "f")
+        if "." in total_text:
+            total_text = total_text.rstrip("0").rstrip(".")
+        action = "được cộng" if unit.group("direction").lower() == "cộng" else "bị trừ"
+        return (
+            f"Theo quy định, mỗi lần {action} {unit.group('rate')} điểm. "
+            f"{occurrences} lần × {unit.group('rate')} điểm/lần = {total_text} điểm {action}.",
+            [self._reference(hit)],
+        )
 
     def generate_attendance_training_scenario(self, hits: list[RankedChunk], question: str = "") -> tuple[str, list[Reference]] | None:
         """Explain an absence/discipline scenario without inventing a penalty."""
