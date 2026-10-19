@@ -56,7 +56,8 @@ class SessionStore:
 
     def contextualize(self, session_id: str, question: str) -> tuple[str, str]:
         history = self.get_history(session_id, 1)
-        if not history:
+        # A refusal or greeting supplies no grounded academic antecedent.
+        if not history or not history[-1].get("rid") or not history[-1].get("article_id"):
             return question, ""
             
         context_str = history[-1]['question']

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 
-from .nlp import expand_academic_terms, normalize, strip_accents
+from .nlp import accent_key, expand_academic_terms, normalize, strip_accents
 
 
 def is_attendance_training_scenario(question: str) -> bool:
@@ -16,20 +16,47 @@ def is_attendance_training_scenario(question: str) -> bool:
     return mentions_absence and mentions_class_time and mentions_training
 
 
-def is_contextual_follow_up(question: str) -> bool:
-    """Recognise short references to the immediately preceding topic only."""
-    q = strip_accents(normalize(question)).lower()
-    prefixes = (
-        "con dieu kien", "con truong hop", "the con", "noi ro hon", "cu the hon",
-        "con gi", "vay con", "vay neu", "neu vay", "neu the", "vay thi", "the thi",
-        "the con", "the thi", "con nua khong", "dieu do",
+def _matches_follow_up_phrase(words: list[str], phrase: str, start: int = 0) -> bool:
+    markers = phrase.split()
+    candidate = words[start:start + len(markers)]
+    return len(candidate) == len(markers) and all(
+        accent_key(word) == accent_key(marker) or word == strip_accents(marker)
+        for word, marker in zip(candidate, markers)
     )
-    if any(q.startswith(prefix) for prefix in prefixes):
+
+
+def is_context_dependent(question: str) -> bool:
+    """References/ellipses lack a standalone subject, even if words retrieve hits."""
+    words = re.findall(r"\w+", normalize(question).lower())
+    # A whole reference phrase is required: "đồ" is not the pronoun "đó",
+    # and a final "không"/"sao" says nothing about the question's subject.
+    for noun in ("cái", "điều", "việc", "trường hợp", "quy định", "mức", "khoản"):
+        for demonstrative in ("đó", "này", "ấy", "kia"):
+            if any(_matches_follow_up_phrase(words, f"{noun} {demonstrative}", index)
+                   for index in range(len(words))):
+                return True
+    ellipses = (
+        "còn điều kiện", "còn điều kiện nào khác", "còn trường hợp",
+        "còn trường hợp nào khác", "còn gì", "còn gì nữa", "còn nữa không",
+        "nói rõ hơn", "cụ thể hơn", "thế còn", "vậy còn", "nếu vậy", "nếu thế",
+        "vậy thì", "thế thì", "tại sao", "vì sao", "được không", "thế nào",
+        "như thế nào", "ra sao", "vậy sao", "sao vậy", "sao thế", "đó là gì",
+        "bao nhiêu", "mấy lần",
+    )
+    return any(len(words) == len(phrase.split()) and _matches_follow_up_phrase(words, phrase)
+               for phrase in ellipses)
+
+
+def is_contextual_follow_up(question: str) -> bool:
+    """Recognise reference phrases or discourse prefixes, not isolated particles."""
+    if is_context_dependent(question):
         return True
-    words = q.split()
-    if len(words) <= 4 and any(w in words for w in ("do", "nay", "ay", "kia", "sao", "khong")):
-        return True
-    return False
+    words = re.findall(r"\w+", normalize(question).lower())
+    prefixes = (
+        "còn điều kiện", "còn trường hợp", "thế còn", "nói rõ hơn", "cụ thể hơn",
+        "vậy còn", "vậy nếu", "nếu vậy", "nếu thế", "vậy thì", "thế thì",
+    )
+    return any(_matches_follow_up_phrase(words, phrase) for phrase in prefixes)
 
 
 def is_historical_query(question: str) -> bool:

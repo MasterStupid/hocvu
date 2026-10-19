@@ -26,3 +26,6 @@ description: Why retrieval/abstention compares words with diacritics and treats 
 - Arithmetic explanations must remain subordinate to the primary rule and preserve source-stated direction.
   **Why:** scanning the whole retrieval pool for any per-occurrence rate replaced dismissal after repeated academic warnings with training points, and hardcoded reward language turned a penalty into a reward.
   **How to apply:** calculate only requested point totals from the individually supported primary clause, with an explicit unambiguous rate/direction. Quote the source instead when negation, multiple rates, or a source cap makes linear multiplication unsafe.
+- Conversation history must not supply evidence for a new, unsupported subject; a discourse connective is not an anaphoric reference.
+  **Why:** short independent asks such as “Đồ án là gì?” and “Học phí ra sao” were contaminated by the preceding topic. Conversely, generic “Còn điều kiện nào khác?” can retrieve the conditions of an entirely unrelated regulation.
+  **How to apply:** preserve independent topic changes, resolve actual references against a grounded antecedent, and refuse unresolved references. Keep the original evidence thresholds; do not use a prior refusal or greeting as documentary context.

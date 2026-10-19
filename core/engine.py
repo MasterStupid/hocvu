@@ -14,7 +14,7 @@ from .index_version import index_fingerprint
 from .llm import GroundedLLM, LLMError
 from .models import Response
 from .searcher import HybridSearcher, StaleIndexError
-from .scenarios import comparison_topic, expand_retrieval_query, is_attendance_training_scenario, is_comparison_query, is_contextual_follow_up, is_historical_query
+from .scenarios import comparison_topic, expand_retrieval_query, is_attendance_training_scenario, is_comparison_query, is_context_dependent, is_contextual_follow_up, is_historical_query
 from .session import SessionStore
 from .settings import AUD, DOCS, INDEX_JSON, SESSION_DB, AppConfig
 from .splitter import split_regulation
@@ -102,21 +102,32 @@ class HocVuEngine:
             retrieval_limit = max(self.config.top_k, 20)
             today_str = ref_date or date.today().isoformat()
 
-            if is_follow_up and use_context:
-                retrieval_question, _ = self.session.contextualize(session_id, retrieval_question)
-                hits = self.searcher.search(retrieval_question, retrieval_limit, today_str, include_expired=historical)
-                hits = self.searcher.rerank_by_coverage(retrieval_question, hits)
-            else:
-                hits = self.searcher.search(retrieval_question, retrieval_limit, today_str, include_expired=historical)
-                hits = self.searcher.rerank_by_coverage(retrieval_question, hits)
-                if (not hits or not self.searcher.has_specific_evidence(retrieval_question, hits)) and use_context:
-                    context_q, _ = self.session.contextualize(session_id, retrieval_question)
-                    if context_q != retrieval_question:
-                        context_hits = self.searcher.search(context_q, retrieval_limit, today_str, include_expired=historical)
-                        context_hits = self.searcher.rerank_by_coverage(context_q, context_hits)
-                        if self.searcher.has_specific_evidence(context_q, context_hits):
-                            hits = context_hits
-                            retrieval_question = context_q
+            def retrieve(query):
+                return self.searcher.rerank_by_coverage(
+                    query, self.searcher.search(
+                        query, retrieval_limit, today_str, include_expired=historical,
+                    ),
+                )
+
+            # Always try the current subject first. A discourse prefix such as
+            # "Thế còn học phí?" must not force a previous, unrelated topic in.
+            hits = retrieve(retrieval_question)
+            dependent = is_context_dependent(question)
+            context_used = False
+            # A connective alone does not license borrowing evidence for an
+            # unsupported new subject ("Thế còn wifi?"). Only an actual
+            # reference/ellipsis needs its antecedent to resolve the query.
+            if use_context and is_follow_up and dependent:
+                context_q, _ = self.session.contextualize(session_id, retrieval_question)
+                if context_q != retrieval_question:
+                    context_hits = retrieve(context_q)
+                    if self.searcher.has_specific_evidence(context_q, context_hits):
+                        hits, retrieval_question = context_hits, context_q
+                        context_used = True
+            # Generic "conditions" can match any regulation. Without a usable
+            # antecedent, never answer a reference-only question from such hits.
+            if dependent and not context_used:
+                hits = []
             if historical and not comparison:
                 # When the student explicitly asks for the old rule, an
                 # expired source is the intended evidence, not a fallback.
@@ -132,7 +143,7 @@ class HocVuEngine:
             # needed to retrieve both attendance and training-score evidence.
             if scenario and not using_semantic:
                 floor = min(floor, 0.30)
-            if follow_up and not using_semantic:
+            if follow_up and context_used and not using_semantic:
                 # The pronouns in a short follow-up are intentionally not in
                 # the document; its earlier turn supplies the actual topic.
                 floor = min(floor, 0.40)
@@ -140,7 +151,9 @@ class HocVuEngine:
                 answer, refused, reason = DECLINE_MSG, True, "Insufficient grounded context"
             else:
                 scenario_answer = self.generator.generate_attendance_training_scenario(hits, question) if scenario else None
-                answer, references = scenario_answer or self.generator.generate(question, hits, comparison=comparison)
+                answer, references = scenario_answer or self.generator.generate(
+                    retrieval_question if context_used else question, hits, comparison=comparison,
+                )
                 refused = not bool(references)
                 reason = "Insufficient grounded context" if refused else ""
                 if use_ai and not refused:
