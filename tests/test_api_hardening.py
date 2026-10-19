@@ -81,6 +81,50 @@ class ApiHardeningTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(valid.status_code, 200)
                 get_engine.assert_called_once()
 
+    async def test_percent_encoded_windows_traversal_pocs_are_rejected(self):
+        # Synthetic fixtures only: never read the actual project's .env or DB.
+        with (
+            tempfile.TemporaryDirectory() as root,
+            patch.object(server, "browser_auth_enabled", False),
+            patch.object(server, "requires_api_token", False),
+        ):
+            root = Path(root)
+            audio = root / "data" / "audio"
+            audio.mkdir(parents=True)
+            for private in (
+                root / "requirements.txt", root / ".env",
+                root / "data" / "sessions.db", root / "data" / "index.json",
+                root / "private.mp3",
+            ):
+                private.write_bytes(b"synthetic-private-marker")
+            payloads = (
+                r"..\..\requirements.txt", r"..\sessions.db", r"..\..\.env",
+                r"..\index.json", r"..\..\private.mp3",
+                r"C:\Windows\private.mp3", r"\\server\share\private.mp3",
+            )
+            with patch.object(server, "AUD", audio):
+                # Check both decoded handler arguments and real HTTP URL decoding.
+                for filename in payloads:
+                    with self.subTest(decoded_filename=filename):
+                        with self.assertRaises(HTTPException) as caught:
+                            await server.get_audio_file(filename)
+                        self.assertEqual(caught.exception.status_code, 404)
+                async with httpx.AsyncClient(
+                    transport=httpx.ASGITransport(app=server.app), base_url="http://test"
+                ) as client:
+                    for payload in payloads:
+                        for escaped in (
+                            payload.replace("\\", "%5c"),
+                            payload.replace("\\", "%5C"),
+                            payload.replace("\\", "%255c"),
+                        ):
+                            with self.subTest(url=escaped):
+                                with patch.object(server, "FileResponse") as serve_file:
+                                    response = await client.get("/api/audio/" + escaped)
+                                    self.assertEqual(response.status_code, 404)
+                                    self.assertNotIn(b"synthetic-private-marker", response.content)
+                                    serve_file.assert_not_called()
+
     async def test_docs_and_schema_endpoints_are_not_exposed_by_default(self):
         with (
             patch.object(server, "browser_auth_enabled", False),
