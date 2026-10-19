@@ -76,9 +76,6 @@ class HocVuEngine:
         started = time.perf_counter()
         question = (question or "").strip()
         intent = self.classifier.classify(question)
-        follow_up = intent == Intent.OUT_OF_SCOPE and use_context and is_contextual_follow_up(question) and bool(self.session.get_history(session_id, 1))
-        if follow_up:
-            intent = Intent.ACADEMIC_RULES
         refused, reason, references, hits, confidence = False, "", [], [], 0.0
         ai_status = "off"
         if not question:
@@ -87,14 +84,12 @@ class HocVuEngine:
             answer, confidence = "Chào bạn! Tôi hỗ trợ tra cứu quy chế đào tạo. Bạn có thể hỏi về tín chỉ, đăng ký học phần, bảo lưu, tốt nghiệp hoặc học vụ.", 1.0
         elif intent == Intent.TOXIC:
             answer, refused, reason = "Tôi chỉ hỗ trợ các câu hỏi về quy chế đào tạo trong môi trường an toàn.", True, "Unsafe request"
-        elif intent == Intent.OUT_OF_SCOPE:
-            answer, refused, reason = "Tôi chỉ hỗ trợ tra cứu quy chế đào tạo, như tín chỉ, học phần, học vụ, bảo lưu, tốt nghiệp và kỷ luật học tập.", True, "Out of scope"
         else:
             scenario = is_attendance_training_scenario(question)
             comparison = is_comparison_query(question)
             historical = comparison or is_historical_query(question)
             retrieval_question = expand_retrieval_query(comparison_topic(question) if comparison else question)
-            is_follow_up = follow_up or is_contextual_follow_up(question)
+            is_follow_up = is_contextual_follow_up(question)
             # Coverage can only rerank clauses present in this bounded pool.
             # Eligibility thresholds can rank below the first 12 BM25 hits
             # when generic "conditions/receive" wording favours other rules.
@@ -143,7 +138,7 @@ class HocVuEngine:
             # needed to retrieve both attendance and training-score evidence.
             if scenario and not using_semantic:
                 floor = min(floor, 0.30)
-            if follow_up and context_used and not using_semantic:
+            if is_follow_up and context_used and not using_semantic:
                 # The pronouns in a short follow-up are intentionally not in
                 # the document; its earlier turn supplies the actual topic.
                 floor = min(floor, 0.40)

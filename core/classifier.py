@@ -10,7 +10,7 @@ from .nlp import normalize, strip_accents
 class Intent(str, Enum):
     GREETING = "greeting"
     ACADEMIC_RULES = "academic_rules"
-    OUT_OF_SCOPE = "out_of_scope"
+    OUT_OF_SCOPE = "out_of_scope"  # Legacy value; scope is now checked by retrieval evidence.
     TOXIC = "unsafe"
 
 
