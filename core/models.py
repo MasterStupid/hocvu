@@ -133,6 +133,7 @@ class RankedChunk:
             "vec": round(self.vec, 5),
             "cite": self.chunk.cite_label,
         }
+        return result
 
 
 @dataclass

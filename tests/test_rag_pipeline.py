@@ -642,9 +642,19 @@ class RagPipelineTests(unittest.TestCase):
             self.assertEqual(len(restored.chunks), len(self.searcher.chunks))
 
     def test_api_response_hides_raw_retrieval_by_default(self):
-        response = Response(query="q", answer="a", retrieved=self.searcher.search("bảo lưu", 1))
+        hits = self.searcher.search("bảo lưu", 3)
+        self.assertTrue(hits)
+        response = Response(query="q", answer="a", retrieved=hits)
         self.assertNotIn("retrieved", response.to_dict())
-        self.assertIn("retrieved", response.to_dict(include_retrieved=True))
+        retrieved = response.to_dict(include_retrieved=True)["retrieved"]
+        self.assertEqual(len(retrieved), len(hits))
+        for item, hit in zip(retrieved, hits):
+            self.assertIsInstance(item, dict)
+            self.assertEqual(item["chunk"], hit.chunk.to_dict())
+            self.assertEqual(item["score"], round(hit.score, 5))
+            self.assertEqual(item["bm25"], round(hit.bm25, 5))
+            self.assertEqual(item["vec"], round(hit.vec, 5))
+            self.assertEqual(item["cite"], hit.chunk.cite_label)
 
     def test_empty_question_is_not_persisted(self):
         engine = HocVuEngine(self.config, self.searcher)
