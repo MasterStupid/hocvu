@@ -10,7 +10,9 @@ from decimal import Decimal, localcontext
 
 from .models import Reference, RankedChunk
 from .nlp import accented_content_tokens, content_tokens, normalize, strip_accents
-from .scenarios import comparison_subjects, comparison_topic, is_version_comparison_query
+from .scenarios import comparison_subjects, comparison_topic, expand_retrieval_query, is_version_comparison_query
+from .question_focus import causal_focus, question_focus, reward_amount
+from .numeric_conditions import numeric_verdict
 
 
 DECLINE_MSG = "Tôi chưa tìm được căn cứ đủ rõ trong cơ sở tri thức hiện có để trả lời chính xác. Bạn hãy thử nêu rõ hơn nội dung cần tra cứu hoặc bổ sung văn bản quy chế chính thức."
@@ -61,7 +63,10 @@ class Generator:
         numeric = self._generate_repeated_unit_total(question, hits)
         if numeric:
             return numeric
-        query_terms = set(content_tokens(question))
+        grounding_question = expand_retrieval_query(question)
+        requested = question_focus(grounding_question)
+        evidence_question = requested.topic or question
+        query_terms = set(content_tokens(evidence_question))
         min_overlap = min(2, max(1, len(query_terms)))
         selected = []
         best_overlap = 0
@@ -74,13 +79,23 @@ class Generator:
         topic = " ".join(
             word for word in HybridSearcher._raw_words(question)
             if strip_accents(word) not in {"dieu", "kien", "nhan"}
-        ) if {"dieu", "kien"}.issubset(query_terms) else question
+        ) if {"dieu", "kien"}.issubset(query_terms) else evidence_question
         topic = HybridSearcher._credit_quantity_topic(question) or topic
         topic_terms = {
             HybridSearcher._query_form(term) for term in accented_content_tokens(topic)
             if not HybridSearcher._is_non_specific(term)
         }
         covered_topic = set()
+        literal_support = {
+            id(hit): HybridSearcher.has_specific_evidence(grounding_question, [hit]) for hit in hits
+        }
+        has_literal_primary = any(literal_support.values())
+        explicit_focus = (
+            bool(HybridSearcher._question_focus(grounding_question))
+            or bool(causal_focus(grounding_question))
+            or requested.kind not in {"", "conditions"}
+            or bool(re.search(r"\b(?:loại|loai)\b", requested.topic))
+        )
         for hit in hits:
             # Do not pad an answer with weakly related passages simply because
             # top_k contains a second document that shares a generic word.
@@ -93,6 +108,19 @@ class Generator:
             identity = (hit.chunk.rid, hit.chunk.cid)
             if identity in seen:
                 continue
+            if (
+                selected and requested.kind == "conditions"
+                and hit.chunk.aid == selected[0].chunk.aid
+                and HybridSearcher._chunk_features(hit.chunk).body_ascii.startswith(("chi xet ", "dieu kien chung"))
+            ):
+                # An explicitly general eligibility clause in the same article
+                # applies alongside the named category, not another category's
+                # thresholds or an unrelated article's payment instructions.
+                selected.append(hit)
+                seen.add(identity)
+                if len(selected) >= self.config.max_units:
+                    break
+                continue
             overlap = len(query_terms.intersection(content_tokens(hit.chunk.text)))
             # Additional passages must stay close to the primary passage's
             # topic and independently support the question, not merely repeat
@@ -103,7 +131,9 @@ class Generator:
             # tokens with that passage.
             semantic_evidence = hit.vec >= self.config.semantic_floor
             if overlap >= required_overlap or semantic_evidence:
-                if selected and not HybridSearcher.has_specific_evidence(question, [hit]):
+                if not literal_support[id(hit)] and not (
+                    not selected and semantic_evidence and not has_literal_primary and not explicit_focus
+                ):
                     continue
                 supported_topic = topic_terms & HybridSearcher._supported_terms(topic, hit.chunk)
                 if (
@@ -123,7 +153,7 @@ class Generator:
                     best_overlap = overlap
                     best_score = hit.score
                     primary_rid = hit.chunk.rid
-            if len(selected) >= self.config.max_units:
+            if len(selected) >= self.config.max_units or (selected and requested.kind == "amount" and requested.maximum):
                 break
         if not selected:
             return DECLINE_MSG, []
@@ -136,6 +166,26 @@ class Generator:
         # traceability, but are jargon for students reading the reply. Chunks
         # already begin with their natural section heading.
         answer = "\n\n".join(hit.chunk.text for hit in selected)
+        verdict = numeric_verdict(question, HybridSearcher._clause_body(selected[0].chunk))
+        if verdict:
+            # Same paragraph/citation as the primary clause, not a new source.
+            answer = verdict + "\n" + answer
+        if requested.kind == "amount" and requested.maximum:
+            amounts = [
+                reward_amount(HybridSearcher._chunk_features(hit.chunk).body_ascii)
+                for hit in hits if HybridSearcher.has_specific_evidence(question, [hit])
+            ]
+            sources = {hit.chunk.rid for hit in hits if HybridSearcher.has_specific_evidence(question, [hit])}
+            comparable = (
+                bool(amounts) and all(amounts)
+                and len({amount[0] for amount in amounts if amount}) == 1 and len(sources) == 1
+            )
+            answer = (
+                ("Trong các mức thưởng cùng đơn vị tính tìm được, mức cao nhất có căn cứ là:\n"
+                 if comparable else "Nguồn tìm được nêu mức thưởng dưới đây; chưa đủ cơ sở so sánh mức cao nhất:\n")
+                + answer
+                + "\nMức thưởng chỉ áp dụng theo cơ sở tính và điều kiện ghi trong nguồn, không áp dụng cho mọi trường hợp."
+            )
         return answer, references
 
     @staticmethod

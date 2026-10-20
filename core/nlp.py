@@ -41,6 +41,7 @@ NORMALIZED_VI_STOPWORDS: Set[str] = {
 # Keys are unaccented abbreviations; values keep their Vietnamese spelling so
 # accent-aware evidence checks can match them (``content_tokens`` strips them).
 ACADEMIC_TOKEN_ALIASES = {
+    "gpa": ("điểm", "trung", "bình", "tích", "lũy"),
     "drl": ("điểm", "rèn", "luyện"),
     "rl": ("điểm", "rèn", "luyện"),
     "hbkkht": ("học", "bổng", "khuyến", "khích", "học", "tập"),
@@ -60,6 +61,7 @@ def expand_academic_terms(text: str) -> str:
     """
     normalized = normalize(text)
     replacements = (
+        (r"\bgpa\b", "điểm trung bình tích lũy"),
         (r"\bđrl\b|\brl\b", "điểm rèn luyện"),
         (r"\bnghỉ học\b|\bnghỉ\b", "vắng mặt"),
         (r"%", " phần trăm "),

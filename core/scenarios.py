@@ -59,8 +59,11 @@ def is_context_dependent(question: str) -> bool:
         "như thế nào", "ra sao", "vậy sao", "sao vậy", "sao thế", "đó là gì",
         "bao nhiêu", "mấy lần",
     )
-    return any(len(words) == len(phrase.split()) and _matches_follow_up_phrase(words, phrase)
-               for phrase in ellipses)
+    variants = [words]
+    if words and _matches_follow_up_phrase(words, "không", len(words) - 1):
+        variants.append(words[:-1])
+    return any(len(candidate) == len(phrase.split()) and _matches_follow_up_phrase(candidate, phrase)
+               for candidate in variants for phrase in ellipses)
 
 
 def is_contextual_follow_up(question: str) -> bool:
@@ -87,6 +90,9 @@ def is_comparison_query(question: str) -> bool:
     return len(set(years)) >= 2 or any(phrase in q for phrase in (
         "so sanh", "khac gi", "khac nhau", "doi chieu", "khac biet",
         "giua cac phien ban", "giua hai phien ban", "qua cac phien ban",
+    )) or bool(re.search(
+        r"\b(?:ban|quy dinh|van ban) (?:cu va (?:(?:ban|quy dinh|van ban) )?moi"
+        r"|moi va (?:(?:ban|quy dinh|van ban) )?cu)\b", q,
     ))
 
 
@@ -160,29 +166,23 @@ def comparison_topic(question: str) -> str:
     Keep accents for the ordinary evidence gates. In particular an unsupported
     feature such as wifi must not be hidden by a supported location.
     """
-    words = re.findall(r"\w+", normalize(question))
-    forms = [strip_accents(word).lower() for word in words]
-    for scope in ("giua cac phien ban", "giua hai phien ban", "qua cac phien ban"):
-        marker = scope.split()
-        for index in range(len(words) - len(marker) + 1):
-            if forms[index:index + len(marker)] != marker:
-                continue
-            tail = forms[index + len(marker):]
-            # Only strip comparison framing. Any additional requested feature
-            # must remain in the original query and pass the normal gate.
-            if any(word not in {"quy", "dinh", "khong", "nhu", "the", "nao", "a", "cu", "moi"} for word in tail):
-                return question
-            topic = words[:index]
-            topic_forms = forms[:index]
-            for ending in ("co thay doi", "thay doi", "co khac nhau", "khac nhau", "co khac", "khac"):
-                suffix = ending.split()
-                if topic_forms[-len(suffix):] == suffix:
-                    topic = topic[:-len(suffix)]
-                    break
-            # Retain descriptive focus semantics: "wifi ký túc xá" must still
-            # require evidence for wifi rather than passing on the location.
-            return " ".join(topic) + " như thế nào"
-    return question
+    if not is_version_comparison_query(question):
+        return question
+    from .question_focus import without_phrases
+    # Years and version operators scope the comparison, not its policy topic.
+    # Everything else, especially unsupported requested features, is retained.
+    topic = re.sub(r"\b(?:năm\s+|nam\s+)?20\d{2}\b", " ", normalize(question), flags=re.IGNORECASE)
+    topic = without_phrases(topic, (
+        "giữa các phiên bản quy định", "giữa hai phiên bản quy định",
+        "qua các phiên bản quy định", "giữa các phiên bản", "giữa hai phiên bản",
+        "qua các phiên bản", "bản cũ và bản mới", "bản mới và bản cũ",
+        "quy định cũ và mới", "văn bản cũ và mới", "bản cũ và mới",
+        "quy định mới và cũ", "văn bản mới và cũ", "bản mới và cũ",
+        "khác nhau như thế nào", "khác nhau ra sao", "khác nhau thế nào",
+        "có thay đổi", "thay đổi", "có khác nhau", "khác nhau",
+        "khác gì", "so sánh", "đối chiếu",
+    ))
+    return topic + " như thế nào"
 
 
 def expand_retrieval_query(question: str) -> str:

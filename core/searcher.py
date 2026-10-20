@@ -13,6 +13,7 @@ from .index_storage import atomic_write, index_write_lock
 from .index_version import index_fingerprint
 from .nlp import accent_key, accented_content_tokens, content_tokens, has_diacritics, normalize, strip_accents
 from .retrieval_features import ChunkFeatures, chunk_features
+from .question_focus import causal_consequence, causal_focus, facet_supported, question_focus, reward_amount
 from .semantic import SemanticEncoder
 from .settings import MODELS
 
@@ -270,11 +271,15 @@ class HybridSearcher:
         in "học bổng ... tối đa"). Numbers never anchor a topic.
         """
         features = cls._chunk_features(chunk)
+        return cls._support_from_features(query, features.evidence_words, features.evidence_pairs, features.alias_pairs)
+
+    @classmethod
+    def _support_from_features(cls, query, words, pairs, aliases):
         sequence = [cls._query_form(term) for term in accented_content_tokens(query)]
-        supported = {form for form in sequence if form in features.evidence_words}
+        supported = {form for form in sequence if form in words}
         in_phrase: set[str] = set()
         for left, right in zip(sequence, sequence[1:]):
-            if (left, right) in features.alias_pairs:
+            if (left, right) in aliases:
                 supported.update((left, right))
                 in_phrase.update((left, right))
         raw_sequence = [cls._query_form(word) for word in cls._raw_words(query)]
@@ -285,8 +290,8 @@ class HybridSearcher:
             # Adjacency is checked both on content words (so a stopword
             # between them does not matter) and on the raw wording (so a
             # neighbour that is a stopword, e.g. "bao" in "bao luu", counts).
-            for pairs in (zip(sequence, sequence[1:]), zip(raw_sequence, raw_sequence[1:])):
-                in_phrase.update(form for pair in pairs if pair in features.evidence_pairs for form in pair)
+            for neighbours in (zip(sequence, sequence[1:]), zip(raw_sequence, raw_sequence[1:])):
+                in_phrase.update(form for pair in neighbours if pair in pairs for form in pair)
         anchored = {
             form for form in supported
             if not form[2:].isdigit() and (form.startswith("a:") or form in in_phrase)
@@ -354,6 +359,7 @@ class HybridSearcher:
         """
         peak_score = max((hit.score for hit in hits), default=0.0) or 1.0
         peak_bm25 = max((hit.bm25 for hit in hits), default=0.0) or 1.0
+        focus = question_focus(query)
         query_terms = set(content_tokens(query))
         asks_for_conditions = {"dieu", "kien"}.issubset(query_terms)
         # "Điều kiện nhận ..." describes the requested kind of rule, not
@@ -363,13 +369,24 @@ class HybridSearcher:
             word for word in cls._raw_words(query)
             if strip_accents(word) not in {"dieu", "kien", "nhan"}
         ) if asks_for_conditions else query
+        topic_query = focus.topic if focus.kind or "|" in query else topic_query
         topic_query = topic_query if cls._query_forms(topic_query) else query
         credit_topic = cls._credit_quantity_topic(query)
         credit_terms = set(content_tokens(credit_topic))
         graduation_total = {"tot", "nghiep"}.issubset(credit_terms) and not (
             credit_terms & {"an", "khoa", "luan", "thuc", "tap", "lai"}
         )
-        has_focus = bool(cls._question_focus(query))
+        has_focus = bool(cls._question_focus(query)) or bool(focus.kind) or bool(causal_focus(query))
+        amounts = [
+            reward_amount(cls._chunk_features(hit.chunk).body_ascii) for hit in hits
+            if cls.has_specific_evidence(query, [hit])
+        ] if focus.kind == "amount" and focus.maximum else []
+        units = {amount[0] for amount in amounts if amount}
+        reward_sources = {
+            hit.chunk.rid for hit in hits
+            if focus.kind == "amount" and focus.maximum and cls.has_specific_evidence(query, [hit])
+        }
+        comparable_amounts = focus.kind == "amount" and focus.maximum and len(units) == 1 and len(reward_sources) == 1
 
         def rank(hit: RankedChunk) -> float:
             base_rel = (hit.score / peak_score) if hit.score > 0 else (hit.bm25 / peak_bm25)
@@ -402,6 +419,7 @@ class HybridSearcher:
             hits,
             key=lambda hit: (
                 cls.has_specific_evidence(query, [hit]) if has_focus else True,
+                (reward_amount(cls._chunk_features(hit.chunk).body_ascii) or ("", 0))[1] if comparable_amounts else 0,
                 rank(hit),
             ),
             reverse=True,
@@ -496,6 +514,9 @@ class HybridSearcher:
         impose another ratio on the predicate: paraphrased verbs such as
         "ảnh hưởng" need not appear verbatim in a clause about graduation.
         """
+        requested = question_focus(query)
+        original_query = query
+        query = requested.topic or query
         groups = []
         focus = cls._question_focus(query)
         descriptive = bool(focus) and not cls._yes_no_focus(query)
@@ -517,6 +538,54 @@ class HybridSearcher:
                     # abbreviation support rather than testing it alone.
                     groups.append((text, {ordered_specific[0]}, 1.0, False))
         for hit in hits:
+            body = cls._chunk_features(hit.chunk).body_ascii
+            duration_evidence = requested.duration and bool(re.search(r"\bthoi (?:han|gian)\b", body))
+            if not facet_supported(requested.kind, body) and not duration_evidence:
+                continue
+            if requested.kind == "conditions":
+                category = re.search(r"\b(?:loại|loai)\s+(\w+)", query)
+                if category and cls._query_form(category[1]) not in cls._supported_terms(query, hit.chunk):
+                    continue
+            if requested.kind in {"timing", "payment_time", "actor", "amount", "conditions"}:
+                terms = {cls._query_form(term) for term in accented_content_tokens(query)
+                         if not cls._is_non_specific(term) and not term.isdigit()}
+                if requested.duration:
+                    # Conjoined aspects may be grounded by complementary
+                    # clauses; each clause must still state the whole subject.
+                    terms -= {form for word in ("thời", "hạn", "gian") for form in cls._term_forms(word)}
+                supported, anchored = cls._evidence_support(query, hit.chunk)
+                if requested.kind == "actor":
+                    # A procedure's document title may identify *what* is
+                    # evaluated. The operation and actor still need body proof.
+                    title = cls._chunk_features(hit.chunk).title
+                    title_supported, _ = cls._support_from_features(query, title.words, title.pairs, title.aliases)
+                    supported |= title_supported
+                if not terms or not terms <= supported or not terms & anchored:
+                    continue
+            # Do not let the predicate hide an unsupported antecedent/event:
+            # "forget homework" cannot borrow an unrelated training-score rule.
+            prefix = cls._yes_no_subject(original_query)
+            if prefix:
+                terms = {cls._query_form(term) for term in accented_content_tokens(prefix)
+                         if not cls._is_non_specific(term) and not term.isdigit()}
+                supported = cls._supported_terms(prefix, hit.chunk)
+                if terms and len(terms & supported) / len(terms) < 0.5:
+                    continue
+            cause = causal_focus(original_query)
+            if cause:
+                consequence = causal_consequence(original_query)
+                effect_terms = {cls._query_form(term) for term in accented_content_tokens(consequence)
+                                if not cls._is_non_specific(term) and not term.isdigit()}
+                if not effect_terms <= cls._supported_terms(consequence, hit.chunk):
+                    continue
+                terms = {cls._query_form(term) for term in accented_content_tokens(cause)
+                         if not cls._is_non_specific(term) and not term.isdigit()}
+                if not terms or not any(
+                    len(terms & supported) / len(terms) >= 0.5 and bool(terms & anchored)
+                    for fields in cls._chunk_features(hit.chunk).conditions
+                    for supported, anchored in [cls._support_from_features(cause, fields.words, fields.pairs, fields.aliases)]
+                ):
+                    continue
             for text, specific, minimum, require_anchor in groups:
                 supported, anchored = cls._evidence_support(text, hit.chunk)
                 covered = len(specific & supported) / len(specific)
@@ -525,6 +594,26 @@ class HybridSearcher:
             else:
                 return True
         return False
+
+    @classmethod
+    def _yes_no_subject(cls, query: str) -> str:
+        words = cls._raw_words(query)
+        predicate = cls._yes_no_focus(query)
+        # Eligibility asks often describe a status in different words from the
+        # source ("chưa học xong" vs "đã hoàn thành"). Apply this event guard
+        # to consequences/rewards; ordinary eligibility retains its own gates.
+        if not re.match(r"^(?:bi\b|duoc (?:cong|thuong)\b)", strip_accents(predicate)):
+            return ""
+        for index, word in enumerate(words):
+            if cls._query_form(word) in cls._term_forms("có"):
+                return " ".join(words[:index])
+        return ""
+
+    @classmethod
+    def has_root_topic(cls, root: str, hit: RankedChunk) -> bool:
+        topic = question_focus(root).topic
+        specific = [cls._query_form(term) for term in accented_content_tokens(topic) if not cls._is_non_specific(term)]
+        return bool(specific) and specific[0] in cls._supported_terms(topic, hit.chunk) and cls.has_specific_evidence(topic, [hit])
 
     @staticmethod
     def _is_valid(chunk: Chunk, ref_date: str | None, include_expired: bool = False) -> bool:

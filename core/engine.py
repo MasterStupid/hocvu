@@ -13,6 +13,8 @@ from .generator import DECLINE_MSG, Generator
 from .index_version import index_fingerprint
 from .llm import GroundedLLM, LLMError
 from .models import Regulation, Response
+from .question_focus import question_focus
+from .regulation_queries import answer_metadata
 from .searcher import HybridSearcher, StaleIndexError
 from .scenarios import comparison_subjects, comparison_topic, expand_retrieval_query, is_attendance_training_scenario, is_comparison_query, is_context_dependent, is_contextual_follow_up, is_historical_query, is_version_comparison_query
 from .session import SessionStore
@@ -92,6 +94,7 @@ class HocVuEngine:
         intent = self.classifier.classify(question)
         refused, reason, references, hits, confidence = False, "", [], [], 0.0
         ai_status = "off"
+        using_semantic = False
         context_question = context_root = question
         if not question:
             answer, refused, reason = "Bạn hãy nhập câu hỏi về quy chế đào tạo.", True, "Empty question"
@@ -99,6 +102,12 @@ class HocVuEngine:
             answer, confidence = "Chào bạn! Tôi hỗ trợ tra cứu quy chế đào tạo. Bạn có thể hỏi về tín chỉ, đăng ký học phần, bảo lưu, tốt nghiệp hoặc học vụ.", 1.0
         elif intent == Intent.TOXIC:
             answer, refused, reason = "Tôi chỉ hỗ trợ các câu hỏi về quy chế đào tạo trong môi trường an toàn.", True, "Unsafe request"
+        elif question_focus(question).kind.startswith("metadata_") and not is_comparison_query(question):
+            answer, references, hits, confidence = answer_metadata(
+                question_focus(question), self.searcher, ref_date or date.today().isoformat(),
+            )
+            refused = not bool(references)
+            reason = "Insufficient grounded context" if refused else ""
         else:
             scenario = is_attendance_training_scenario(question)
             comparison = is_comparison_query(question)
@@ -142,7 +151,7 @@ class HocVuEngine:
                     session_id, retrieval_question, limit=self.config.max_history,
                 )
                 if context_q != retrieval_question:
-                    context_hits = retrieve(context_q)
+                    context_hits = [hit for hit in retrieve(context_q) if self.searcher.has_root_topic(root, hit)]
                     if self.searcher.has_specific_evidence(context_q, context_hits):
                         hits, retrieval_question = context_hits, context_q
                         context_used = True
@@ -159,7 +168,7 @@ class HocVuEngine:
             # Query-time fallback is local to this response; the encoder stays
             # available for a later retry. Do not use raw BM25 as cosine confidence.
             using_semantic = any(hit.vec != 0 for hit in hits)
-            lexical_coverage = self.searcher.lexical_coverage(retrieval_question, hits)
+            lexical_coverage = self.searcher.lexical_coverage(question_focus(retrieval_question).topic, hits)
             confidence = min(1.0, hits[0].score) if using_semantic and hits else lexical_coverage
             floor = self.config.semantic_floor if using_semantic else self.config.lexical_coverage_floor
             # Scenario expansion deliberately adds the regulation vocabulary

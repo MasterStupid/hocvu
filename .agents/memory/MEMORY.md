@@ -1,6 +1,7 @@
 - [Hosting and access decision](hosting-and-access-decision.md) — Replit-only hosting; public chat, password only for document management; persist via App Storage + Postgres.
 - [API origin protection](api-origin-protection.md) — preserve same-origin checks and disabled cross-origin CORS when simplifying single-server hosting.
 - [Vietnamese evidence matching](vietnamese-evidence-matching.md) — diacritic-aware evidence checks, abbreviations as phrases; heading down-weighting breaks terse clauses.
+- [Query grounding contract](query-grounding-contract.md) — align retrieval/primary checks; match evidence to the question type and qualify numeric eligibility verdicts.
 - [Retrieval feature caching](retrieval-feature-caching.md) — keep lexical caches chunk-local, immutable and runtime-only; ranking phrases must not become evidence support.
 - [Index freshness policy](index-freshness-policy.md) — source and uploaded-manifest snapshots invalidate stale indexes automatically; never mark a later snapshot as already indexed.
 - [Wrapped subject safety](wrapped-subject-safety.md) — favor excluding body text over guessing ambiguous capitalized subject continuations.

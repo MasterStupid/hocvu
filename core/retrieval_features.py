@@ -10,9 +10,32 @@ from typing import TYPE_CHECKING
 
 from .models import Chunk
 from .nlp import ACADEMIC_TOKEN_ALIASES, accented_content_tokens, content_tokens, strip_accents
+from .question_focus import condition_fragments
 
 if TYPE_CHECKING:
     from .searcher import HybridSearcher
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceFeatures:
+    words: frozenset[str]
+    pairs: frozenset[tuple[str, str]]
+    aliases: frozenset[tuple[str, str]]
+
+
+def evidence_features(text: str, searcher_type: type[HybridSearcher]) -> EvidenceFeatures:
+    tokens = accented_content_tokens(text, expand_aliases=False)
+    aliases = set()
+    for token in tokens:
+        expansion = ACADEMIC_TOKEN_ALIASES.get(strip_accents(token))
+        if expansion:
+            aliases.update(searcher_type._phrase_index(list(expansion)))
+    return EvidenceFeatures(
+        frozenset(searcher_type._index_forms(tokens)),
+        frozenset(searcher_type._phrase_index(tokens))
+        | frozenset(searcher_type._phrase_index(searcher_type._raw_words(text))),
+        frozenset(aliases),
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,6 +49,8 @@ class ChunkFeatures:
     ranking_pairs: frozenset[tuple[str, str]]
     body_lower: str
     body_ascii: str
+    title: EvidenceFeatures
+    conditions: tuple[EvidenceFeatures, ...]
 
 
 def chunk_features(chunk: Chunk, searcher_type: type[HybridSearcher]) -> ChunkFeatures:
@@ -69,6 +94,8 @@ def chunk_features(chunk: Chunk, searcher_type: type[HybridSearcher]) -> ChunkFe
         ranking_pairs=ranking_pairs,
         body_lower=body.lower(),
         body_ascii=strip_accents(body).lower(),
+        title=evidence_features(f"{chunk.reg_title} {chunk.version}", searcher_type),
+        conditions=tuple(evidence_features(part, searcher_type) for part in condition_fragments(body)),
     )
     setattr(chunk, "_retrieval_features", features)
     return features
