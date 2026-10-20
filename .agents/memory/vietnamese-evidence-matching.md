@@ -19,6 +19,9 @@ description: Why retrieval/abstention compares words with diacritics and treats 
 - For focused yes/no or descriptive asks, keep the primary answer passage individually supported, not merely the result pool.
   **Why:** a diploma-issuance clause can outrank the graduation-classification rule on “bằng tốt nghiệp”, while the later rule supplies all the evidence needed to pass the pool-level gate. Applying individual-evidence priority to every query instead broke scholarship eligibility ranking because generic request words are intentionally excluded from its topic ranking.
   **How to apply:** preserve ordinary eligibility/quantity ranking and the existing evidence thresholds; test both the article cited and the consequence stated, not just the regulation identifier.
+- Ordinary answers may use multiple clauses, but the passage limit is a ceiling, not a quota.
+  **Why:** simply permitting more passages mixed scholarship payment instructions into eligibility answers and project credits into graduation totals. Generic framing words can falsely make the extra article look complementary.
+  **How to apply:** independently ground added clauses; another article must cover an additional requested aspect. Interpret eligibility/quantity framing consistently with retrieval ranking, rather than counting words such as “nhận” or “hệ” as new subject evidence.
 - How to apply: before changing ranking, compare answers and citations for the evaluation set, the suggestion questions, and paraphrases.
 - Version-comparison framing is not itself documentary evidence, but removing it must preserve descriptive subject/focus checks.
   **Why:** requiring clauses to repeat “thay đổi giữa các phiên bản” falsely refused supported training-score questions; reducing a query to bare topic words instead let unsupported wifi questions pass on dormitory words.

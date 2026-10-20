@@ -65,33 +65,64 @@ class Generator:
         min_overlap = min(2, max(1, len(query_terms)))
         selected = []
         best_overlap = 0
-        best_score = hits[0].score
-        primary_rid = hits[0].chunk.rid
+        best_score = 0.0
+        primary_rid = None
+        seen = set()
+        from .searcher import HybridSearcher
+        # Request framing must not make an unrelated clause count as new
+        # subject evidence ("nhận" in payment instructions is not eligibility).
+        topic = " ".join(
+            word for word in HybridSearcher._raw_words(question)
+            if strip_accents(word) not in {"dieu", "kien", "nhan"}
+        ) if {"dieu", "kien"}.issubset(query_terms) else question
+        topic = HybridSearcher._credit_quantity_topic(question) or topic
+        topic_terms = {
+            HybridSearcher._query_form(term) for term in accented_content_tokens(topic)
+            if not HybridSearcher._is_non_specific(term)
+        }
+        covered_topic = set()
         for hit in hits:
             # Do not pad an answer with weakly related passages simply because
             # top_k contains a second document that shares a generic word.
             if selected and hit.score < best_score * 0.55:
-                break
-            # For a normal lookup, keep evidence in the best-matching source
-            # document. This avoids mixing an unrelated demo regulation into
-            # an answer sourced from an uploaded report.
-            if hit.chunk.rid != primary_rid:
+                # Coverage reranking need not preserve raw-score order.
+                continue
+            # Lock the source only after a candidate actually qualifies.
+            if primary_rid is not None and hit.chunk.rid != primary_rid:
+                continue
+            identity = (hit.chunk.rid, hit.chunk.cid)
+            if identity in seen:
                 continue
             overlap = len(query_terms.intersection(content_tokens(hit.chunk.text)))
-            # An ordinary lookup should answer from its strongest clause.
-            # Multi-passage synthesis is reserved for explicit comparison and
-            # scenario handlers, preventing a generic neighbouring clause
-            # from diluting a precise answer.
+            # Additional passages must stay close to the primary passage's
+            # topic and independently support the question, not merely repeat
+            # a generic heading or borrow evidence from the first clause.
             required_overlap = max(min_overlap, best_overlap - 1) if selected else min_overlap
             # Semantic evidence permits a paraphrased question to retrieve a
             # grounded passage even when it shares fewer literal Vietnamese
             # tokens with that passage.
             semantic_evidence = hit.vec >= self.config.semantic_floor
             if overlap >= required_overlap or semantic_evidence:
+                if selected and not HybridSearcher.has_specific_evidence(question, [hit]):
+                    continue
+                supported_topic = topic_terms & HybridSearcher._supported_terms(topic, hit.chunk)
+                if (
+                    selected
+                    and not any(item.chunk.aid == hit.chunk.aid for item in selected)
+                    and not supported_topic - covered_topic
+                ):
+                    # More clauses from the same article may supply separate
+                    # conditions. A different article must address an additional
+                    # requested aspect, not swap graduation totals for project
+                    # credits or scholarship eligibility for payment methods.
+                    continue
                 selected.append(hit)
+                seen.add(identity)
+                covered_topic.update(supported_topic)
                 if len(selected) == 1:
                     best_overlap = overlap
-                    break
+                    best_score = hit.score
+                    primary_rid = hit.chunk.rid
             if len(selected) >= self.config.max_units:
                 break
         if not selected:
