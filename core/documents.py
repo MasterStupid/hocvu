@@ -118,7 +118,7 @@ class DocumentRepository:
         document_date = str(raw.get("document_date", "") or "").strip()
         if document_date:
             try:
-                date.fromisoformat(document_date)
+                document_date = date.fromisoformat(document_date).isoformat()
             except ValueError as exc:
                 raise DocumentError("Ngày áp dụng cần theo định dạng YYYY-MM-DD.") from exc
         return {
@@ -154,6 +154,20 @@ class DocumentRepository:
             text, pages = self.extract(path, use_ocr=use_ocr)
             if len(text.strip()) < 20:
                 raise DocumentError("Không trích xuất được đủ nội dung văn bản từ tệp.")
+            if not metadata.get("document_date"):
+                date_m = re.search(
+                    r"\bngày\s+(\d{1,2})\s+tháng\s+(\d{1,2})\s+năm\s+(\d{4})",
+                    text, re.IGNORECASE,
+                )
+                if date_m:
+                    day, month, year = map(int, date_m.groups())
+                    try:
+                        metadata["document_date"] = date(year, month, day).isoformat()
+                    except ValueError as exc:
+                        raise DocumentError(
+                            f"Ngày tự nhận diện {day:02d}/{month:02d}/{year:04d} không hợp lệ. "
+                            "Hãy nhập ngày áp dụng chính xác (YYYY-MM-DD) khi tải lên."
+                        ) from exc
             # Keep an extracted Unicode text copy. The search index is built
             # from this representation, never directly from a page layout.
             self._extracted_path(item_id).write_text(text, encoding="utf-8")
@@ -168,11 +182,6 @@ class DocumentRepository:
             num_m = re.search(r"\b(?:Số hiệu|Số)\s*:\s*([0-9]+(?:/[\w-]+)+)", text, re.IGNORECASE)
             if num_m:
                 metadata["decision_number"] = num_m.group(1).strip()
-        if not metadata.get("document_date"):
-            date_m = re.search(r"\bngày\s+(\d{1,2})\s+tháng\s+(\d{1,2})\s+năm\s+(\d{4})", text, re.IGNORECASE)
-            if date_m:
-                d, m, y = date_m.group(1).zfill(2), date_m.group(2).zfill(2), date_m.group(3)
-                metadata["document_date"] = f"{y}-{m}-{d}"
         explicit_subject = self._explicit_subject(text)
         if metadata.get("decision_number") and explicit_subject:
             title = f"Thông báo {metadata['decision_number']} - {explicit_subject}"[:150]
