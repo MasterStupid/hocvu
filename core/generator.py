@@ -9,8 +9,8 @@ import re
 from decimal import Decimal, localcontext
 
 from .models import Reference, RankedChunk
-from .nlp import content_tokens, normalize, strip_accents
-from .scenarios import comparison_topic
+from .nlp import accented_content_tokens, content_tokens, normalize, strip_accents
+from .scenarios import comparison_subjects, comparison_topic, is_version_comparison_query
 
 
 DECLINE_MSG = "Tôi chưa tìm được căn cứ đủ rõ trong cơ sở tri thức hiện có để trả lời chính xác. Bạn hãy thử nêu rõ hơn nội dung cần tra cứu hoặc bổ sung văn bản quy chế chính thức."
@@ -24,6 +24,25 @@ class Generator:
         if not hits:
             return DECLINE_MSG, []
         if comparison:
+            if not is_version_comparison_query(question):
+                selected = self.select_comparison_evidence(question, hits)
+                if not selected:
+                    return DECLINE_MSG, []
+                subjects = comparison_subjects(question)
+                answer = "\n\n".join(
+                    f"{subject}:\n{hit.chunk.text}" for subject, hit in zip(subjects, selected)
+                )
+                if any(strip_accents(subject).lower().startswith("diem ") for subject in subjects):
+                    if not all(self._has_scoring_rule(hit) for hit in selected):
+                        answer += (
+                            "\n\nLưu ý: nguồn hiện có chưa nêu đầy đủ cách tính điểm "
+                            "cho cả hai nội dung, nên chưa thể kết luận sự khác biệt "
+                            "về công thức chấm điểm."
+                        )
+                # One passage can explicitly cover both subjects. Quote it for
+                # each side if needed, but never duplicate its citation.
+                unique = {(hit.chunk.rid, hit.chunk.cid): hit for hit in selected}
+                return answer, [self._reference(hit) for hit in unique.values()]
             compared = self._generate_comparison(question, hits)
             if compared:
                 return compared
@@ -95,6 +114,62 @@ class Generator:
             art_heading=hit.chunk.art_heading, clause_ids=hit.chunk.clause_ids,
             excerpt=_excerpt(hit.chunk.text),
         )
+
+    def select_comparison_evidence(self, question: str, hits: list[RankedChunk]) -> list[RankedChunk]:
+        """Ground each content subject independently, without grouping by rid."""
+        from .searcher import HybridSearcher
+        subjects = comparison_subjects(question)
+        if len(subjects) != 2:
+            return []
+        terms = [accented_content_tokens(subject) for subject in subjects]
+        forms = [set(HybridSearcher._query_forms(subject)) for subject in subjects]
+        shared = forms[0] & forms[1]
+        candidates = []
+        for index, subject in enumerate(subjects):
+            # Shared topic words cannot stand in for the distinguishing item:
+            # a Giỏi clause is not evidence for Xuất sắc or an unknown category.
+            distinct = forms[index] - forms[1 - index]
+            # "Điểm thực tập" can be expressed as "Đánh giá ... (40%) ...".
+            # Keep the normal coverage gate, but require the nominal subject,
+            # not the introductory feature word, to be literally present.
+            if len(terms[index]) > 1 and strip_accents(terms[index][0]) == "diem":
+                distinct.discard(HybridSearcher._query_form(terms[index][0]))
+            matches = [
+                hit for hit in HybridSearcher.rerank_by_coverage(subject, hits)
+                if HybridSearcher.has_specific_evidence(subject, [hit])
+                and (distinct | shared).issubset(HybridSearcher._supported_terms(subject, hit.chunk))
+                and (
+                    hit.vec >= self.config.semantic_floor
+                    or HybridSearcher.lexical_coverage(subject, hit) >= self.config.lexical_coverage_floor
+                )
+            ]
+            if not matches:
+                return []
+            if strip_accents(terms[index][0]) == "diem":
+                # "thời điểm đăng ký" is not a scoring rule, even though
+                # literal coverage can rank it above "Đánh giá ... 40%/60%".
+                matches.sort(key=self._has_scoring_rule, reverse=True)
+            candidates.append(matches)
+        # Prefer a complete pair from one regulation, but allow explicitly
+        # named subjects to have independent sources when both are grounded.
+        for left in candidates[0]:
+            right = next((hit for hit in candidates[1] if hit.chunk.rid == left.chunk.rid), None)
+            if right:
+                return [left, right]
+        if len(terms[1]) <= 2 and not shared:
+            # A bare elliptical category ("Giỏi và Xuất sắc") must inherit
+            # its source topic, not borrow the other half from an unrelated rule.
+            return []
+        return [candidates[0][0], candidates[1][0]]
+
+    @staticmethod
+    def _has_scoring_rule(hit: RankedChunk) -> bool:
+        from .searcher import HybridSearcher
+        body = strip_accents(HybridSearcher._clause_body(hit.chunk)).lower()
+        return bool(re.search(
+            r"\b(?:danh gia|cham diem|diem (?:hoc tap|trung binh|tich luy|ren luyen))\b",
+            body,
+        ))
 
     def _generate_comparison(self, question: str, hits: list[RankedChunk]) -> tuple[str, list[Reference]] | None:
         """Return one directly relevant passage per regulation for comparison."""

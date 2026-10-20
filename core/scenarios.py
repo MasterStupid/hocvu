@@ -69,9 +69,73 @@ def is_comparison_query(question: str) -> bool:
     q = strip_accents(normalize(question)).lower()
     years = re.findall(r"\b20\d{2}\b", q)
     return len(set(years)) >= 2 or any(phrase in q for phrase in (
-        "so sanh", "khac gi", "khac nhau", "doi chieu",
+        "so sanh", "khac gi", "khac nhau", "doi chieu", "khac biet",
         "giua cac phien ban", "giua hai phien ban", "qua cac phien ban",
     ))
+
+
+def is_version_comparison_query(question: str) -> bool:
+    """Only explicit version/history comparisons may include expired rules."""
+    if not is_comparison_query(question):
+        return False
+    q = strip_accents(normalize(question)).lower()
+    return (
+        len(set(re.findall(r"\b20\d{2}\b", q))) >= 2
+        or bool(re.search(r"\bphien ban\b", q))
+        or bool(re.search(r"\b(?:quy dinh|van ban|ban) (?:cu|moi)\b", q))
+    )
+
+
+def comparison_subjects(question: str) -> tuple[str, ...]:
+    """Extract two content subjects, retaining accents and shared category names.
+
+    This deliberately handles explicit pairs, not arbitrary conjunctions in a
+    long question. An unparseable comparison must not become a version lookup
+    or silently fall back to answering just one side.
+    """
+    if not is_comparison_query(question) or is_version_comparison_query(question):
+        return ()
+    words = re.findall(r"\w+", normalize(question))
+
+    def forms():
+        return [strip_accents(word).lower() for word in words]
+
+    for prefix in (
+        "su khac biet giua", "khac biet giua", "so sanh giua",
+        "doi chieu giua", "so sanh", "doi chieu",
+    ):
+        marker = prefix.split()
+        if forms()[:len(marker)] == marker:
+            words = words[len(marker):]
+            break
+    # Remove only the comparison's trailing question framing.
+    for ending in (
+        "co gi khac nhau", "khac nhau nhu the nao", "khac nhau the nao",
+        "khac nhau ra sao", "khac nhau", "khac gi nhau", "khac biet the nao",
+    ):
+        marker = ending.split()
+        if forms()[-len(marker):] == marker:
+            words = words[:-len(marker)]
+            break
+    current = forms()
+    separators = [(index, 1) for index, word in enumerate(current) if word in {"va", "voi"}]
+    if not separators:
+        separators = [(index, 2) for index in range(len(current) - 1)
+                      if current[index:index + 2] == ["khac", "gi"]]
+    if len(separators) != 1:
+        return ()
+    index, width = separators[0]
+    left, right = words[:index], words[index + width:]
+    if not left or not right:
+        return ()
+    # "học bổng loại Giỏi và Xuất sắc" names two scholarship categories,
+    # not a scholarship and any unrelated rule containing "Xuất sắc".
+    left_forms = [strip_accents(word).lower() for word in left]
+    category = next((i for i in range(len(left_forms) - 1, -1, -1)
+                     if left_forms[i] in {"loai", "hang", "muc", "nhom", "he"}), None)
+    if category is not None and len(right) <= 2:
+        right = left[:category + 1] + right
+    return " ".join(left), " ".join(right)
 
 
 def comparison_topic(question: str) -> str:

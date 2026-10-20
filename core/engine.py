@@ -14,7 +14,7 @@ from .index_version import index_fingerprint
 from .llm import GroundedLLM, LLMError
 from .models import Response
 from .searcher import HybridSearcher, StaleIndexError
-from .scenarios import comparison_topic, expand_retrieval_query, is_attendance_training_scenario, is_comparison_query, is_context_dependent, is_contextual_follow_up, is_historical_query
+from .scenarios import comparison_subjects, comparison_topic, expand_retrieval_query, is_attendance_training_scenario, is_comparison_query, is_context_dependent, is_contextual_follow_up, is_historical_query, is_version_comparison_query
 from .session import SessionStore
 from .settings import AUD, DOCS, INDEX_JSON, SESSION_DB, AppConfig
 from .splitter import split_regulation
@@ -87,7 +87,9 @@ class HocVuEngine:
         else:
             scenario = is_attendance_training_scenario(question)
             comparison = is_comparison_query(question)
-            historical = comparison or is_historical_query(question)
+            version_comparison = is_version_comparison_query(question)
+            subjects = comparison_subjects(question) if comparison and not version_comparison else ()
+            historical = version_comparison or is_historical_query(question)
             retrieval_question = expand_retrieval_query(comparison_topic(question) if comparison else question)
             is_follow_up = is_contextual_follow_up(question)
             # Coverage can only rerank clauses present in this bounded pool.
@@ -107,6 +109,14 @@ class HocVuEngine:
             # Always try the current subject first. A discourse prefix such as
             # "Thế còn học phí?" must not force a previous, unrelated topic in.
             hits = retrieve(retrieval_question)
+            if subjects:
+                # Give both sides their own bounded retrieval allowance;
+                # combined-query ranking can otherwise omit the shorter side.
+                by_id = {(hit.chunk.rid, hit.chunk.cid): hit for hit in hits}
+                for subject in subjects:
+                    for hit in retrieve(expand_retrieval_query(subject)):
+                        by_id.setdefault((hit.chunk.rid, hit.chunk.cid), hit)
+                hits = list(by_id.values())
             dependent = is_context_dependent(question)
             context_used = False
             # A connective alone does not license borrowing evidence for an
@@ -142,7 +152,23 @@ class HocVuEngine:
                 # The pronouns in a short follow-up are intentionally not in
                 # the document; its earlier turn supplies the actual topic.
                 floor = min(floor, 0.40)
-            if not hits or confidence < floor or not self.searcher.has_specific_evidence(retrieval_question, hits):
+            specific_evidence = self.searcher.has_specific_evidence(retrieval_question, hits)
+            if comparison and not version_comparison:
+                selected = self.generator.select_comparison_evidence(question, hits)
+                # A comparison is supported only when *each* requested side is
+                # grounded. Pool-wide max coverage cannot establish that.
+                specific_evidence = bool(selected)
+                lexical_coverage = min((
+                    self.searcher.lexical_coverage(subject, hit)
+                    for subject, hit in zip(subjects, selected)
+                ), default=0.0)
+                confidence = min((
+                    min(1.0, hit.score) if hit.vec != 0
+                    else self.searcher.lexical_coverage(subject, hit)
+                    for subject, hit in zip(subjects, selected)
+                ), default=0.0)
+                floor = 0.0  # Per-side lexical/semantic floors were checked above.
+            if not hits or confidence < floor or not specific_evidence:
                 answer, refused, reason = DECLINE_MSG, True, "Insufficient grounded context"
             else:
                 scenario_answer = self.generator.generate_attendance_training_scenario(hits, question) if scenario else None
