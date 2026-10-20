@@ -50,3 +50,7 @@ timeoutMs = 180000
 
 [objectStorage]
 defaultBucketID = "replit-objstore-fc616c94-1bfd-4e39-b357-0ac7d5530fca"
+
+[deployment]
+deploymentTarget = "vm"
+run = ["python", "manage.py", "serve", "--host", "0.0.0.0", "--port", "5000"]
