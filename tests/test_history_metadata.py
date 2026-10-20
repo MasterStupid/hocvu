@@ -30,7 +30,7 @@ def make_engine(root):
         for chunk in split_regulation(regulation, config.max_chunk_chars, config.overlap_sents)
     ])
     with patch.multiple(
-        engine_module, SESSION_DB=root / "sessions.db", DOCS=root / "docs", AUD=root / "audio",
+        engine_module, SESSION_DB=root / "sessions.db", DOCS=root / "docs",
     ):
         return HocVuEngine(config, searcher)
 

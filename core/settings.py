@@ -126,8 +126,6 @@ class AppConfig:
 
     # ── Backends ────────────────────────────────
     llm_backend: str = "local"     # local | openai | gemini
-    stt_backend: str = "local"     # local | whisper
-    tts_backend: str = "local"     # local | edge
 
     # ── OpenAI (chỉ khi llm_backend=openai) ────
     openai_key: str = ""
@@ -140,9 +138,7 @@ class AppConfig:
     gemini_url: str = "https://generativelanguage.googleapis.com/v1beta"
     gemini_model: str = "gemini-3.8-flash"
 
-    # ── Whisper / TTS ───────────────────────────
-    whisper_size: str = "small"
-    tts_voice: str = "vi-VN-HoaiMyNeural"
+    # ── API access ─────────────────────────────
     api_token: str = ""
     rate_limit_per_minute: int = 120
 
@@ -164,8 +160,6 @@ class AppConfig:
             "semantic_floor": self.semantic_floor,
             "lexical_coverage_floor": self.lexical_coverage_floor,
             "llm": self.llm_backend,
-            "stt": self.stt_backend,
-            "tts": self.tts_backend,
             "rate_limit_per_minute": self.rate_limit_per_minute,
         }
 
@@ -188,8 +182,6 @@ def load_config() -> AppConfig:
         max_units=_i("HV_MAX_UNITS", 2),
         max_history=_i("HV_MAX_HISTORY", 8),
         llm_backend=_e("HV_LLM", "local").lower(),
-        stt_backend=_e("HV_STT", "local").lower(),
-        tts_backend=_e("HV_TTS", "local").lower(),
         openai_key=clean_api_key(_e("OPENAI_API_KEY", "")),
         openai_url=_e("OPENAI_BASE_URL", "https://api.openai.com/v1"),
         openai_model=_e("OPENAI_MODEL", "gpt-4o-mini"),
@@ -197,8 +189,6 @@ def load_config() -> AppConfig:
         gemini_key=clean_api_key(_e("GEMINI_API_KEY", "")),
         gemini_url=_e("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta"),
         gemini_model=_e("GEMINI_MODEL", "gemini-3.8-flash"),
-        whisper_size=_e("WHISPER_MODEL", "small"),
-        tts_voice=_e("TTS_VOICE", "vi-VN-HoaiMyNeural"),
         api_token=_e("HV_API_TOKEN", ""),
         rate_limit_per_minute=_i("HV_RATE_LIMIT_PER_MINUTE", 120),
         seed=_i("HV_SEED", 20262027),

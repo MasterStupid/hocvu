@@ -33,7 +33,7 @@ class IsolatedServerEngineTests(unittest.IsolatedAsyncioTestCase):
         self.enterContext(patch.dict(os.environ, {"HV_SEMANTIC": "0"}))
         self.enterContext(patch.multiple(settings, **paths))
         self.enterContext(patch.multiple(engine_module, **{
-            key: paths[key] for key in ("AUD", "DOCS", "SESSION_DB", "INDEX_JSON")
+            key: paths[key] for key in ("DOCS", "SESSION_DB", "INDEX_JSON")
         }))
         self.enterContext(patch.multiple(server, **{
             key: paths[key] for key in ("AUD", "INDEX_JSON", "SERVER_META")

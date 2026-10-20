@@ -58,7 +58,7 @@ class SettingsTests(unittest.TestCase):
         with patch.dict(os.environ):
             for name in (
                 "HV_TOP_K", "HV_BM25_WEIGHT", "HV_SEMANTIC_FLOOR",
-                "HV_LEXICAL_COVERAGE_FLOOR", "HV_SEMANTIC", "HV_WHISPER_SIZE",
+                "HV_LEXICAL_COVERAGE_FLOOR", "HV_SEMANTIC",
             ):
                 os.environ.pop(name, None)
             config = load_config()
@@ -67,7 +67,6 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(config.semantic_floor, 0.20)
         self.assertEqual(config.lexical_coverage_floor, 0.50)
         self.assertTrue(config.semantic_enabled)
-        self.assertEqual(config.whisper_size, "small")
 
     def test_invalid_environment_value_is_reported(self):
         with patch.dict(os.environ, {"HV_TOP_K": "not-a-number"}, clear=False):

@@ -811,7 +811,6 @@ class UploadedFeatureEvidenceTests(unittest.TestCase):
                 with (
                     patch("core.engine.DOCS", root / "documents"),
                     patch("core.engine.SESSION_DB", root / "sessions.db"),
-                    patch("core.engine.AUD", root / "audio"),
                     # Redirect the default index path bound by build_index,
                     # while still running the real rebuild implementation.
                     patch("core.engine.build_index", side_effect=lambda cfg, **kw: build_index(

@@ -189,7 +189,7 @@ class SessionLifecycleApiTests(unittest.IsolatedAsyncioTestCase):
             ])
             with patch.multiple(
                 engine_module, SESSION_DB=self.root / "sessions.db",
-                DOCS=self.root / "docs", AUD=self.root / "audio",
+                DOCS=self.root / "docs",
             ):
                 return HocVuEngine(config, searcher)
 

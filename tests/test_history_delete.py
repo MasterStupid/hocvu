@@ -158,7 +158,7 @@ class DeleteHistoryApiTests(unittest.IsolatedAsyncioTestCase):
             ])
             root = self.store.db_path.parent
             with patch.multiple(
-                engine_module, SESSION_DB=self.store.db_path, DOCS=root / "docs", AUD=root / "audio",
+                engine_module, SESSION_DB=self.store.db_path, DOCS=root / "docs",
             ):
                 return HocVuEngine(config, searcher)
 

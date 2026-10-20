@@ -1,13 +1,10 @@
-"""Voice capability module with Edge-TTS server synthesis and browser contract."""
+"""Asynchronous Edge-TTS synthesis and audio-file caching."""
 from __future__ import annotations
 
 import asyncio
 import hashlib
 import re
 from pathlib import Path
-from typing import Optional
-
-from .models import SpeechResult
 from .settings import AUD
 from .index_storage import atomic_write
 
@@ -49,23 +46,11 @@ def clean_text_for_tts(text: str) -> str:
 
 
 class VoiceManager:
-    """Quản lý tổng hợp và nhận dạng giọng nói."""
+    """Tổng hợp giọng nói Edge-TTS; nhận dạng do trình duyệt thực hiện."""
 
-    def __init__(self, config=None, audio_dir: Path | None = None):
-        self.config = config
+    def __init__(self, audio_dir: Path | None = None):
         self.audio_dir = audio_dir or AUD
         self.audio_dir.mkdir(parents=True, exist_ok=True)
-        self.default_voice = DEFAULT_VOICE
-
-    def speech_to_text(self, audio_path: str) -> SpeechResult:
-        """Hợp đồng nhận dạng giọng nói (Browser-First với Web Speech API)."""
-        return SpeechResult(
-            text="",
-            confidence=0.0,
-            lang="vi",
-            provider="browser",
-            note="Nhận dạng giọng nói được thực hiện trực tiếp trên trình duyệt qua Web Speech API.",
-        )
 
     async def synthesize(
         self,
@@ -113,10 +98,3 @@ class VoiceManager:
             await asyncio.to_thread(atomic_write, filepath, audio_bytes)
 
         return f"/api/audio/{filename}", filepath
-
-    def text_to_speech(self, text: str) -> Optional[bytes]:
-        """Wrapper đồng bộ cho tổng hợp giọng nói."""
-        try:
-            return asyncio.run(self.synthesize(text))
-        except Exception:
-            return None

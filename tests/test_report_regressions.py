@@ -29,7 +29,6 @@ class ReportRegressionTests(unittest.TestCase):
         root = Path(self.enterContext(tempfile.TemporaryDirectory()))
         self.enterContext(patch("core.engine.SESSION_DB", root / "sessions.db"))
         self.enterContext(patch("core.engine.DOCS", root / "documents"))
-        self.enterContext(patch("core.engine.AUD", root / "audio"))
         self.engine = HocVuEngine(self.config, self.searcher)
 
     def ask(self, question, *, searcher=None, ref_date="2026-10-20"):

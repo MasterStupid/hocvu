@@ -110,7 +110,7 @@ def get_voice_manager() -> VoiceManager:
     if voice_manager is None:
         with _voice_lock:
             if voice_manager is None:
-                voice_manager = VoiceManager(config=config, audio_dir=AUD)
+                voice_manager = VoiceManager(audio_dir=AUD)
     return voice_manager
 
 

@@ -46,7 +46,6 @@ def _rebuild_worker(root, role, seed, entered, paused, release, stage="primary")
     with (
         patch("core.engine.DOCS", root / "documents"),
         patch("core.engine.SESSION_DB", root / f"sessions-{role}.db"),
-        patch("core.engine.AUD", root / "audio"),
         patch.object(HybridSearcher, "save", save),
         patch("core.index_storage.os.replace", replace_file),
     ):
@@ -86,7 +85,6 @@ class IndexFreshnessTests(unittest.TestCase):
             patch("core.index_version.INDEX_SOURCE_FILES", tuple(self.sources)),
             patch("core.engine.DOCS", self.root / "documents"),
             patch("core.engine.SESSION_DB", self.root / "sessions.db"),
-            patch("core.engine.AUD", self.root / "audio"),
         ):
             patcher.start()
             self.addCleanup(patcher.stop)

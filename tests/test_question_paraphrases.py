@@ -35,7 +35,6 @@ class QuestionParaphraseTests(unittest.TestCase):
         root = Path(self.enterContext(tempfile.TemporaryDirectory()))
         self.enterContext(patch("core.engine.SESSION_DB", root / "sessions.db"))
         self.enterContext(patch("core.engine.DOCS", root / "documents"))
-        self.enterContext(patch("core.engine.AUD", root / "audio"))
 
     def ask(self, question, chunks=None):
         searcher = self.searcher if chunks is None else self.make_searcher(chunks)

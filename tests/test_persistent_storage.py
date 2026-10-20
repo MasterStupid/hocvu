@@ -59,7 +59,6 @@ class PersistentStorageTests(PostgresCase):
         self.enterContext(patch.dict("os.environ", {"HV_STORAGE_BACKEND": "replit"}))
         self.enterContext(patch.object(engine_module, "DOCS", root / "documents"))
         self.enterContext(patch.object(engine_module, "INDEX_JSON", index))
-        self.enterContext(patch.object(engine_module, "AUD", root / "audio"))
         self.enterContext(patch.object(engine_module, "document_repository", lambda path: PersistentDocumentRepository(
             path, blobs=self.blobs, state=self.state,
         )))

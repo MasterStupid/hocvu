@@ -155,20 +155,6 @@ class Reference:
 # ═══════════════════════════════════════════════════════════════════════════
 
 @dataclass
-class SpeechResult:
-    """Kết quả nhận dạng giọng nói."""
-    text: str
-    confidence: float
-    lang: str = "vi"
-    provider: str = "local"
-    duration: float | None = None
-    note: str = ""
-
-    def to_dict(self) -> dict:
-        return asdict(self)
-
-
-@dataclass
 class Response:
     """Phản hồi hoàn chỉnh cho một câu hỏi."""
     query: str
@@ -178,7 +164,6 @@ class Response:
     refused: bool = False
     refusal_reason: str = ""
     intent: str = "other"
-    speech: SpeechResult | None = None
     retrieved: list[RankedChunk] = field(default_factory=list)
     audio_url: str | None = None
     providers: dict[str, str] = field(default_factory=dict)
@@ -196,7 +181,8 @@ class Response:
             "refused": self.refused,
             "refusal_reason": self.refusal_reason,
             "intent": self.intent,
-            "speech": self.speech.to_dict() if self.speech else None,
+            # Preserve the legacy JSON key; recognition runs only in the browser.
+            "speech": None,
             "audio_url": self.audio_url,
             "providers": self.providers,
             "timing": {k: round(v, 2) for k, v in self.timing.items()},

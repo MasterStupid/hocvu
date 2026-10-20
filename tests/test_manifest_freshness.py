@@ -25,7 +25,6 @@ class ManifestFreshnessTests(unittest.TestCase):
             ("core.engine.DOCS", self.docs),
             ("core.index_version.DOCS", self.docs),
             ("core.engine.SESSION_DB", self.root / "sessions.db"),
-            ("core.engine.AUD", self.root / "audio"),
         ):
             item = patch(target, value)
             item.start()

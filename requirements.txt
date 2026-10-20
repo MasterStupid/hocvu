@@ -2,7 +2,6 @@
 pypdf>=5.0.0
 PyMuPDF>=1.24.0
 sentence-transformers>=3.0.0
-underthesea>=6.0.0
 
 # Modern Web API Framework (FastAPI + ASGI + Swagger UI)
 fastapi>=0.115.0

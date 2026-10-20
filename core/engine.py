@@ -20,9 +20,8 @@ from .searcher import HybridSearcher, StaleIndexError
 from .scenarios import comparison_subjects, comparison_topic, expand_retrieval_query, is_attendance_training_scenario, is_comparison_query, is_context_dependent, is_contextual_follow_up, is_historical_query, is_version_comparison_query
 from .storage_backend import document_repository, session_store, writing, storage_backend
 from .persistent_documents import rollback_index
-from .settings import AUD, DOCS, INDEX_JSON, SESSION_DB, AppConfig
+from .settings import DOCS, INDEX_JSON, SESSION_DB, AppConfig
 from .splitter import split_regulation
-from .voice import VoiceManager
 
 
 def build_index(
@@ -59,7 +58,6 @@ class HocVuEngine:
         self.classifier = Classifier()
         self.generator = Generator(config)
         self.llm = GroundedLLM(config)
-        self.voice = VoiceManager(config, AUD)
         self.session = session_store(SESSION_DB)
         self.documents = documents if documents is not None else document_repository(DOCS)
         self._corpus_lock = threading.RLock()
@@ -257,16 +255,6 @@ class HocVuEngine:
 
     def suggestion_topics(self) -> list[dict]:
         return self._suggestion_topics
-
-    def ask_voice(self, audio_path: str, session_id: str, with_audio: bool = True, ref_date: str | None = None) -> Response:
-        speech = self.voice.speech_to_text(audio_path)
-        response = Response(
-            query="", answer="Bản thử nghiệm dùng nhận dạng giọng nói của trình duyệt. Hãy thử lại bằng Chrome/Edge hoặc nhập câu hỏi bằng văn bản.",
-            refused=True, refusal_reason="Server-side STT unavailable", intent=Intent.ACADEMIC_RULES.value,
-            speech=speech, session_id=session_id, providers={"voice": "browser"},
-        )
-        response.speech = speech
-        return response
 
     def list_documents(self) -> list[dict]:
         self._refresh_corpus()

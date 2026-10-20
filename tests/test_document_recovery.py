@@ -138,7 +138,6 @@ class DocumentRecoveryTests(unittest.TestCase):
         with (
             patch("core.engine.DOCS", self.repo.root),
             patch("core.engine.SESSION_DB", self.root / "session.db"),
-            patch("core.engine.AUD", self.root / "audio"),
             patch("core.engine.build_index", wraps=build_index) as build,
         ):
             engine = HocVuEngine.load_or_build(self.config, self.index)
