@@ -110,7 +110,7 @@ class AuthThrottlingTests(unittest.IsolatedAsyncioTestCase):
         self.addAsyncCleanup(self.client.aclose)
 
     async def test_basic_brute_force_is_limited_on_pages_and_api(self):
-        for path in ("/", "/api/documents"):
+        for path in ("/documents.html", "/api/documents"):
             with self.subTest(path=path):
                 with patch.object(server, "request_limiter", SlidingWindowLimiter()):
                     for _ in range(2):
@@ -128,13 +128,13 @@ class AuthThrottlingTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_invalid_and_valid_credentials_share_the_same_quota(self):
         for _ in range(2):
-            await self.client.get("/api/suggestions", auth=("hocvu", "wrong"))
-        response = await self.client.get("/api/suggestions", auth=("hocvu", "synthetic-security-token"))
+            await self.client.get("/api/documents", auth=("hocvu", "wrong"))
+        response = await self.client.get("/api/documents", auth=("hocvu", "synthetic-security-token"))
         self.assertEqual(response.status_code, 429)
 
     async def test_health_stays_public_even_when_client_is_throttled(self):
         for _ in range(3):
-            await self.client.get("/")
+            await self.client.get("/documents.html")
         with patch.object(server, "get_engine") as engine:
             engine.return_value.list_documents.return_value = []
             engine.return_value.searcher.provider = "bm25"
@@ -144,16 +144,16 @@ class AuthThrottlingTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_clients_behind_trusted_proxy_do_not_share_a_quota(self):
         for _ in range(3):
-            await self.client.get("/", headers={"X-Forwarded-For": "198.51.100.1"})
-        response = await self.client.get("/", headers={"X-Forwarded-For": "198.51.100.2"})
+            await self.client.get("/documents.html", headers={"X-Forwarded-For": "198.51.100.1"})
+        response = await self.client.get("/documents.html", headers={"X-Forwarded-For": "198.51.100.2"})
         self.assertEqual(response.status_code, 401)
-        blocked = await self.client.get("/", headers={"X-Forwarded-For": "198.51.100.1"})
+        blocked = await self.client.get("/documents.html", headers={"X-Forwarded-For": "198.51.100.1"})
         self.assertEqual(blocked.status_code, 429)
 
     async def test_forged_forwarded_prefix_cannot_reset_a_real_clients_quota(self):
         for fake_ip in ("203.0.113.1", "203.0.113.2", "203.0.113.3"):
             response = await self.client.get(
-                "/", headers={"X-Forwarded-For": f"{fake_ip},198.51.100.1"},
+                "/documents.html", headers={"X-Forwarded-For": f"{fake_ip},198.51.100.1"},
             )
         self.assertEqual(response.status_code, 429)
 
@@ -163,7 +163,7 @@ class AuthThrottlingTests(unittest.IsolatedAsyncioTestCase):
             base_url="http://test",
         ) as client:
             for ip in ("203.0.113.1", "203.0.113.2", "203.0.113.3"):
-                response = await client.get("/", headers={"X-Forwarded-For": ip})
+                response = await client.get("/documents.html", headers={"X-Forwarded-For": ip})
             self.assertEqual(response.status_code, 429)
 
 
@@ -178,11 +178,11 @@ import httpx
 from server import app as server
 async def check():
     with patch.object(server, "get_engine") as engine:
-        engine.return_value.suggestion_topics.return_value = []
+        engine.return_value.list_documents.return_value = []
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=server.app), base_url="http://test") as client:
-            missing = await client.get("/api/suggestions")
-            wrong = await client.get("/api/suggestions", headers={"X-HocVu-Token": "wrong"})
-            valid = await client.get("/api/suggestions", headers={"X-HocVu-Token": sys.argv[1]})
+            missing = await client.get("/api/documents")
+            wrong = await client.get("/api/documents", headers={"X-HocVu-Token": "wrong"})
+            valid = await client.get("/api/documents", headers={"X-HocVu-Token": sys.argv[1]})
     print(json.dumps([server.requires_api_token, missing.status_code, wrong.status_code, valid.status_code]))
 asyncio.run(check())
 """

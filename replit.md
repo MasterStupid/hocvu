@@ -15,15 +15,19 @@ pages. No frontend build or separate service is needed.
 
 - `HV_API_TOKEN` must be set in Replit Secrets before starting. Never put its
   value in source code or browser JavaScript.
-- `HV_BROWSER_AUTH=1` enables native browser sign-in for the UI, assets, and API.
+- The Q&A page, its assets, suggestions and public regulation catalog require no
+  password. Chat history remains scoped to each browser's `X-HocVu-Owner` key.
+- `HV_BROWSER_AUTH=1` enables native browser sign-in for document management.
   Sign in with username `hocvu` and the password stored as `HV_API_TOKEN`.
-  API clients can still send the `X-HocVu-Token` header. `/api/health` is public.
+  API clients can still send the `X-HocVu-Token` header. All `/api/documents`
+  routes (including reads, upload, delete, date edits and reindex) stay protected.
+  `/api/catalog` only exposes public title, regulation ID and version metadata.
   Browser-authenticated POST/DELETE requests must include a matching `Origin`;
   cross-site mutations are rejected and cross-origin CORS access is disabled.
 - The UI and API share one origin. Leave `HV_TRUSTED_ORIGINS` empty for the
   normal single-server setup; keep the existing cross-site protection enabled.
-  If the preview cannot display the browser's login prompt, open the preview in
-  a new tab and sign in there.
+  If the document management login prompt cannot appear in preview, open that
+  page in a new tab. The Q&A page never requires that sign-in.
 - `HV_SEMANTIC=0` uses the existing BM25 search without downloading embedding
   weights. Semantic retrieval is optional, not required to run.
 - API documentation and the OpenAPI schema are disabled by default. Set

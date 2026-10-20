@@ -20,10 +20,14 @@ Open `http://127.0.0.1:8000`. Use Chrome or Edge for Vietnamese browser speech r
 The date field below the chat box is optional: choose it only when you need to
 look up the regulation effective on a historical date. Leaving it blank always
 uses the current date. Set a strong `HV_API_TOKEN` before starting the server.
-API authentication is enabled for every launch mode, including direct ASGI
-imports and local binds. API clients send `X-HocVu-Token`; with
-`HV_BROWSER_AUTH=1`, browsers can instead use the native Basic login.
-`/api/health` remains public. Missing credentials never open the API.
+The Q&A page is public: no password is needed to ask questions, load suggestions
+or view the public regulation catalog (`/api/catalog`). Conversation history still
+requires the browser's separate `X-HocVu-Owner` capability.
+Document API authentication is enabled for every launch mode, including direct
+ASGI imports and local binds. Management API clients send `X-HocVu-Token`; with
+`HV_BROWSER_AUTH=1`, browsers can use the native Basic login on `/documents.html`.
+All `/api/documents` routes remain protected, including upload, delete, reindex,
+date edits and extracted text. Opening chat does not grant administration rights.
 
 ### Export the bundled demo data
 

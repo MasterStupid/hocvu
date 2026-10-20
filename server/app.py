@@ -199,6 +199,35 @@ app = FastAPI(
 
 request_limiter = SlidingWindowLimiter()
 
+# Public chat access does not grant authority over the document repository.
+# Keep an explicit allowlist so future API routes are protected by default.
+PUBLIC_CHAT_API = {
+    ("GET", "/api/health"),
+    ("GET", "/api/catalog"),
+    ("GET", "/api/suggestions"),
+    ("POST", "/api/ask"),
+    ("GET", "/api/history"),
+    ("DELETE", "/api/history"),
+    ("GET", "/api/history/status"),
+    ("GET", "/api/conversations"),
+    ("GET", "/api/tts"),
+    ("POST", "/api/tts"),
+}
+PUBLIC_CHAT_PAGES = {
+    "/", "/index.html", "/main.js", "/theme.js", "/styles.css",
+    "/api-errors.js", "/favicon.ico",
+}
+
+
+def is_public_chat_request(request: Request) -> bool:
+    path = request.url.path.rstrip("/") or "/"
+    method = "GET" if request.method == "HEAD" else request.method
+    return (
+        (method, path) in PUBLIC_CHAT_API
+        or (method == "GET" and path in PUBLIC_CHAT_PAGES)
+        or (method == "GET" and path.startswith("/api/audio/"))
+    )
+
 
 def conversation_owner(request: Request) -> str:
     """Browser capability is separate from the shared document/API password.
@@ -239,10 +268,11 @@ async def session_closed_handler(request: Request, exc: SessionClosedError):
 @app.middleware("http")
 async def rate_limit_and_auth_middleware(request: Request, call_next):
     path = request.url.path
+    public_chat = is_public_chat_request(request)
     # Count invalid credentials too, including Basic attempts against UI pages.
     # The health probe stays public and does not consume a user's allowance.
     protected_api = path.startswith("/api/") and path != "/api/health"
-    if protected_api or (browser_auth_enabled and path != "/api/health"):
+    if protected_api or (browser_auth_enabled and not public_chat):
         retry_after = request_limiter.consume(
             client_address(request, trusted_proxies), config.rate_limit_per_minute,
         )
@@ -253,10 +283,10 @@ async def rate_limit_and_auth_middleware(request: Request, call_next):
                 headers={"Retry-After": str(retry_after)},
             )
 
-    # Opt-in browser authentication for a single-origin hosted UI. Header-token
-    # clients remain compatible; the public health endpoint remains available.
+    # Basic login is only for document management and other non-public routes.
+    # Ignore ambient Basic credentials on chat routes: chat ownership is separate.
     browser_authenticated = False
-    if browser_auth_enabled and path != "/api/health":
+    if browser_auth_enabled and not public_chat:
         browser_authenticated = valid_browser_credentials(request.headers.get("Authorization", ""))
         api_authenticated = (
             path.startswith("/api/")
@@ -270,7 +300,10 @@ async def rate_limit_and_auth_middleware(request: Request, call_next):
             return JSONResponse(
                 status_code=401,
                 content={"error": "Sign in with username hocvu and your access password."},
-                headers={"WWW-Authenticate": 'Basic realm="HocVu AI", charset="UTF-8"'},
+                headers={
+                    "WWW-Authenticate": 'Basic realm="HocVu AI - Document management", charset="UTF-8"',
+                    "Cache-Control": "no-store",
+                },
             )
 
     if path.startswith("/api/") and request.method not in {"GET", "HEAD", "OPTIONS"}:
@@ -289,7 +322,7 @@ async def rate_limit_and_auth_middleware(request: Request, call_next):
             return JSONResponse(status_code=403, content={"error": "Cross-site changes are not allowed."})
 
     # Kiểm tra bảo vệ API nếu mở ra mạng công cộng
-    if path.startswith("/api/") and path != "/api/health":
+    if path.startswith("/api/") and not public_chat:
         if requires_api_token and not browser_authenticated:
             token = request.headers.get("X-HocVu-Token", "")
             if not config.api_token or not secrets.compare_digest(token.encode("utf-8"), config.api_token.encode("utf-8")):
@@ -350,6 +383,16 @@ async def ask_question(payload: AskRequest, request: Request):
 def list_documents():
     eng = get_engine()
     return eng.list_documents()
+
+
+@app.get("/api/catalog", summary="Danh mục quy chế công khai cho trang hỏi đáp")
+def public_catalog():
+    # The chat sidebar needs identity metadata, not upload filenames, extraction
+    # details or repository administration fields.
+    return [
+        {key: item.get(key, "") for key in ("rid", "title", "version")}
+        for item in get_engine().list_documents()
+    ]
 
 
 @app.post("/api/documents/upload", status_code=status.HTTP_201_CREATED, summary="Tải lên tài liệu quy chế mới")

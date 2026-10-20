@@ -211,16 +211,17 @@ class DeleteHistoryApiTests(unittest.IsolatedAsyncioTestCase):
             get_engine.assert_not_called()
         self.assertEqual(len(self.store.get_history("selected", 100)), 12)
 
-    async def test_browser_auth_requires_same_origin_even_with_valid_credentials(self):
+    async def test_public_history_rejects_cross_site_changes_and_requires_ownership(self):
         with patch.object(server, "get_engine") as get_engine:
-            for headers in ({}, {"Origin": "null"}, {"Origin": "https://attacker.test"},
+            for headers in ({"Origin": "null"}, {"Origin": "https://attacker.test"},
                             {"Origin": "http://test", "Sec-Fetch-Site": "cross-site"}):
                 response = await self.delete(headers=headers, auth=("hocvu", "synthetic-test-token"))
                 self.assertEqual(response.status_code, 403)
             get_engine.assert_not_called()
         # A shared browser password alone no longer authorizes legacy histories.
-        missing_owner = await self.delete(headers={"Origin": "http://test"}, auth=("hocvu", "synthetic-test-token"))
-        self.assertEqual(missing_owner.status_code, 401)
+        for headers in ({}, {"Origin": "http://test"}):
+            missing_owner = await self.delete(headers=headers, auth=("hocvu", "synthetic-test-token"))
+            self.assertEqual(missing_owner.status_code, 401)
         allowed = await self.client.delete(
             "/api/history", params={"session_id": "new-browser-session"},
             headers={"Origin": "http://test", "X-HocVu-Owner": "a" * 64},

@@ -4,6 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
+from unittest.mock import AsyncMock
 
 import httpx
 
@@ -76,12 +77,115 @@ class BrowserAuthenticationTests(IsolatedServerEngineTests):
         for item in reversed(self.patches):
             item.stop()
 
-    async def test_pages_and_api_require_login(self):
-        for path in ["/", "/documents.html", "/main.js", "/documents.js", "/theme.js", "/styles.css", "/api-errors.js", "/api/documents", "/docs"]:
+    async def test_management_pages_and_api_require_login(self):
+        for path in ["/documents.html", "/documents.js", "/document-date-editor.js", "/api/documents", "/docs", "/api/unknown"]:
             with self.subTest(path=path):
                 response = await self.client.get(path)
                 self.assertEqual(response.status_code, 401)
                 self.assertIn("Basic", response.headers["www-authenticate"])
+
+    async def test_chat_pages_assets_and_catalog_are_public(self):
+        for path in ["/", "/index.html", "/main.js", "/theme.js", "/styles.css", "/api-errors.js", "/api/catalog", "/api/suggestions"]:
+            with self.subTest(path=path):
+                response = await self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertNotIn("www-authenticate", response.headers)
+        with patch.object(server, "get_engine") as engine:
+            engine.return_value.list_documents.return_value = [{
+                "rid": "public-id", "title": "Quy chế", "version": "2026",
+                "filename": "internal.docx", "extracted_path": "/private/extracted.txt",
+            }]
+            response = await self.client.get("/api/catalog")
+            self.assertEqual(response.json(), [{
+                "rid": "public-id", "title": "Quy chế", "version": "2026",
+            }])
+
+    async def test_public_question_and_own_history_need_no_admin_password(self):
+        headers = {"Origin": "http://test", "X-HocVu-Owner": "b" * 64}
+        response = await self.client.post(
+            "/api/ask", headers=headers,
+            json={"question": "Điều kiện bảo lưu kết quả học tập là gì?", "session_id": "public-chat"},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertFalse(response.json()["refused"])
+        for path, params in [
+            ("/api/conversations", {}),
+            ("/api/history", {"session_id": "public-chat"}),
+            ("/api/history/status", {"session_id": "public-chat"}),
+        ]:
+            self.assertEqual((await self.client.get(path, params=params, headers=headers)).status_code, 200)
+        other = await self.client.get(
+            "/api/history", params={"session_id": "public-chat"},
+            headers={"X-HocVu-Owner": "c" * 64},
+        )
+        self.assertEqual(other.status_code, 404)
+        deleted = await self.client.delete(
+            "/api/history", params={"session_id": "public-chat"}, headers=headers,
+        )
+        self.assertEqual(deleted.status_code, 200)
+
+    async def test_chat_capability_does_not_grant_document_administration(self):
+        for method, path, kwargs in [
+            ("GET", "/documents.html", {}),
+            ("GET", "/api/documents", {}),
+            ("GET", "/api/documents/example/text", {}),
+            ("POST", "/api/documents/upload", {"files": {"file": ("test.pdf", b"%PDF-test")}}),
+            ("POST", "/api/documents/upload-batch", {}),
+            ("POST", "/api/documents/delete-batch", {"json": {"ids": ["example"]}}),
+            ("DELETE", "/api/documents/example", {}),
+            ("PATCH", "/api/documents/example/date", {"json": {"document_date": "2026-10-20"}}),
+            ("POST", "/api/documents/reindex", {}),
+        ]:
+            with self.subTest(path=path), patch.object(server, "get_engine") as engine:
+                response = await self.client.request(
+                    method, path,
+                    headers={"Origin": "http://test", "X-HocVu-Owner": "b" * 64},
+                    **kwargs,
+                )
+                self.assertEqual(response.status_code, 401)
+                engine.assert_not_called()
+
+    async def test_public_chat_still_rejects_cross_site_changes(self):
+        with patch.object(server, "get_engine") as engine:
+            response = await self.client.post(
+                "/api/ask", headers={"Origin": "https://attacker.example", "X-HocVu-Owner": "b" * 64},
+                json={"question": "Điều kiện bảo lưu?"},
+            )
+            self.assertEqual(response.status_code, 403)
+            engine.assert_not_called()
+
+    async def test_public_voice_endpoints_do_not_request_admin_login(self):
+        with patch.object(server, "get_voice_manager") as get_voice:
+            get_voice.return_value.synthesize = AsyncMock(return_value=b"synthetic-mp3")
+            get_voice.return_value.generate_audio_file = AsyncMock(return_value=("/api/audio/test.mp3", None))
+            get = await self.client.get("/api/tts", params={"text": "Xin chào"})
+            self.assertEqual(get.status_code, 200)
+            post = await self.client.post(
+                "/api/tts", headers={"Origin": "http://test"}, json={"text": "Xin chào"},
+            )
+            self.assertEqual(post.status_code, 200)
+            audio_dir = self.root / "audio"
+            audio_dir.mkdir(exist_ok=True)
+            (audio_dir / "test.mp3").write_bytes(b"synthetic-mp3")
+            audio = await self.client.get(post.json()["audio_url"])
+            self.assertEqual(audio.status_code, 200)
+            self.assertEqual(audio.content, b"synthetic-mp3")
+
+    async def test_admin_can_still_delete_reindex_and_edit_dates(self):
+        for method, path, engine_method, kwargs in [
+            ("DELETE", "/api/documents/example", "remove_document", {}),
+            ("POST", "/api/documents/reindex", "rebuild_index", {}),
+            ("PATCH", "/api/documents/example/date", "update_document_date",
+             {"json": {"document_date": "2026-10-20"}}),
+        ]:
+            with self.subTest(path=path), patch.object(server, "get_engine") as engine:
+                getattr(engine.return_value, engine_method).return_value = {}
+                response = await self.client.request(
+                    method, path, auth=("hocvu", "test-access-only"),
+                    headers={"Origin": "http://test"}, **kwargs,
+                )
+                self.assertEqual(response.status_code, 200, response.text)
+                getattr(engine.return_value, engine_method).assert_called_once()
 
     async def test_browser_login_serves_pages_and_api(self):
         for path in ["/", "/documents.html", "/main.js", "/documents.js", "/theme.js", "/styles.css", "/api-errors.js", "/api/suggestions"]:
@@ -181,12 +285,12 @@ class BrowserAuthenticationTests(IsolatedServerEngineTests):
             "Basic " + base64.b64encode(b"hocvu:wrong").decode(),
             "Basic " + base64.b64encode(b"other:test-access-only").decode(),
         ]:
-            response = await self.client.get("/", headers={"Authorization": authorization})
+            response = await self.client.get("/documents.html", headers={"Authorization": authorization})
             self.assertEqual(response.status_code, 401)
 
     async def test_empty_secret_does_not_authenticate(self):
         with patch.object(server.config, "api_token", ""):
-            response = await self.client.get("/", auth=("hocvu", ""))
+            response = await self.client.get("/documents.html", auth=("hocvu", ""))
             self.assertEqual(response.status_code, 401)
 
     async def test_health_is_public(self):

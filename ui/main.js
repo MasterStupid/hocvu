@@ -641,7 +641,7 @@
     const listing = refreshConversations();
     try {
       const [health, documents, topics] = await Promise.all([
-        api('/api/health'), api('/api/documents'), api('/api/suggestions'),
+        api('/api/health'), api('/api/catalog'), api('/api/suggestions'),
       ]);
       setStatus(true, `Trực tuyến · ${health.documents} văn bản`);
       dom.documents.innerHTML = documents.map((doc) => `<article class="doc-item"><div class="doc-title">${escapeHTML(doc.title)}</div><div class="doc-meta">${escapeHTML(doc.rid)} · Bản ${escapeHTML(doc.version)}</div></article>`).join('');
