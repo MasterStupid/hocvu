@@ -12,6 +12,9 @@ expertMode = true
 [userenv.shared]
 HV_BROWSER_AUTH = "1"
 HV_SEMANTIC = "0"
+HV_STORAGE_BUCKET_ID = "replit-objstore-fc616c94-1bfd-4e39-b357-0ac7d5530fca"
+HV_STORAGE_PREFIX = "hocvu/v1"
+HV_STORAGE_BACKEND = "replit"
 
 [workflows]
 runButton = "Project"
@@ -44,3 +47,6 @@ externalPort = 80
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 180000
+
+[objectStorage]
+defaultBucketID = "replit-objstore-fc616c94-1bfd-4e39-b357-0ac7d5530fca"
