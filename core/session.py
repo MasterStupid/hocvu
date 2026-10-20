@@ -1,5 +1,6 @@
 import sqlite3
 import json
+import time
 from pathlib import Path
 
 from .classifier import Classifier, Intent
@@ -30,6 +31,7 @@ class SessionAccessError(Exception):
 
 
 LEGACY_API_OWNER = "legacy-api"
+SQLITE_BUSY_TIMEOUT_MS = 5000
 
 
 class SessionStore:
@@ -37,9 +39,38 @@ class SessionStore:
         self.db_path = db_path
         self._init_db()
 
-    def _init_db(self):
-        conn = sqlite3.connect(self.db_path)
+    def _connect(self):
+        conn = sqlite3.connect(self.db_path, timeout=SQLITE_BUSY_TIMEOUT_MS / 1000)
         try:
+            # This pragma is per connection, unlike the persistent WAL mode.
+            conn.execute(f"PRAGMA busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
+            return conn
+        except BaseException:
+            conn.close()
+            raise
+
+    @staticmethod
+    def _enable_wal(conn):
+        # PRAGMA journal_mode cannot change inside BEGIN IMMEDIATE. Two fresh
+        # processes can also race the initial journal switch before migrations.
+        deadline = time.monotonic() + SQLITE_BUSY_TIMEOUT_MS / 1000
+        while True:
+            try:
+                mode = conn.execute("PRAGMA journal_mode=WAL").fetchone()[0]
+                if mode.lower() != "wal":
+                    raise sqlite3.OperationalError("Không thể bật chế độ WAL cho cơ sở dữ liệu hội thoại.")
+                return
+            except sqlite3.OperationalError as exc:
+                code = getattr(exc, "sqlite_errorcode", 0) & 0xFF
+                remaining = deadline - time.monotonic()
+                if code not in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED) or remaining <= 0:
+                    raise
+                time.sleep(min(0.05, remaining))
+
+    def _init_db(self):
+        conn = self._connect()
+        try:
+            self._enable_wal(conn)
             # Serialize the additive migration across simultaneous engines.
             conn.execute("BEGIN IMMEDIATE")
             cursor = conn.cursor()
@@ -98,7 +129,7 @@ class SessionStore:
         validate_session_id(session_id)
         if not owner:
             raise SessionAccessError()
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         try:
             conn.execute("BEGIN IMMEDIATE")
             self._authorize(conn, session_id, owner, create=create)
@@ -127,7 +158,7 @@ class SessionStore:
 
     def list_conversations(self, owner: str) -> list[dict]:
         """Return only saved, open sessions in this authority's scope."""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         conn.row_factory = sqlite3.Row
         try:
             conn.execute("BEGIN")
@@ -164,7 +195,7 @@ class SessionStore:
 
     def is_closed(self, session_id: str, *, owner: str | None = None) -> bool:
         validate_session_id(session_id)
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         try:
             if owner is not None:
                 conn.execute("BEGIN")
@@ -196,7 +227,7 @@ class SessionStore:
             json.dumps(response["card"], ensure_ascii=False),
             response["confidence"], response["refusal_reason"],
         ) if response is not None else (None, None, None, None, None)
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         try:
             # The tombstone check and insert share a writer transaction. This
             # coordinates independent stores/processes, not just this engine.
@@ -226,7 +257,7 @@ class SessionStore:
             conn.close()
 
     def get_history(self, session_id: str, limit: int, *, owner: str | None = None) -> list[dict]:
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         try:
             if owner is not None:
                 # Authorization and data must share one snapshot, including
@@ -262,7 +293,7 @@ class SessionStore:
 
     def delete_history(self, session_id: str) -> int:
         validate_session_id(session_id)
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         try:
             # Equality and binding are intentional: no wildcard or all-session mode.
             with conn:
@@ -285,7 +316,7 @@ class SessionStore:
         """
         if not is_context_dependent(question):
             return question, ""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         try:
             conn.row_factory = sqlite3.Row
             history = conn.execute('''

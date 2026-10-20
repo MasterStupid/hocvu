@@ -124,10 +124,11 @@ sys.exit(1)
             with self.subTest(journal_mode=mode):
                 path = self.path.with_name(f"sessions-{mode}.db")
                 store = SessionStore(path)
+                other = SessionStore(path)
+                # Initialization now deliberately selects WAL. Set the alternate
+                # test mode after both stores exist to keep testing both snapshots.
                 with sqlite3.connect(path) as conn:
                     self.assertEqual(conn.execute(f"PRAGMA journal_mode={mode}").fetchone()[0], mode.lower())
-                # Initialization must also remain usable on an existing WAL DB.
-                other = SessionStore(path)
                 for session_id in ("selected", "survivor"):
                     store.authorize(session_id, "a", create=True)
                     add_turn(store, session_id)

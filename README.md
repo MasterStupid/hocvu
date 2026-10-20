@@ -135,12 +135,15 @@ operations. This header does not replace existing network authentication,
 origin checks or rate limits.
 
 Conversation discovery uses one read-only SELECT for the aggregate and first
-question, regardless of the number of saved conversations. SQLite connections
-retain Python's default five-second lock timeout. Journal mode is left unchanged:
-WAL allows deletion to commit while a list reader holds an older snapshot, but
-enabling it is a separate storage decision (including backup handling for its
-`-wal`/`-shm` files). It cannot be enabled inside the initializer's
-`BEGIN IMMEDIATE`; any future WAL setup must run outside that transaction.
+question, regardless of the number of saved conversations. Every SQLite
+connection explicitly sets `PRAGMA busy_timeout=5000`. Initialization enables
+`PRAGMA journal_mode=WAL` **before** the migration's `BEGIN IMMEDIATE`, allowing
+writers to commit while readers retain an older snapshot. Concurrent writers
+still serialize; WAL does not eliminate write contention.
+For live backups, use SQLite's connection `backup()` API rather than copying
+only `sessions.db`: recent commits may still be in `sessions.db-wal`. Do not
+delete live `-wal`/`-shm` files. For a filesystem backup, stop all database users
+and cleanly close their connections first.
 Write transactions remain limited to database operations, never retrieval,
 LLM calls or audio generation.
 

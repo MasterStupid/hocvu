@@ -1,10 +1,22 @@
 ---
 name: SQLite journal policy
-description: Why conversation-list optimization does not automatically enable WAL.
+description: User-requested WAL adoption, safe initialization boundaries, and live backup requirements.
 ---
 
-Preserve the configured journal mode when optimizing read-only conversation discovery. Treat enabling WAL as a separate storage decision.
+The user explicitly requested WAL for the SQLite conversation store. Enable it outside the initialization/migration transaction, keeping write transactions short and the five-second busy timeout on every connection.
 
-**Why:** eliminating per-conversation SQL round trips does not require a journal-mode change. WAL improves reader/writer overlap, but changes persistent database behavior and backup requirements for live sidecar files. Enabling it inside the existing serialized initialization transaction is invalid.
+**Why:** the earlier list-query optimization deliberately preserved journal mode because removing N+1 did not require changing storage behavior. The user's subsequent request adopts WAL to improve reader/writer overlap. A journal-mode switch inside an active transaction is invalid; fresh concurrent initializers may also contend while switching modes.
 
-**How to apply:** if WAL is deliberately adopted later, configure it outside the initialization transaction and verify concurrent startup, deletion, and backup/recovery. Keep write transactions short; never extend them around retrieval, LLM calls, or TTS to compensate for contention. The existing default SQLite connection timeout is already five seconds.
+**How to apply:** keep WAL configuration before migration begins, bound retries to the lock timeout, and fail explicitly instead of silently falling back to another mode. Verify concurrent startup and deletion without dropping ownership or permanent closure markers. Never extend a write transaction around retrieval, LLM calls, or TTS.
+
+Use SQLite's backup API for live backups; do not copy only the main database file or delete live journal sidecars.
+
+**Why:** recent committed history and closure markers may still be in the WAL, so a main-file-only copy can lose data even when SQL commits succeeded.
+
+**How to apply:** preserve SQLite snapshot semantics during online backup; stop all database users and close connections cleanly before filesystem-only backups.
+
+An open but idle connection does not necessarily retain a WAL generation; an actual read snapshot controls checkpoint retention.
+
+**Why:** SQLite can defer attaching a connection to the database/WAL, so concurrent connections closing may checkpoint and remove the WAL despite an idle connection still existing.
+
+**How to apply:** when verifying live-WAL backup behavior, hold a real read snapshot during concurrent commits. End that older snapshot before taking a backup intended to include the latest commits.
