@@ -57,7 +57,8 @@
     dom.tts.classList.toggle('active', state.ttsEnabled);
   };
   function remember(role, text, extra = {}) {
-    state.transcript.push({ role, text, ...extra });
+    // Keep the evidence as it was displayed, independent of later responses.
+    state.transcript.push({ role, text, ...JSON.parse(JSON.stringify(extra)) });
   }
   function appendUser(text, { restore = false } = {}) {
     dom.welcome.hidden = true;
@@ -248,7 +249,14 @@
     item.querySelectorAll('[data-source-index]').forEach((card) => card.addEventListener('click', () => flashSource(card.dataset.sourceIndex)));
     item.querySelector('.copy-btn')?.addEventListener('click', () => copyAnswer(item.querySelector('.copy-btn'), cardMarkdown(segments, refs)));
     item.querySelectorAll('.follow-up-chip').forEach((button) => button.addEventListener('click', () => send(button.textContent)));
-    dom.thread.appendChild(item); remember('assistant', response.answer, { references: refs.map((ref) => ({ reg_title: ref.reg_title, art_heading: ref.art_heading, rid: ref.rid })) }); updateEvidence(refs); scrollBottom(); if (!restore) speak(segments.map((segment) => segment.text).join('. '), response.audio_url);
+    dom.thread.appendChild(item);
+    remember('assistant', response.answer, {
+      references: refs, card: response.card || {}, intent: response.intent,
+      refused: response.refused ?? null, refusal_reason: response.refusal_reason || '',
+      presentation: response.refused ? 'refusal' : response.intent === 'greeting' ? 'greeting'
+        : restore && !hasSavedEvidence(response) ? 'legacy' : 'answer',
+    });
+    updateEvidence(refs); scrollBottom(); if (!restore) speak(segments.map((segment) => segment.text).join('. '), response.audio_url);
   }
   function appendError(message) {
     const item = document.createElement('article'); item.className = 'message bot error';
@@ -384,15 +392,53 @@
       state.isDeleting = false; updateComposer();
     }
   }
+  function exportAnswer(entry) {
+    if (entry.presentation === 'greeting') {
+      return ['Trạng thái: Lời chào — không sử dụng căn cứ.', entry.text];
+    }
+    if (entry.presentation === 'refusal') {
+      return [
+        'Trạng thái: Từ chối trả lời — chưa đủ căn cứ.', entry.text,
+        ...(entry.refusal_reason ? [`Lý do từ chối: ${entry.refusal_reason}`] : []),
+      ];
+    }
+    if (entry.presentation === 'legacy') {
+      return ['Trạng thái: Lượt đã lưu — chi tiết căn cứ không có trong bản lưu này.', entry.text];
+    }
+    const card = entry.card || {}, refs = entry.references || [];
+    const segments = card.verdict_segments?.length ? card.verdict_segments : [{ text: entry.text, cites: [] }];
+    return [
+      ...segments.map((segment) => [
+        segment.text, ...(segment.cites || []).map((cite) => `[${cite}]`),
+      ].join(' ')),
+      ...(hasSavedEvidence(entry) ? [
+        `Căn cứ ${card.grounding.label} · ${card.grounding.source_count} nguồn · Mức ${card.grounding.level}/5`,
+      ] : []),
+      ...(card.notes?.length ? ['Lưu ý:', ...card.notes.map((note) => note.text)] : []),
+      ...(refs.length ? [
+        'Nguồn của lượt này (số [n] chỉ áp dụng trong lượt):',
+        ...refs.flatMap((ref, index) => [
+          `Nguồn [${index + 1}]: ${ref.reg_title || ''}`,
+          ...(ref.rid ? [`Mã văn bản: ${ref.rid}`] : []),
+          ...(ref.version ? [`Phiên bản: ${ref.version}`] : []),
+          ...(ref.aid ? [`Điều/mục: ${ref.aid}`] : []),
+          ...(ref.art_heading ? [`Tiêu đề: ${ref.art_heading}`] : []),
+          ...(ref.clause_ids?.length ? [`Khoản: ${ref.clause_ids.join(', ')}`] : []),
+          'Trích dẫn:', ref.excerpt || '', '',
+        ]),
+      ] : []),
+    ];
+  }
   function exportConversation() {
     if (!state.transcript.length) { setLiveStatus('Chưa có hội thoại để xuất'); return; }
+    let answerTurn = 0;
     const content = [
       'HOCVU AI — LỊCH SỬ HỘI THOẠI',
       `Xuất lúc: ${new Date().toLocaleString('vi-VN')}`,
       '',
       ...state.transcript.flatMap((entry) => [
-        `${entry.role === 'user' ? 'BẠN' : 'HOCVU AI'}:`, entry.text,
-        ...(entry.references?.length ? ['Nguồn: ' + entry.references.map((ref) => `${ref.reg_title} — ${ref.art_heading}`).join('; ')] : []),
+        entry.role === 'user' ? 'BẠN:' : `HOCVU AI (lượt ${++answerTurn}):`,
+        ...(entry.role === 'user' ? [entry.text] : exportAnswer(entry)),
         '',
       ]),
     ].join('\n');

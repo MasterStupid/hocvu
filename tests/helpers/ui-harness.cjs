@@ -6,7 +6,7 @@ const vm = require('node:vm');
 
 function loadUI(options = {}) {
   const elements = new Map(), timers = new Map(), audios = [];
-  const calls = [], confirmations = [], storage = new Map();
+  const calls = [], confirmations = [], storage = new Map(), downloads = [], blobs = [], revokedURLs = [];
   let timerId = 0;
   let sessionId = 0;
   const escape = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -25,6 +25,10 @@ function loadUI(options = {}) {
     focus() { this.focused = true; }
     setAttribute(name, value) { this[name] = value; }
     addEventListener(name, callback) { this.events[name] = callback; }
+    click() {
+      if (this.download) downloads.push({ filename: this.download, href: this.href });
+      else this.events.click?.();
+    }
     scrollIntoView() { this.scrolled = true; }
     querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
     querySelectorAll(selector) {
@@ -46,6 +50,7 @@ function loadUI(options = {}) {
     }
   }
   const document = {
+    body: new Element(),
     documentElement: { dataset: {} },
     querySelector(selector) {
       if (!elements.has(selector)) elements.set(selector, new Element());
@@ -85,7 +90,11 @@ function loadUI(options = {}) {
   }
   const sandbox = {
     document, localStorage: { getItem(key) { return storage.get(key) || null; }, setItem(key, value) { storage.set(key, value); } },
-    crypto: { randomUUID() { return `test-session-${++sessionId}`; } }, navigator: {}, console,
+    crypto: { randomUUID() { return `test-session-${++sessionId}`; } }, navigator: {}, console, Blob,
+    URL: {
+      createObjectURL(blob) { blobs.push(blob); return `blob:test-${blobs.length}`; },
+      revokeObjectURL(url) { revokedURLs.push(url); },
+    },
     window: {
       speechSynthesis: synthesis,
       confirm(message) { confirmations.push(message); return options.confirm ?? true; },
@@ -108,13 +117,13 @@ function loadUI(options = {}) {
     globalThis.testUI = {
       renderAnswerCard, appendAnswer, restoreHistory, state, dom, appendTyping,
       speak, stopSpeech, stopLive, send, bind, startNewConversation,
-      deleteHistory, boot, updateComposer,
+      deleteHistory, boot, updateComposer, exportConversation,
       setSpeechHook(callback) { speak = callback; }
     };
   })();`);
   vm.runInNewContext(instrumented, sandbox, { filename });
   const ui = sandbox.testUI;
-  Object.assign(ui, { speech: [], synthesis, audios, timers, calls, confirmations, storage });
+  Object.assign(ui, { speech: [], synthesis, audios, timers, calls, confirmations, storage, downloads, blobs, revokedURLs, document });
   ui.runTimers = () => {
     const pending = [...timers.entries()];
     for (const [id, timer] of pending) { timers.delete(id); timer.callback(); }

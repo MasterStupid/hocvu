@@ -112,9 +112,9 @@ test('saved and greeting text remain escaped instead of becoming executable HTML
   assert.doesNotMatch(ui.dom.evidence.innerHTML, /<script>/);
 });
 
-test('real Python-persisted response retains its grounding and citation markers in the UI', {
+test('real Python-persisted response retains its grounding, citations and exported sources', {
   skip: !process.env.HV_HISTORY_FIXTURE,
-}, () => {
+}, async () => {
   const turns = JSON.parse(fs.readFileSync(process.env.HV_HISTORY_FIXTURE, 'utf8'));
   const ui = loadUI();
   ui.restoreHistory(turns);
@@ -122,6 +122,208 @@ test('real Python-persisted response retains its grounding and citation markers 
   assert.match(html, new RegExp(`Căn cứ ${last.card.grounding.label} · ${last.card.grounding.source_count} nguồn`));
   assert.match(html, /data-citation="1"/);
   assert.equal(ui.speech.length, 0);
+  const text = await downloadText(ui);
+  for (const ref of last.references) {
+    for (const value of [ref.reg_title, ref.rid, ref.aid, ref.art_heading, ref.excerpt]) {
+      assert.ok(text.includes(value), `export is missing saved source field: ${value}`);
+    }
+    assert.ok(text.includes(`Khoản: ${ref.clause_ids.join(', ')}`));
+  }
+  assert.equal(ui.calls.length, 0, 'export must not query the current corpus');
+});
+
+async function downloadText(ui) {
+  ui.exportConversation();
+  assert.equal(ui.blobs.length, 1);
+  assert.equal(ui.blobs[0].type, 'text/plain;charset=utf-8');
+  assert.match(ui.downloads[0].filename, /^hocvu-ai-\d{4}-\d{2}-\d{2}\.txt$/);
+  assert.equal(ui.downloads[0].href, 'blob:test-1');
+  assert.deepEqual(ui.revokedURLs, ['blob:test-1']);
+  assert.equal(ui.document.body.children.length, 0, 'download link is cleaned up');
+  assert.match(ui.dom.liveStatus.textContent, /Đã tải tệp hội thoại/);
+  return ui.blobs[0].text();
+}
+
+test('transcript keeps independent full evidence snapshots for both live and restored answers', () => {
+  for (const restore of [false, true]) {
+    const ui = loadUI(), response = grounded();
+    response.refusal_reason = '';
+    const original = JSON.parse(JSON.stringify(response));
+    if (restore) ui.restoreHistory([response]);
+    else ui.appendAnswer(response);
+    const entry = ui.state.transcript.at(-1);
+    assert.equal(entry.text, original.answer);
+    for (const key of ['references', 'card', 'refused', 'refusal_reason', 'intent']) {
+      assert.deepEqual(JSON.parse(JSON.stringify(entry[key])), original[key], key);
+    }
+    assert.equal(entry.presentation, 'answer');
+    response.references[0].excerpt = 'Đã thay đổi';
+    response.references[0].clause_ids.push('99');
+    response.card.verdict_segments[0].cites.push(99);
+    response.card.notes[0].text = 'Lưu ý khác';
+    response.card.grounding.level = 0;
+    assert.deepEqual(JSON.parse(JSON.stringify(entry.references)), original.references);
+    assert.deepEqual(JSON.parse(JSON.stringify(entry.card)), original.card);
+  }
+});
+
+test('live send exports UTF-8 text with full clauses, excerpts, assessment and citations without retrieval', async () => {
+  const response = grounded('Quy chế đào tạo — Đại học Hải Phòng');
+  response.question = 'Điều kiện bảo lưu “kết quả”?\nTiếng Việt: đ, ắ, ễ; 🎓';
+  response.references[0].rid = 'QĐ/ĐHHP-2026';
+  response.references[0].clause_ids = ['2', '3a'];
+  response.references[0].excerpt = 'Khoản 2. Sinh viên được bảo lưu.\nKhoản 3a. Giữ nguyên “kết quả” <đã học> & điểm.';
+  response.card.verdict_segments.push({ text: 'Cần đáp ứng quy định bổ sung.', cites: [1] });
+  const ui = loadUI({ request: async () => response });
+  ui.bind();
+  assert.equal(ui.dom.exportConversation.events.click, ui.exportConversation);
+  await ui.send(response.question);
+  assert.equal(ui.calls.length, 1);
+  const text = await downloadText(ui);
+  assert.match(text, /^HOCVU AI — LỊCH SỬ HỘI THOẠI\nXuất lúc: .+\n\nBẠN:\n/);
+  for (const value of [
+    response.question, 'HOCVU AI (lượt 1):',
+    'Được bảo lưu khi đủ điều kiện. [1]', 'Cần đáp ứng quy định bổ sung. [1]',
+    'Căn cứ mạnh · 1 nguồn · Mức 5/5', 'Lưu ý:\nÁp dụng cho sinh viên.',
+    'Nguồn [1]: Quy chế đào tạo — Đại học Hải Phòng', 'Mã văn bản: QĐ/ĐHHP-2026',
+    'Phiên bản: 2026', 'Điều/mục: Điều 5', 'Tiêu đề: Bảo lưu', 'Khoản: 2, 3a',
+    `Trích dẫn:\n${response.references[0].excerpt}`,
+  ]) assert.ok(text.includes(value), `missing: ${value}`);
+  assert.doesNotMatch(text, /undefined|null|\[object Object\]|&lt;|&amp;|�/);
+  const bytes = Buffer.from(await ui.blobs[0].arrayBuffer());
+  assert.equal(bytes.toString('utf8'), text, 'Unicode survives the downloaded bytes');
+  assert.equal(ui.calls.length, 1, 'export makes no additional API calls');
+});
+
+test('live and restored snapshots produce identical export bodies', async () => {
+  const response = grounded();
+  const live = loadUI({ request: async () => response }), restored = loadUI();
+  await live.send(response.question);
+  restored.restoreHistory([response]);
+  const liveText = await downloadText(live), restoredText = await downloadText(restored);
+  assert.equal(liveText.split('\n').slice(2).join('\n'), restoredText.split('\n').slice(2).join('\n'));
+  assert.equal(restored.calls.length, 0);
+});
+
+test('multiple turns scope repeated [1] to their own original sources, not the selected sidebar', async () => {
+  const first = grounded('Văn bản thứ nhất'), second = grounded('Văn bản thứ hai');
+  first.question = 'Câu hỏi thứ nhất?';
+  first.answer = first.card.verdict_segments[0].text = 'Kết luận thứ nhất.';
+  first.references[0].excerpt = 'Đoạn trích thứ nhất.';
+  second.question = 'Câu hỏi thứ hai?';
+  second.answer = second.card.verdict_segments[0].text = 'Kết luận thứ hai.';
+  second.references[0].aid = 'Điều 10';
+  second.references[0].clause_ids = ['4'];
+  second.references[0].excerpt = 'Đoạn trích thứ hai.';
+  const ui = loadUI();
+  ui.restoreHistory([first, second]);
+  botMessages(ui)[0].querySelectorAll('[data-citation]')[0].events.click();
+  assert.match(ui.dom.evidence.innerHTML, /Văn bản thứ nhất/);
+  first.references[0].excerpt = 'Nội dung đã bị sửa sau khi hiển thị';
+  second.references[0].clause_ids[0] = '99';
+  const text = await downloadText(ui);
+  const one = text.split('HOCVU AI (lượt 1):')[1].split('BẠN:')[0];
+  const two = text.split('HOCVU AI (lượt 2):')[1];
+  assert.match(one, /Kết luận thứ nhất\. \[1\]/);
+  assert.match(one, /Nguồn \[1\]: Văn bản thứ nhất/);
+  assert.match(one, /Điều\/mục: Điều 5\nTiêu đề: Bảo lưu\nKhoản: 2\nTrích dẫn:\nĐoạn trích thứ nhất\./);
+  assert.doesNotMatch(one, /thứ hai|Điều 10|Khoản: 4/);
+  assert.match(two, /Kết luận thứ hai\. \[1\]/);
+  assert.match(two, /Nguồn \[1\]: Văn bản thứ hai/);
+  assert.match(two, /Điều\/mục: Điều 10\nTiêu đề: Bảo lưu\nKhoản: 4\nTrích dẫn:\nĐoạn trích thứ hai\./);
+  assert.doesNotMatch(two, /thứ nhất|Khoản: 99|Nội dung đã bị sửa/);
+  assert.equal((text.match(/Nguồn \[1\]:/g) || []).length, 2);
+  assert.equal(ui.calls.length, 0);
+});
+
+test('multiple references preserve snapshot ordering, duplicate document IDs and per-segment citation numbers', async () => {
+  const response = grounded();
+  response.references.push({
+    ...response.references[0], aid: 'Điều 7', art_heading: 'Thời hạn', clause_ids: ['1', '2'],
+    excerpt: 'Đoạn trích khác trong cùng văn bản.',
+  });
+  response.card.verdict_segments = [
+    { text: 'Đối chiếu hai điều.', cites: [2, 1] },
+    { text: 'Nội dung không gắn nguồn.', cites: [] },
+  ];
+  response.card.grounding.source_count = 2;
+  const ui = loadUI();
+  ui.restoreHistory([response]);
+  const text = await downloadText(ui);
+  assert.match(text, /Đối chiếu hai điều\. \[2\] \[1\]\nNội dung không gắn nguồn\./);
+  assert.match(text, /Nguồn \[1\]:[^]*Điều\/mục: Điều 5[^]*Nguồn \[2\]:[^]*Điều\/mục: Điều 7/);
+  assert.match(text, /Khoản: 1, 2\nTrích dẫn:\nĐoạn trích khác trong cùng văn bản\./);
+  assert.doesNotMatch(text, /Nguồn \[3\]/);
+});
+
+test('greetings and refusals export their real status, never card-shaped evidence', async () => {
+  for (const restore of [false, true]) {
+    for (const kind of ['greeting', 'refusal']) {
+      const response = grounded('Nguồn không được dùng');
+      response.intent = kind === 'greeting' ? 'greeting' : 'academic_rules';
+      response.refused = kind === 'refusal';
+      response.refusal_reason = response.refused ? 'Không có quy định phù hợp.' : '';
+      response.answer = response.refused ? 'Chưa tìm thấy căn cứ.' : 'Chào bạn!';
+      const ui = loadUI();
+      if (restore) ui.restoreHistory([response]);
+      else ui.appendAnswer(response);
+      const text = await downloadText(ui);
+      assert.ok(text.includes(response.answer));
+      assert.match(text, response.refused ? /Trạng thái: Từ chối trả lời/ : /Trạng thái: Lời chào/);
+      if (response.refused) assert.match(text, /Lý do từ chối: Không có quy định phù hợp\./);
+      assert.doesNotMatch(text, /Nguồn \[|Nguồn không được dùng|Căn cứ mạnh|Khoản:|Trích dẫn:|Được bảo lưu/);
+    }
+  }
+});
+
+test('legacy missing or partial metadata exports an explicit unknown, without reconstructing sources from IDs', async () => {
+  for (const extra of [
+    {},
+    { references: null, card: null, refused: null },
+    { refused: false, references: grounded().references, card: { grounding: {} } },
+  ]) {
+    const ui = loadUI();
+    ui.restoreHistory([{
+      question: 'Câu hỏi cũ?', answer: 'Câu trả lời cũ [1].', intent: 'academic_rules',
+      rid: 'Mã cũ không xác định nguồn', article_id: 'Điều 99', ...extra,
+    }]);
+    const text = await downloadText(ui);
+    assert.match(text, /Trạng thái: Lượt đã lưu — chi tiết căn cứ không có trong bản lưu này\./);
+    assert.match(text, /Câu trả lời cũ \[1\]\./);
+    assert.doesNotMatch(text, /Nguồn \[1\]:|Mã văn bản:|Điều\/mục:|Khoản:|Căn cứ yếu|Căn cứ mạnh/);
+    assert.equal(ui.calls.length, 0);
+  }
+});
+
+test('legacy greetings and refusals export as such, rather than unknown academic answers', async () => {
+  for (const extra of [
+    { intent: 'greeting' },
+    { intent: 'unsafe' },
+    { intent: 'academic_rules', article_id: '', rid: '' },
+  ]) {
+    const ui = loadUI();
+    ui.restoreHistory([{ question: 'Câu hỏi cũ?', answer: 'Nội dung cũ.', ...extra }]);
+    const text = await downloadText(ui);
+    assert.match(text, extra.intent === 'greeting' ? /Trạng thái: Lời chào/ : /Trạng thái: Từ chối trả lời/);
+    assert.doesNotMatch(text, /chi tiết căn cứ không có|Nguồn \[|Căn cứ yếu/);
+  }
+});
+
+test('empty exports download nothing; New only exports the currently displayed conversation', async () => {
+  const ui = loadUI({ request: async () => grounded('Chỉ nguồn mới') });
+  ui.exportConversation();
+  assert.match(ui.dom.liveStatus.textContent, /Chưa có hội thoại để xuất/);
+  assert.equal(ui.blobs.length, 0);
+  ui.restoreHistory([grounded('Nguồn không còn hiển thị')]);
+  ui.startNewConversation();
+  ui.exportConversation();
+  assert.equal(ui.blobs.length, 0);
+  await ui.send('Câu hỏi mới?');
+  const text = await downloadText(ui);
+  assert.match(text, /Câu hỏi mới\?/);
+  assert.match(text, /HOCVU AI \(lượt 1\):/);
+  assert.match(text, /Nguồn \[1\]: Chỉ nguồn mới/);
+  assert.doesNotMatch(text, /Nguồn không còn hiển thị|lượt 2/);
 });
 
 test('delete button is present, mobile-visible, and bound to the real delete action', () => {
