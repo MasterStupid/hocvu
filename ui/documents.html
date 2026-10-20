@@ -24,7 +24,7 @@
         <label class="drop-zone" data-doc="drop-zone" for="file-input">
           <input id="file-input" data-doc="file-input" type="file" multiple accept=".pdf,.docx,.png,.jpg,.jpeg,.webp,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png,image/jpeg,image/webp">
           <strong>Kéo tệp vào đây hoặc chọn tệp</strong>
-          <span>PDF, DOCX, PNG, JPG, WEBP · tối đa 25 MB · PDF không được mã hóa</span>
+          <span>PDF, DOCX, PNG, JPG, WEBP · tối đa 25 MB/tệp · 20 tệp và 50 MB/lô · PDF không được mã hóa</span>
         </label>
         <label class="ocr-option"><input data-doc="ocr" type="checkbox"> <span>Mặc định bật OCR tiếng Việt cho các tệp mới thêm vào hàng đợi</span><small>OCR áp dụng cho ảnh, trang PDF scan và ảnh nhúng trong DOCX; xử lý thực hiện cục bộ, giữ nguyên lớp văn bản có sẵn và không gửi ảnh sang dịch vụ AI.</small></label>
         <section class="upload-queue" data-doc="queue" aria-live="polite"></section>
@@ -64,6 +64,6 @@
   </dialog>
   <script src="api-errors.js?v=20261019-1"></script>
   <script src="document-date-editor.js?v=20261020-1"></script>
-  <script src="documents.js?v=20261020-ui-fixes-1"></script>
+  <script src="documents.js?v=20261020-batch-1"></script>
 </body>
 </html>

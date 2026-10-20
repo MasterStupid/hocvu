@@ -20,3 +20,9 @@ Document-mutation rollback must not depend on allocating space to serialize a ne
 **Why:** an index build can fail because the disk is full; rewriting JSON during rollback can fail for the same reason, leaving an upload committed despite an error. The manifest backup must also be restored so later recovery cannot resurrect the failed change.
 
 **How to apply:** stage rollback copies before changing metadata, restore them by rename, and retain deleted documents' source files until indexing succeeds. Keep the existing writer admission boundary around the entire transaction; a whole-manifest snapshot is not a merge strategy for concurrent writers.
+
+Batch document mutations are all-or-nothing; file cleanup after an index commit is not a rollback opportunity.
+
+**Why:** reporting a committed deletion as a failed transaction encourages retries against documents already removed from the index. A lost HTTP response likewise cannot prove whether a commit happened.
+
+**How to apply:** report cleanup warnings separately from transaction failure. In the browser, retain pending uploads/selections on an unconfirmed response and explicitly tell the user to reconcile the library before retrying; never run a final reindex from browser cleanup code.

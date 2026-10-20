@@ -252,13 +252,24 @@ class HocVuEngine:
         return list(docs.values())
 
     def add_document(self, filename: str, content: bytes, use_ocr: bool = False, metadata: dict | None = None) -> dict:
-        with self.documents.adding(filename, content, use_ocr=use_ocr, metadata=metadata) as item:
-            _, self.searcher = build_index(self.config, return_searcher=True)
-        return item
+        return self.add_documents([{
+            "filename": filename, "content": content, "use_ocr": use_ocr, "metadata": metadata,
+        }])["items"][0]
+
+    def add_documents(self, uploads: list[dict]) -> dict:
+        with self.documents.adding_many(uploads) as items:
+            stats, searcher = build_index(self.config, return_searcher=True)
+        self.searcher = searcher
+        return {"items": items, "index": stats}
 
     def remove_document(self, item_id: str) -> None:
-        with self.documents.removing(item_id):
-            _, self.searcher = build_index(self.config, return_searcher=True)
+        self.remove_documents([item_id])
+
+    def remove_documents(self, item_ids: list[str]) -> dict:
+        with self.documents.removing_many(item_ids) as result:
+            stats, searcher = build_index(self.config, return_searcher=True)
+            self.searcher = searcher
+        return {**result, "index": stats}
 
     def update_document_date(self, item_id: str, document_date: str) -> dict:
         with self.documents.change_date(item_id, document_date) as item:

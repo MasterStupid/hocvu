@@ -3,6 +3,7 @@
   const $ = (key) => document.querySelector(`[data-doc="${key}"]`);
   const dom = { form: $('upload-form'), input: $('file-input'), ocr: $('ocr'), queue: $('queue'), selected: $('selected-file'), status: $('status'), table: $('table'), count: $('count'), reindex: $('reindex'), zone: $('drop-zone'), upload: $('upload'), removeQueued: $('remove-queued'), removeLibrary: $('remove-library'), preview: $('preview'), previewTitle: $('preview-title'), previewMeta: $('preview-meta'), previewText: $('preview-text'), closePreview: $('close-preview') };
   let queue = [], librarySelection = new Set(), uploading = false;
+  const MAX_BATCH_FILES = 20, MAX_BATCH_BYTES = 50 * 1024 * 1024;
   const escapeHTML = (value) => { const box = document.createElement('div'); box.textContent = value || ''; return box.innerHTML; };
   const formatSize = (bytes) => bytes < 1024 * 1024 ? `${Math.ceil(bytes / 1024)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   const setStatus = (message, type = '') => { dom.status.textContent = message; dom.status.className = `upload-status ${type}`; };
@@ -20,14 +21,22 @@
       setStatus('Đã sửa ngày áp dụng và cập nhật chỉ mục tìm kiếm.', 'success');
     },
   });
-  function updateSelected() { dom.selected.textContent = queue.length ? `${queue.length} tệp trong hàng đợi` : 'Chưa chọn tệp'; dom.upload.disabled = uploading || !queue.length; dom.removeQueued.disabled = uploading || !queue.some((item) => item.selected); }
+  function updateSelected() {
+    dom.selected.textContent = queue.length ? `${queue.length} tệp trong hàng đợi` : 'Chưa chọn tệp';
+    dom.upload.disabled = uploading || !queue.length;
+    dom.removeQueued.disabled = uploading || !queue.some((item) => item.selected);
+    dom.removeLibrary.disabled = uploading || !librarySelection.size;
+    dom.reindex.disabled = uploading;
+    dom.queue.querySelectorAll('input').forEach((input) => { input.disabled = uploading; });
+    dom.table.querySelectorAll('[data-delete], [data-library-select], [data-edit-date]').forEach((input) => { input.disabled = uploading; });
+  }
   function renderQueue() {
     dom.queue.innerHTML = queue.length ? `<h3>Hàng đợi tải lên</h3>${queue.map((item) => `<article class="queue-item"><label><input data-queue-select="${item.id}" type="checkbox" ${item.selected ? 'checked' : ''}> Chọn</label><strong>${escapeHTML(item.file.name)}</strong><small>${formatSize(item.file.size)}</small><div class="queue-fields"><label>STT<input data-queue-field="order" data-queue-id="${item.id}" type="number" min="1" value="${escapeHTML(item.order)}"></label><label>Số quyết định<input data-queue-field="decision_number" data-queue-id="${item.id}" value="${escapeHTML(item.decision_number)}"></label><label>Điều / khoản<input data-queue-field="article_clause" data-queue-id="${item.id}" value="${escapeHTML(item.article_clause)}"></label><label>Ngày áp dụng<input data-queue-field="document_date" data-queue-id="${item.id}" type="date" value="${escapeHTML(item.document_date)}"></label><label class="queue-ocr"><input data-queue-field="ocr" data-queue-id="${item.id}" type="checkbox" ${item.ocr ? 'checked' : ''}> OCR</label></div></article>`).join('')}` : '';
     dom.queue.querySelectorAll('[data-queue-select]').forEach((input) => input.addEventListener('change', () => { queue.find((entry) => entry.id === input.dataset.queueSelect).selected = input.checked; updateSelected(); }));
     dom.queue.querySelectorAll('[data-queue-field]').forEach((input) => input.addEventListener('change', () => { const item = queue.find((entry) => entry.id === input.dataset.queueId); item[input.dataset.queueField] = input.type === 'checkbox' ? input.checked : input.value; }));
     updateSelected();
   }
-  function addFiles(files) { for (const file of files) { if (!/\.(pdf|docx|png|jpe?g|webp)$/i.test(file.name) || file.size > 25 * 1024 * 1024) { setStatus(`${file.name}: chỉ nhận PDF/DOCX/PNG/JPG/WEBP, tối đa 25 MB.`, 'error'); continue; } queue.push({ id: `${Date.now()}-${Math.random()}`, file, selected: false, order: String(queue.length + 1), decision_number: '', article_clause: '', document_date: today(), ocr: dom.ocr.checked }); } dom.input.value = ''; renderQueue(); }
+  function addFiles(files) { for (const file of files) { if (!/\.(pdf|docx|png|jpe?g|webp)$/i.test(file.name) || !file.size || file.size > 25 * 1024 * 1024) { setStatus(`${file.name}: chỉ nhận PDF/DOCX/PNG/JPG/WEBP, từ 1 byte đến 25 MB.`, 'error'); continue; } if (queue.length >= MAX_BATCH_FILES || queue.reduce((sum, item) => sum + item.file.size, 0) + file.size > MAX_BATCH_BYTES) { setStatus('Hàng đợi tối đa 20 tệp, tổng 50 MB. Hãy xử lý hàng đợi trước khi thêm tệp.', 'error'); break; } queue.push({ id: `${Date.now()}-${Math.random()}`, file, selected: false, order: String(queue.length + 1), decision_number: '', article_clause: '', document_date: today(), ocr: dom.ocr.checked }); } dom.input.value = ''; renderQueue(); }
   function metadataLine(item) { return [item.order && `STT ${item.order}`, item.decision_number && `QĐ ${item.decision_number}`, item.article_clause, item.document_date, item.ocr && 'OCR'].filter(Boolean).join(' · '); }
   async function load() {
     const items = await request('/api/documents'), uploads = items.filter((item) => item.kind === 'uploaded');
@@ -40,9 +49,35 @@
       const item = uploads.find((entry) => entry.id === button.dataset.editDate);
       if (item) dateEditor.open(item);
     }));
-    dom.removeLibrary.disabled = !librarySelection.size;
+    const available = new Set(uploads.map((item) => item.id));
+    librarySelection = new Set([...librarySelection].filter((id) => available.has(id)));
+    updateSelected();
   }
-  async function deleteDocuments(ids) { if (!ids.length || !confirm(`Xóa ${ids.length} tài liệu đã chọn khỏi cơ sở tri thức?`)) return; try { for (const id of ids) await request(`/api/documents/${id}`, { method: 'DELETE' }); ids.forEach((id) => librarySelection.delete(id)); setStatus('Đã xóa tài liệu và cập nhật chỉ mục.', 'success'); await load(); } catch (error) { setStatus(error.message, 'error'); } }
+  function mutationError(error) {
+    // A lost response is not proof of rollback: the server may have committed.
+    return error.status ? error.message : `${error.message} Chưa xác nhận được kết quả; máy chủ có thể đã hoàn tất. Hãy tải lại thư viện trước khi thử lại.`;
+  }
+  async function refreshAfterCommit(message) {
+    setStatus(message, 'success');
+    try { await load(); }
+    catch (error) { setStatus(`${message} Chưa tải lại được thư viện: ${error.message}`, 'success'); }
+  }
+  async function deleteDocuments(ids) {
+    if (uploading || !ids.length) return;
+    if (ids.length > MAX_BATCH_FILES) { setStatus('Mỗi lần chỉ xóa tối đa 20 tài liệu.', 'error'); return; }
+    if (!confirm(`Xóa ${ids.length} tài liệu đã chọn khỏi cơ sở tri thức? Cả lô sẽ được giữ nguyên nếu cập nhật chỉ mục thất bại.`)) return;
+    uploading = true; updateSelected();
+    setStatus(`Đang xóa ${ids.length} tài liệu và cập nhật chỉ mục một lần...`);
+    try {
+      const result = await request('/api/documents/delete-batch', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }),
+      });
+      result.deleted.forEach((id) => librarySelection.delete(id));
+      const warning = result.cleanup_pending?.length ? ' Một số tệp gốc chưa dọn được trên đĩa.' : '';
+      await refreshAfterCommit(`Đã xóa ${result.deleted.length} tài liệu và cập nhật chỉ mục.${warning}`);
+    } catch (error) { setStatus(mutationError(error), 'error'); }
+    finally { uploading = false; updateSelected(); }
+  }
   async function preview(id) { try { const data = await request(`/api/documents/${id}/text`); dom.previewTitle.textContent = data.title; dom.previewMeta.textContent = `${data.chunk_count || 0} đoạn truy xuất · văn bản đã trích xuất`; dom.previewText.textContent = data.text; dom.preview.hidden = false; dom.preview.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (error) { setStatus(error.message, 'error'); } }
   dom.input.addEventListener('change', () => addFiles([...dom.input.files]));
   ['dragenter', 'dragover'].forEach((event) => dom.zone.addEventListener(event, (e) => { e.preventDefault(); dom.zone.classList.add('dragging'); }));
@@ -54,26 +89,27 @@
   dom.form.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (uploading || !queue.length) return;
-    const batch = [...queue], total = batch.length;
+    const batch = queue.map((item) => ({ ...item })), total = batch.length;
     uploading = true; updateSelected();
-    let done = 0;
     try {
-      for (const item of batch) {
-        setStatus(`Đang xử lý ${done + 1}/${total}: ${item.file.name}`);
-        const body = new FormData();
-        body.append('file', item.file); body.append('ocr', item.ocr ? 'true' : 'false');
-        for (const key of ['order', 'decision_number', 'article_clause', 'document_date']) body.append(key, item[key]);
-        await request('/api/documents/upload', { method: 'POST', body });
-        queue = queue.filter((entry) => entry.id !== item.id);
-        done += 1; renderQueue();
-      }
-      setStatus(`Đã tải lên và lập chỉ mục ${done} tài liệu.`, 'success'); await load();
+      setStatus(`Đang xử lý cả lô ${total} tệp và lập chỉ mục một lần...`);
+      const body = new FormData();
+      batch.forEach((item) => body.append('files', item.file));
+      body.append('metadata', JSON.stringify(batch.map((item) => ({
+        ocr: item.ocr, order: item.order, decision_number: item.decision_number,
+        article_clause: item.article_clause, document_date: item.document_date,
+      }))));
+      const result = await request('/api/documents/upload-batch', { method: 'POST', body });
+      const completed = new Set(batch.map((item) => item.id));
+      queue = queue.filter((item) => !completed.has(item.id));
+      renderQueue();
+      await refreshAfterCommit(`Đã tải lên và lập chỉ mục ${result.items.length} tài liệu.`);
     } catch (error) {
-      setStatus(`${done} tệp đã xong. ${error.message}`, 'error');
+      setStatus(`${mutationError(error)} Hàng đợi được giữ lại.`, 'error');
     } finally {
       uploading = false; updateSelected();
     }
   });
-  dom.reindex.addEventListener('click', async () => { dom.reindex.disabled = true; setStatus('Đang xây dựng lại chỉ mục...'); try { const result = await request('/api/documents/reindex', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); setStatus(`Đã lập chỉ mục ${result.documents} tài liệu với ${result.chunks} đoạn nội dung.`, 'success'); await load(); } catch (error) { setStatus(error.message, 'error'); } finally { dom.reindex.disabled = false; } });
+  dom.reindex.addEventListener('click', async () => { if (uploading) return; uploading = true; updateSelected(); setStatus('Đang xây dựng lại chỉ mục...'); try { const result = await request('/api/documents/reindex', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); await refreshAfterCommit(`Đã lập chỉ mục ${result.documents} tài liệu với ${result.chunks} đoạn nội dung.`); } catch (error) { setStatus(mutationError(error), 'error'); } finally { uploading = false; updateSelected(); } });
   renderQueue(); load().catch((error) => setStatus(error.message, 'error'));
 })();

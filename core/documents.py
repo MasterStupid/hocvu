@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import io
 import hashlib
+import logging
 import re
 import shutil
 import tempfile
@@ -29,6 +30,8 @@ class DocumentRepository:
     allowed_extensions = {".pdf", ".docx", ".png", ".jpg", ".jpeg", ".webp"}
     image_extensions = {".png", ".jpg", ".jpeg", ".webp"}
     max_bytes = 25 * 1024 * 1024
+    max_batch_files = 20
+    max_batch_bytes = 50 * 1024 * 1024
     extraction_version = 5
     pdf_text_min_chars = 40
     # Bump whenever _make_articles (or anything else that changes article
@@ -173,18 +176,49 @@ class DocumentRepository:
 
     @contextmanager
     def adding(self, filename: str, content: bytes, use_ocr: bool = False, metadata: dict | None = None):
-        """Keep a new upload only if the caller's index build succeeds."""
-        item_id = uuid.uuid4().hex
-        path = self.root / f"{item_id}{Path(filename).suffix.lower()}"
+        with self.adding_many([{
+            "filename": filename, "content": content, "use_ocr": use_ocr, "metadata": metadata,
+        }]) as items:
+            yield items[0]
+
+    @classmethod
+    def validate_batch_count(cls, count: int) -> None:
+        if not 1 <= count <= cls.max_batch_files:
+            raise DocumentError(f"Mỗi lô phải có từ 1 đến {cls.max_batch_files} tài liệu.")
+
+    @contextmanager
+    def adding_many(self, uploads: list[dict]):
+        """Publish one manifest, rolling back every new file if indexing fails."""
+        self.validate_batch_count(len(uploads))
+        if sum(len(upload["content"]) for upload in uploads) > self.max_batch_bytes:
+            raise DocumentError("Tổng dung lượng mỗi lô không được vượt quá 50 MB.")
+        paths = []
         try:
             with self._manifest_transaction():
-                yield self._add(filename, content, use_ocr, metadata, item_id)
+                entries = self._read_manifest()
+                added = []
+                for upload in uploads:
+                    item_id = uuid.uuid4().hex
+                    filename = upload["filename"]
+                    paths.extend((
+                        self.root / f"{item_id}{Path(filename).suffix.lower()}",
+                        self._extracted_path(item_id),
+                    ))
+                    try:
+                        added.append(self._add(
+                            filename, upload["content"], upload.get("use_ocr", False),
+                            upload.get("metadata"), item_id, entries,
+                        ))
+                    except DocumentError as exc:
+                        raise DocumentError(f"{filename}: {exc}") from exc
+                self._write_manifest(entries)
+                yield added
         except BaseException:
-            path.unlink(missing_ok=True)
-            self._extracted_path(item_id).unlink(missing_ok=True)
+            for path in paths:
+                path.unlink(missing_ok=True)
             raise
 
-    def _add(self, filename: str, content: bytes, use_ocr: bool, metadata: dict | None, item_id: str) -> dict:
+    def _add(self, filename: str, content: bytes, use_ocr: bool, metadata: dict | None, item_id: str, entries: list[dict]) -> dict:
         suffix = Path(filename).suffix.lower()
         if suffix not in self.allowed_extensions:
             raise DocumentError("Chỉ hỗ trợ PDF, DOCX hoặc ảnh PNG/JPG/WEBP khi bật OCR.")
@@ -197,7 +231,6 @@ class DocumentRepository:
         if suffix == ".docx" and content[:2] != b"PK":
             raise DocumentError("Tệp không phải DOCX hợp lệ.")
         content_hash = hashlib.sha256(content).hexdigest()
-        entries = self._read_manifest()
         for existing in entries:
             if self._content_hash(existing) == content_hash:
                 raise DocumentError(f"Tệp trùng với tài liệu đã tải lên: {existing.get('filename', 'không rõ tên')}.")
@@ -266,7 +299,6 @@ class DocumentRepository:
             **metadata,
         }
         entries.append(entry)
-        self._write_manifest(entries)
         return entry
 
     @staticmethod
@@ -464,18 +496,33 @@ class DocumentRepository:
 
     @contextmanager
     def removing(self, item_id: str):
-        """Hide the entry for reindexing, retaining files until it succeeds."""
-        with self._manifest_transaction():
-            entries = self._read_manifest()
-            selected = next((item for item in entries if item["id"] == item_id), None)
-            if not selected:
-                raise DocumentError("Không tìm thấy tài liệu.")
-            self._write_manifest([item for item in entries if item["id"] != item_id])
+        with self.removing_many([item_id]):
             yield
-        # The manifest/index commit has succeeded. Cleanup errors must not
-        # resurrect an entry that the committed search index no longer has.
-        (self.root / selected["stored_name"]).unlink(missing_ok=True)
-        self._extracted_path(item_id).unlink(missing_ok=True)
+
+    @contextmanager
+    def removing_many(self, item_ids: list[str]):
+        """Retain all originals until the caller commits the new index."""
+        self.validate_batch_count(len(item_ids))
+        if len(set(item_ids)) != len(item_ids):
+            raise DocumentError("Danh sách xóa có mã tài liệu trùng nhau.")
+        entries = self._read_manifest()
+        selected = [item for item in entries if item["id"] in item_ids]
+        if len(selected) != len(item_ids):
+            raise DocumentNotFoundError("Không tìm thấy một hoặc nhiều tài liệu; chưa xóa tài liệu nào.")
+        result = {"deleted": list(item_ids), "cleanup_pending": []}
+        with self._manifest_transaction():
+            self._write_manifest([item for item in entries if item["id"] not in item_ids])
+            yield result
+        # Index commit is irreversible here. Report cleanup separately rather
+        # than telling the client a committed deletion failed (and to retry it).
+        for item in selected:
+            for path in (self.root / item["stored_name"], self._extracted_path(item["id"])):
+                try:
+                    path.unlink(missing_ok=True)
+                except OSError:
+                    if item["id"] not in result["cleanup_pending"]:
+                        result["cleanup_pending"].append(item["id"])
+                    logging.getLogger(__name__).warning("Document cleanup pending: %s", item["id"], exc_info=True)
 
     def get_text(self, item_id: str) -> dict:
         entry = next((item for item in self._read_manifest() if item["id"] == item_id), None)

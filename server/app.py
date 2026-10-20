@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+import asyncio
 import hashlib
 import base64
 import binascii
@@ -21,8 +22,9 @@ import anyio
 from fastapi import FastAPI, HTTPException, Request, Response, UploadFile, File, Form, Query, status
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from starlette.concurrency import run_in_threadpool
+from starlette.datastructures import UploadFile as StarletteUploadFile
 
 from core.engine import HocVuEngine
 from core.session import LEGACY_API_OWNER, SessionAccessError, SessionClosedError, validate_session_id
@@ -118,7 +120,34 @@ def _call_engine(method: str, *args, **kwargs):
 
 async def _mutate_documents(method: str, *args, **kwargs):
     async with _document_write_lock:
-        return await run_in_threadpool(_call_engine, method, *args, **kwargs)
+        return await _finish_document_write(method, *args, **kwargs)
+
+
+async def _finish_document_write(method: str, *args, **kwargs):
+    """Never release writer admission while its synchronous worker still runs.
+
+    ASGI normally leaves handlers running after disconnect, and AnyIO shields
+    its workers. Also handle direct asyncio task cancellation: a Python thread
+    cannot be stopped safely in the middle of the manifest/index transaction.
+    """
+    worker = asyncio.create_task(run_in_threadpool(_call_engine, method, *args, **kwargs))
+    cancelled = False
+    with anyio.CancelScope(shield=True):
+        while True:
+            try:
+                result = await asyncio.shield(worker)
+                break
+            except asyncio.CancelledError:
+                if worker.cancelled():
+                    raise
+                cancelled = True
+            except Exception:
+                if cancelled:
+                    raise asyncio.CancelledError() from None
+                raise
+    if cancelled:
+        raise asyncio.CancelledError()
+    return result
 
 
 # ── Pydantic Request / Response Models ───────────────────────────────────────
@@ -139,6 +168,20 @@ class TTSRequest(BaseModel):
 class DocumentDateRequest(BaseModel):
     model_config = {"extra": "forbid"}
     document_date: str = Field(..., min_length=1, max_length=32, description="Ngày áp dụng mới, định dạng YYYY-MM-DD")
+
+
+class DocumentBatchMetadata(BaseModel):
+    model_config = {"extra": "forbid", "strict": True}
+    ocr: bool = False
+    order: str = Field("", max_length=20)
+    decision_number: str = Field("", max_length=100)
+    article_clause: str = Field("", max_length=100)
+    document_date: str = Field("", max_length=32)
+
+
+class DocumentDeleteBatch(BaseModel):
+    model_config = {"extra": "forbid"}
+    ids: list[str] = Field(..., min_length=1, max_length=DocumentRepository.max_batch_files)
 
 
 # ── Khởi tạo Ứng dụng FastAPI ────────────────────────────────────────────────
@@ -333,14 +376,73 @@ async def upload_document(
         if len(content) > DocumentRepository.max_bytes:
             raise HTTPException(status_code=400, detail="Kích thước tệp vượt quá 25 MB.")
         try:
-            return await run_in_threadpool(
-                _call_engine, "add_document", file.filename, content,
+            return await _finish_document_write(
+                "add_document", file.filename, content,
                 use_ocr=use_ocr, metadata=metadata,
             )
         except DocumentError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
         except Exception as exc:
             raise HTTPException(status_code=400, detail=f"Không thể đọc tệp: {exc}")
+
+
+@app.post("/api/documents/upload-batch", status_code=201, summary="Tải một lô, lập chỉ mục một lần")
+async def upload_documents(request: Request):
+    # Parse a bounded number of spooled files only after writer admission.
+    # Do not accumulate full-size buffers for requests waiting on another writer.
+    async with _document_write_lock:
+        async with request.form(
+            max_files=DocumentRepository.max_batch_files, max_fields=1, max_part_size=65536,
+        ) as form:
+            files = form.getlist("files")
+            try:
+                DocumentRepository.validate_batch_count(len(files))
+                raw = form.get("metadata", "[]")
+                if not isinstance(raw, str) or len(raw) > 65536:
+                    raise DocumentError("Thông tin tài liệu quá dài hoặc không hợp lệ.")
+                metadata = json.loads(raw)
+                if not isinstance(metadata, list) or len(metadata) != len(files):
+                    raise DocumentError("Thông tin tài liệu phải khớp từng tệp trong lô.")
+                metadata = [DocumentBatchMetadata.model_validate(item) for item in metadata]
+                uploads, total = [], 0
+                for file, item in zip(files, metadata):
+                    if not isinstance(file, StarletteUploadFile) or not file.filename:
+                        raise DocumentError("Hãy chọn tệp có tên hợp lệ.")
+                    # Bound even the last read: aggregate limit plus one sentinel
+                    # byte, rather than another complete 25 MB file.
+                    limit = min(DocumentRepository.max_bytes, DocumentRepository.max_batch_bytes - total)
+                    content = await file.read(limit + 1)
+                    if len(content) > limit:
+                        raise DocumentError("Tệp vượt quá 25 MB hoặc tổng dung lượng lô vượt quá 50 MB.")
+                    total += len(content)
+                    values = item.model_dump()
+                    uploads.append({
+                        "filename": file.filename, "content": content,
+                        "use_ocr": values.pop("ocr"), "metadata": values,
+                    })
+                return await _finish_document_write("add_documents", uploads)
+            except (DocumentError, json.JSONDecodeError, ValidationError) as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Chưa thể tải lô và cập nhật chỉ mục. Cả lô đã được hoàn tác; hãy thử lại.",
+                ) from exc
+
+
+@app.post("/api/documents/delete-batch", summary="Xóa một lô, lập chỉ mục một lần")
+async def remove_documents(payload: DocumentDeleteBatch):
+    try:
+        return await _mutate_documents("remove_documents", payload.ids)
+    except DocumentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except DocumentError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Chưa thể xóa lô và cập nhật chỉ mục. Cả lô được giữ nguyên; hãy thử lại.",
+        ) from exc
 
 
 @app.get("/api/documents/{item_id}/text", summary="Xem nội dung văn bản trích xuất")
