@@ -32,13 +32,18 @@ class FollowUpRecognitionTests(unittest.TestCase):
             "Còn điều kiện nào khác?", "Con dieu kien nao khac",
             "Nói rõ hơn.", "Cụ thể hơn?", "Còn trường hợp này?",
             "Được không?", "Tại sao?", "Vậy sao?",
+            "Thế còn thời gian tối đa?", "The con thoi gian toi da?",
+            "Còn thời hạn là bao lâu?", "Thời gian tối thiểu là bao nhiêu?",
         ):
             with self.subTest(question=question):
                 self.assertTrue(is_contextual_follow_up(question))
                 self.assertTrue(is_context_dependent(question))
 
     def test_discourse_prefix_can_still_have_an_independent_subject(self):
-        for question in ("Thế còn học phí?", "The con hoc phi", "Vậy còn đồ án?"):
+        for question in (
+            "Thế còn học phí?", "The con hoc phi", "Vậy còn đồ án?",
+            "Thế còn thời gian thực tập?", "Thế còn wifi?",
+        ):
             with self.subTest(question=question):
                 self.assertTrue(is_contextual_follow_up(question))
                 self.assertFalse(is_context_dependent(question))
@@ -62,7 +67,8 @@ class MultiturnContextTests(unittest.TestCase):
     def setUp(self):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
-        with patch("core.engine.SESSION_DB", Path(directory.name) / "sessions.db"):
+        self.session_path = Path(directory.name) / "sessions.db"
+        with patch("core.engine.SESSION_DB", self.session_path):
             self.engine = HocVuEngine(self.config, self.searcher)
 
     def seed_history(self, session_id="conversation"):
@@ -222,3 +228,85 @@ class MultiturnContextTests(unittest.TestCase):
             response = self.engine.ask("Còn cái đó?", "conversation", record_session=False)
         self.assertTrue(response.refused)
         self.assertFalse(response.references)
+
+    def test_three_turn_poc_keeps_bao_luu_and_answers_its_time_limit(self):
+        for session_id, questions in (
+            ("accented-chain", ("Điều kiện bảo lưu?", "Còn điều kiện nào khác?", "Thế còn thời gian tối đa?")),
+            ("ascii-chain", ("Dieu kien bao luu?", "Con dieu kien nao khac?", "The con thoi gian toi da?")),
+        ):
+            with self.subTest(session_id=session_id):
+                for question in questions:
+                    response = self.engine.ask(question, session_id)
+                    self.assertFalse(response.refused)
+                    self.assertEqual(response.references[0].rid, "QD-DTDC-HPU-2026")
+                    self.assertEqual(response.references[0].aid, "Điều 5")
+                self.assertIn("4 học kỳ", response.answer)
+                self.assertEqual(response.references[0].clause_ids, ["1"])
+                history = self.engine.history(session_id)
+                self.assertEqual([turn["question"] for turn in history], list(questions))
+                self.assertEqual(history[-1]["context_root"], questions[0])
+                self.assertIn(questions[0], history[-1]["context_question"])
+
+    def test_greetings_unsafe_and_refusals_are_not_recorded(self):
+        for question in ("", "Xin chào", "Cảm ơn", "Tự sát", "Wifi ở ký túc xá thế nào?"):
+            with self.subTest(question=question):
+                with patch.object(self.engine.session, "add_turn", wraps=self.engine.session.add_turn) as add_turn:
+                    self.engine.ask(question, "not-recorded")
+                add_turn.assert_not_called()
+        self.assertEqual(self.engine.history("not-recorded"), [])
+        response = self.engine.ask("Còn điều kiện nào khác?", "not-recorded")
+        self.assertTrue(response.refused)
+        self.assertEqual(self.engine.history("not-recorded"), [])
+
+    def test_non_grounded_turns_do_not_replace_a_successful_antecedent(self):
+        self.seed_history()
+        for question in ("Xin chào", "Tự sát", "Wifi ở ký túc xá thế nào?"):
+            self.engine.ask(question, "conversation")
+        self.assertEqual(len(self.engine.history("conversation")), 1)
+        response = self.engine.ask("Thế còn thời gian tối đa?", "conversation")
+        self.assertFalse(response.refused)
+        self.assertIn("4 học kỳ", response.answer)
+        self.assertNotIn("Wifi", self.engine.history("conversation")[-1]["context_question"])
+
+    def test_long_chain_and_restart_keep_root_with_bounded_context(self):
+        self.seed_history()
+        for index in range(self.config.max_history + 4):
+            if index == 2:
+                with patch("core.engine.SESSION_DB", self.session_path):
+                    self.engine = HocVuEngine(self.config, self.searcher)
+            response = self.engine.ask(
+                "Thế còn thời gian tối đa?" if index % 2 == 0 else "Còn cái đó?",
+                "conversation",
+            )
+            self.assertFalse(response.refused)
+            self.assertIn("4 học kỳ", response.answer)
+            latest = self.engine.history("conversation")[-1]
+            self.assertIn("bảo lưu", latest["context_root"])
+            self.assertLessEqual(len(latest["context_question"].split(" | ")), self.config.max_history)
+
+    def test_successful_topic_change_replaces_context_root(self):
+        self.seed_history()
+        question = "Điều kiện đi thực tập"
+        response = self.engine.ask(question, "conversation")
+        self.assertFalse(response.refused)
+        self.assertEqual(self.engine.history("conversation")[-1]["context_root"], question)
+        response = self.engine.ask("Còn điều kiện nào khác?", "conversation")
+        self.assertFalse(response.refused)
+        self.assertEqual(response.references[0].rid, "QD-TTTN-HPU-2026")
+        self.assertNotIn("bảo lưu", self.engine.history("conversation")[-1]["context_question"])
+
+    def test_record_session_false_does_not_change_context(self):
+        self.seed_history()
+        before = self.engine.history("conversation")
+        response = self.engine.ask("Thế còn thời gian tối đa?", "conversation", record_session=False)
+        self.assertFalse(response.refused)
+        self.assertIn("4 học kỳ", response.answer)
+        self.assertEqual(self.engine.history("conversation"), before)
+
+    def test_no_history_and_context_disabled_cannot_answer_subjectless_facets(self):
+        self.seed_history()
+        for session_id, use_context in (("new-session", True), ("conversation", False)):
+            with self.subTest(session_id=session_id, use_context=use_context):
+                response = self.engine.ask("Thế còn thời gian tối đa?", session_id, use_context=use_context)
+                self.assertTrue(response.refused)
+                self.assertFalse(response.references)

@@ -1,6 +1,10 @@
 import sqlite3
 from pathlib import Path
 
+from .classifier import Classifier, Intent
+from .scenarios import is_context_dependent
+
+
 class SessionStore:
     def __init__(self, db_path: Path):
         self.db_path = db_path
@@ -9,6 +13,8 @@ class SessionStore:
     def _init_db(self):
         conn = sqlite3.connect(self.db_path)
         try:
+            # Serialize the additive migration across simultaneous engines.
+            conn.execute("BEGIN IMMEDIATE")
             cursor = conn.cursor()
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS turns (
@@ -18,21 +24,42 @@ class SessionStore:
                     answer TEXT NOT NULL,
                     intent TEXT,
                     article_id TEXT,
-                    rid TEXT
+                    rid TEXT,
+                    context_question TEXT NOT NULL DEFAULT '',
+                    context_root TEXT NOT NULL DEFAULT ''
                 )
             ''')
+            columns = {row[1] for row in cursor.execute("PRAGMA table_info(turns)")}
+            for column in ("context_question", "context_root"):
+                if column not in columns:
+                    cursor.execute(f"ALTER TABLE turns ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
             conn.commit()
         finally:
             conn.close()
 
-    def add_turn(self, session_id: str, question: str, answer: str, intent: str, article_id: str, rid: str):
+    def add_turn(
+        self, session_id: str, question: str, answer: str, intent: str,
+        article_id: str, rid: str, *, context_question: str = "", context_root: str = "",
+    ):
+        # Also defend callers other than HocVuEngine. Old ungrounded rows remain
+        # readable, but new greetings/refusals must not become conversation state.
+        if not question.strip() or intent != Intent.ACADEMIC_RULES.value or not article_id or not rid:
+            return None
+        if Classifier().classify(question) != Intent.ACADEMIC_RULES:
+            return None
         conn = sqlite3.connect(self.db_path)
         try:
             cursor = conn.cursor()
             cursor.execute('''
-                INSERT INTO turns (session_id, question, answer, intent, article_id, rid)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (session_id, question, answer, intent, article_id, rid))
+                INSERT INTO turns (
+                    session_id, question, answer, intent, article_id, rid,
+                    context_question, context_root
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                session_id, question, answer, intent, article_id, rid,
+                context_question or question,
+                context_root or (question if not is_context_dependent(question) else ""),
+            ))
             conn.commit()
             return cursor.lastrowid
         finally:
@@ -54,12 +81,46 @@ class SessionStore:
         finally:
             conn.close()
 
-    def contextualize(self, session_id: str, question: str) -> tuple[str, str]:
-        history = self.get_history(session_id, 1)
-        # A refusal or greeting supplies no grounded academic antecedent.
-        if not history or not history[-1].get("rid") or not history[-1].get("article_id"):
+    def contextualize(self, session_id: str, question: str, limit: int = 8) -> tuple[str, str]:
+        """Resolve against grounded turns, retaining the root across follow-ups.
+
+        The root and a bounded tail of follow-ups prevent query growth. Raw
+        questions remain intact in display history; legacy rows without resolved
+        fields recover their root from an earlier independent grounded question.
+        """
+        if not is_context_dependent(question):
             return question, ""
-            
-        context_str = history[-1]['question']
-        expanded = f"{context_str} | {question}"
-        return expanded, context_str
+        conn = sqlite3.connect(self.db_path)
+        try:
+            conn.row_factory = sqlite3.Row
+            history = conn.execute('''
+                SELECT question, context_question, context_root FROM turns
+                WHERE session_id = ? AND intent = ?
+                    AND TRIM(COALESCE(rid, '')) != ''
+                    AND TRIM(COALESCE(article_id, '')) != ''
+                ORDER BY id DESC LIMIT ?
+            ''', (session_id, Intent.ACADEMIC_RULES.value, max(1, limit))).fetchall()
+        finally:
+            conn.close()
+        classifier = Classifier()
+        latest = None
+        for turn in history:
+            if classifier.classify(turn["question"]) != Intent.ACADEMIC_RULES:
+                continue
+            if latest is None:
+                latest = turn
+            root = turn["context_root"]
+            if not root and not is_context_dependent(turn["question"]):
+                root = turn["question"]
+            if not root or classifier.classify(root) != Intent.ACADEMIC_RULES or is_context_dependent(root):
+                continue
+            prefix = f"{root} | "
+            if latest["context_question"].startswith(prefix):
+                tail = latest["context_question"][len(prefix):].split(" | ")
+            else:
+                tail = [latest["question"]] if latest["question"] != root else []
+            # Always retain the root, even beyond the history window. Dedup and
+            # cap only the tail so repeated ellipses do not grow the query.
+            tail = list(dict.fromkeys([*tail, question]))
+            return " | ".join([root, *tail[-max(1, limit - 1):]]), root
+        return question, ""

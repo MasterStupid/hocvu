@@ -35,6 +35,22 @@ def is_context_dependent(question: str) -> bool:
             if any(_matches_follow_up_phrase(words, f"{noun} {demonstrative}", index)
                    for index in range(len(words))):
                 return True
+    # A dimension without a subject ("Thế còn thời gian tối đa?") needs its
+    # antecedent; a new named subject ("Thế còn học phí?") does not. Match the
+    # whole remaining phrase so "thời gian thực tập" stays independent.
+    facet_words = words
+    for prefix in ("thế còn", "vậy còn", "còn"):
+        if _matches_follow_up_phrase(words, prefix):
+            facet_words = words[len(prefix.split()):]
+            break
+    for facet in (
+        "thời gian", "thời gian tối đa", "thời gian tối thiểu", "thời hạn",
+        "thời hạn tối đa", "thời hạn tối thiểu", "điều kiện", "mức tối đa", "mức tối thiểu",
+    ):
+        for ending in ("", "là bao lâu", "bao lâu", "là bao nhiêu", "bao nhiêu", "thế nào"):
+            phrase = f"{facet} {ending}".strip()
+            if len(facet_words) == len(phrase.split()) and _matches_follow_up_phrase(facet_words, phrase):
+                return True
     ellipses = (
         "còn điều kiện", "còn điều kiện nào khác", "còn trường hợp",
         "còn trường hợp nào khác", "còn gì", "còn gì nữa", "còn nữa không",

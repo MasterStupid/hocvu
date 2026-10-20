@@ -78,6 +78,7 @@ class HocVuEngine:
         intent = self.classifier.classify(question)
         refused, reason, references, hits, confidence = False, "", [], [], 0.0
         ai_status = "off"
+        context_question = context_root = question
         if not question:
             answer, refused, reason = "Bạn hãy nhập câu hỏi về quy chế đào tạo.", True, "Empty question"
         elif intent == Intent.GREETING:
@@ -123,12 +124,15 @@ class HocVuEngine:
             # unsupported new subject ("Thế còn wifi?"). Only an actual
             # reference/ellipsis needs its antecedent to resolve the query.
             if use_context and is_follow_up and dependent:
-                context_q, _ = self.session.contextualize(session_id, retrieval_question)
+                context_q, root = self.session.contextualize(
+                    session_id, retrieval_question, limit=self.config.max_history,
+                )
                 if context_q != retrieval_question:
                     context_hits = retrieve(context_q)
                     if self.searcher.has_specific_evidence(context_q, context_hits):
                         hits, retrieval_question = context_hits, context_q
                         context_used = True
+                        context_question, context_root = context_q, root
             # Generic "conditions" can match any regulation. Without a usable
             # antecedent, never answer a reference-only question from such hits.
             if dependent and not context_used:
@@ -192,8 +196,11 @@ class HocVuEngine:
             metadata={"grounded": bool(references), "ai_mode": ai_status, "lexical_coverage": round(lexical_coverage if 'lexical_coverage' in locals() else 0.0, 4)},
             card=build_card(answer, references, hits, confidence, best_suggestions(question, self._suggestion_topics) if refused else None),
         )
-        if record_session and question:
-            self.session.add_turn(session_id, question, answer, intent.value, references[0].aid if references else "", references[0].rid if references else "")
+        if record_session and not refused and references and intent == Intent.ACADEMIC_RULES:
+            self.session.add_turn(
+                session_id, question, answer, intent.value, references[0].aid, references[0].rid,
+                context_question=context_question, context_root=context_root,
+            )
         return response
 
     def suggestion_topics(self) -> list[dict]:
