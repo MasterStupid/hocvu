@@ -17,3 +17,4 @@
 - [History lifecycle](history-lifecycle.md) — New is not consent to delete; keep permanent deletion explicit and support exact legacy session names.
 - [Conversation ownership](conversation-ownership.md) — shared login and legacy session IDs do not prove ownership; discovery and all chat operations need separate scoped authority.
 - [SQLite journal policy](sqlite-journal-policy.md) — WAL is explicitly requested; enable it outside migration transactions and use SQLite-aware live backups.
+- [Dependency audit floors](dependency-audit-floors.md) — the dependency scanner checks manifest minimums even when the installed environment already uses patched releases.

@@ -1,18 +1,19 @@
+# Security minimums must stay aligned with requirements.production.txt.
 # Core Document & Retrieval Processing
-pypdf>=5.0.0
+pypdf>=6.21.1
 PyMuPDF>=1.24.0
-sentence-transformers>=3.0.0
+sentence-transformers>=6.1.0
 
 # Modern Web API Framework (FastAPI + ASGI + Swagger UI)
 fastapi>=0.115.0
 uvicorn>=0.30.0
-python-multipart>=0.0.9
+python-multipart>=0.0.32
 
 # Server-Side Voice Synthesis (Microsoft Edge TTS Neural Voices)
 edge-tts>=7.0.0
 
 # Optional local OCR for uploaded PNG/JPG/WEBP images
-Pillow>=10.0.0
+Pillow>=13.0.0
 pytesseract>=0.3.10
 
 # HTTP client used by API regression tests
