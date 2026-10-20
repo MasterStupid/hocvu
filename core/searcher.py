@@ -11,7 +11,8 @@ from pathlib import Path
 from .models import Chunk, RankedChunk
 from .index_storage import atomic_write, index_write_lock
 from .index_version import index_fingerprint
-from .nlp import ACADEMIC_TOKEN_ALIASES, accent_key, accented_content_tokens, content_tokens, has_diacritics, normalize, strip_accents
+from .nlp import accent_key, accented_content_tokens, content_tokens, has_diacritics, normalize, strip_accents
+from .retrieval_features import ChunkFeatures, chunk_features
 from .semantic import SemanticEncoder
 from .settings import MODELS
 
@@ -29,6 +30,7 @@ class HybridSearcher:
         self.chunks: list[Chunk] = []
         self._freqs: list[Counter] = []
         self._lengths: list[int] = []
+        self._features: list[ChunkFeatures] = []
         self._idf: dict[str, float] = {}
         self._avg_len = 0.0
         self.semantic: SemanticEncoder | None = None
@@ -53,6 +55,10 @@ class HybridSearcher:
         df = Counter(token for freq in self._freqs for token in freq)
         total = len(self.chunks)
         self._idf = {token: math.log(1 + (total - count + 0.5) / (count + 0.5)) for token, count in df.items()}
+        # Build/load prepares every document once, even with semantics disabled.
+        # Features live on chunks too, so Generator's classmethod calls reuse
+        # the same evidence without depending on a particular searcher instance.
+        self._features = [self._chunk_features(chunk) for chunk in chunks]
         if not self.config.semantic_enabled:
             self.semantic = None
             self.semantic_error = "Disabled by HV_SEMANTIC"
@@ -144,6 +150,7 @@ class HybridSearcher:
         if not q_tokens:
             return []
         q_freq = Counter(self._query_form(token) for token in accented_content_tokens(query))
+        normalized_query = " ".join(q_tokens)
         try:
             semantic_scores = self.semantic.similarities(query) if self.semantic and self.semantic.available else []
             if semantic_scores:
@@ -167,11 +174,9 @@ class HybridSearcher:
                 term_freq = freq.get(token, 0)
                 if term_freq:
                     bm25 += self._idf.get(token, 0.0) * (term_freq * (k1 + 1) / (term_freq + k1 * (1 - b + b * length / max(1, self._avg_len))) * min(q_count, 2))
-            heading_terms = set(self._index_forms(accented_content_tokens(f"{chunk.version} {chunk.reg_title} {chunk.art_heading}")))
-            bm25 += sum(self._idf.get(token, 0.0) * 2.0 for token in q_freq if token in heading_terms)
-            normalized_query = " ".join(q_tokens)
-            normalized_text = " ".join(content_tokens(chunk.text))
-            if len(q_tokens) > 1 and normalized_query in normalized_text:
+            features = self._features[index]
+            bm25 += sum(self._idf.get(token, 0.0) * 2.0 for token in q_freq if token in features.heading_forms)
+            if len(q_tokens) > 1 and normalized_query in features.normalized_text:
                 bm25 += 3.0
             candidates.append((index, chunk, bm25))
             lexical_scores.append(bm25)
@@ -240,6 +245,10 @@ class HybridSearcher:
         return re.findall(r"\w+", normalize(text).lower())
 
     @classmethod
+    def _chunk_features(cls, chunk: Chunk) -> ChunkFeatures:
+        return chunk_features(chunk, cls)
+
+    @classmethod
     def _supported_terms(cls, query: str, chunk: Chunk) -> set[str]:
         """Query word forms that a clause (with its heading) states."""
         return cls._evidence_support(query, chunk)[0]
@@ -260,19 +269,12 @@ class HybridSearcher:
         the neighbour tells the readings apart ("giai bong da" never occurs
         in "học bổng ... tối đa"). Numbers never anchor a topic.
         """
-        evidence = cls._evidence_text(chunk)
-        tokens = accented_content_tokens(evidence, expand_aliases=False)
-        words = set(cls._index_forms(tokens))
-        alias_phrases: set[tuple[str, str]] = set()
-        for token in tokens:
-            expansion = ACADEMIC_TOKEN_ALIASES.get(strip_accents(token))
-            if expansion:
-                alias_phrases |= cls._phrase_index(list(expansion))
+        features = cls._chunk_features(chunk)
         sequence = [cls._query_form(term) for term in accented_content_tokens(query)]
-        supported = {form for form in sequence if form in words}
+        supported = {form for form in sequence if form in features.evidence_words}
         in_phrase: set[str] = set()
         for left, right in zip(sequence, sequence[1:]):
-            if (left, right) in alias_phrases:
+            if (left, right) in features.alias_pairs:
                 supported.update((left, right))
                 in_phrase.update((left, right))
         raw_sequence = [cls._query_form(word) for word in cls._raw_words(query)]
@@ -283,9 +285,8 @@ class HybridSearcher:
             # Adjacency is checked both on content words (so a stopword
             # between them does not matter) and on the raw wording (so a
             # neighbour that is a stopword, e.g. "bao" in "bao luu", counts).
-            evidence_pairs = cls._phrase_index(tokens) | cls._phrase_index(cls._raw_words(evidence))
             for pairs in (zip(sequence, sequence[1:]), zip(raw_sequence, raw_sequence[1:])):
-                in_phrase.update(form for pair in pairs if pair in evidence_pairs for form in pair)
+                in_phrase.update(form for pair in pairs if pair in features.evidence_pairs for form in pair)
         anchored = {
             form for form in supported
             if not form[2:].isdigit() and (form.startswith("a:") or form in in_phrase)
@@ -304,13 +305,13 @@ class HybridSearcher:
         confidence scale. Coverage is stable and lets the engine abstain from
         a document that merely shares one generic word with a long query.
         """
-        if isinstance(hit, list):
-            return max((cls.lexical_coverage(query, item) for item in hit), default=0.0)
         query_forms = cls._query_forms(query)
         if not query_forms:
             return 0.0
-        supported = cls._supported_terms(query, hit.chunk)
-        return sum(form in supported for form in query_forms) / len(query_forms)
+        def coverage(item):
+            supported = cls._supported_terms(query, item.chunk)
+            return sum(form in supported for form in query_forms) / len(query_forms)
+        return max(map(coverage, hit), default=0.0) if isinstance(hit, list) else coverage(hit)
 
     @classmethod
     def phrase_coverage(cls, query: str, hit: RankedChunk) -> float:
@@ -319,8 +320,7 @@ class HybridSearcher:
         query_phrases = set(zip(query_tokens, query_tokens[1:]))
         if not query_phrases:
             return 0.0
-        evidence_phrases = cls._phrase_index(accented_content_tokens(cls._evidence_text(hit.chunk)))
-        return len(query_phrases & evidence_phrases) / len(query_phrases)
+        return len(query_phrases & cls._chunk_features(hit.chunk).ranking_pairs) / len(query_phrases)
 
     @classmethod
     def _credit_quantity_topic(cls, query: str) -> str:
@@ -373,22 +373,23 @@ class HybridSearcher:
 
         def rank(hit: RankedChunk) -> float:
             base_rel = (hit.score / peak_score) if hit.score > 0 else (hit.bm25 / peak_bm25)
+            coverage = cls.lexical_coverage(topic_query, hit)
             value = (
-                (0.40 * cls.lexical_coverage(topic_query, hit))
+                (0.40 * coverage)
                 + (0.30 * cls.phrase_coverage(topic_query, hit))
                 + (0.30 * base_rel)
             )
             if asks_for_conditions:
-                evidence = cls._clause_body(hit.chunk).lower()
+                evidence = cls._chunk_features(hit.chunk).body_lower
                 # "Từ" alone also occurs in funding/payment descriptions,
                 # so it does not establish an eligibility condition.
                 if any(marker in evidence for marker in ("khi ", "tối thiểu", "không được", "phải", "điều kiện", "được xét", "chỉ xét")):
-                    value += 0.18 * cls.lexical_coverage(topic_query, hit)
+                    value += 0.18 * coverage
             if credit_topic:
                 # A credit question needs an amount in the clause body.
                 # Heading/topic overlap alone cannot distinguish attendance,
                 # thesis credits, and the full graduation requirement.
-                body = strip_accents(cls._clause_body(hit.chunk)).lower()
+                body = cls._chunk_features(hit.chunk).body_ascii
                 if re.search(r"\b\d+(?:[.,]\d+)?\s+tin\s+chi\b", body):
                     coverage = cls.lexical_coverage(credit_topic, hit)
                     value += 0.45 * coverage
@@ -413,6 +414,8 @@ class HybridSearcher:
         "tổ", "chức", "có", "cơ", "sở", "số", "yêu", "cầu", "bộ", "làm", "vào", "ở",
     )
     _conversational_words = ("em", "mình", "gặp", "xin", "ạ", "dạ")
+    _non_specific_accented = frozenset(map(accent_key, _generic_institutional_words + _conversational_words))
+    _non_specific_ascii = frozenset(map(strip_accents, _generic_institutional_words + _conversational_words))
 
     # Unaccented spellings of a non-specific word that are also meaningful
     # words: "da" is "dạ" (particle) but also "đá" (bóng đá) and "đa" (tối đa).
@@ -420,12 +423,11 @@ class HybridSearcher:
 
     @classmethod
     def _is_non_specific(cls, term: str) -> bool:
-        words = cls._generic_institutional_words + cls._conversational_words
         if has_diacritics(term):
-            return accent_key(term) in {accent_key(word) for word in words}
+            return accent_key(term) in cls._non_specific_accented
         if term in cls._ambiguous_unaccented:
             return False
-        return term in {strip_accents(word) for word in words}
+        return term in cls._non_specific_ascii
 
     @classmethod
     def _yes_no_focus(cls, query: str) -> str:
