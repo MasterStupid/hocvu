@@ -1,9 +1,10 @@
 - [Hosting and access decision](hosting-and-access-decision.md) — Replit-only hosting; public chat, password only for document management; persist via App Storage + Postgres.
 - [API origin protection](api-origin-protection.md) — API changes need same or exact trusted origin; Netlify site must be in HV_TRUSTED_ORIGINS.
 - [Vietnamese evidence matching](vietnamese-evidence-matching.md) — diacritic-aware evidence checks, abbreviations as phrases; heading down-weighting breaks terse clauses.
-- [Index freshness policy](index-freshness-policy.md) — prefer automatic source fingerprints over manual version bumps for built-in regulation and chunking changes.
+- [Index freshness policy](index-freshness-policy.md) — source and uploaded-manifest snapshots invalidate stale indexes automatically; never mark a later snapshot as already indexed.
 - [Wrapped subject safety](wrapped-subject-safety.md) — favor excluding body text over guessing ambiguous capitalized subject continuations.
 - [Vietnamese PDF fixture fonts](vietnamese-pdf-fixture-fonts.md) — base and bundled CJK fonts may omit Vietnamese glyphs; use Unicode font fallback for portable fixtures.
 - [Process-interruption tests](process-interruption-tests.md) — spawned-process synchronization objects need retained parent references; killed workers can leave Event locks unusable.
 - [Embedding cache lifecycle](embedding-cache-lifecycle.md) — whole-collection generations protect vector row ordering; pruning must coordinate with concurrent users.
 - [Document date integrity](document-date-integrity.md) — reject impossible detected dates; do not guess an effective date or relax search validity checks.
+- [Local OCR privacy](local-ocr-privacy.md) — OCR stays local regardless of answer-provider settings; preserve native text and invalidate obsolete extracted-text caches.

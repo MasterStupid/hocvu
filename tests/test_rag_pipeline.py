@@ -885,7 +885,7 @@ class SemanticFeatureEvidenceTests(unittest.TestCase):
             searcher.build(chunks)
             encoder_type.assert_called_once()
             encoder.build.assert_called_once_with(
-                [f"{chunk.art_heading}\n{chunk.text}" for chunk in chunks],
+                [HybridSearcher._evidence_text(chunk) for chunk in chunks],
                 index_fingerprint=index_fingerprint(config),
             )
         self.assertEqual(searcher.provider, "bm25+multilingual-e5")

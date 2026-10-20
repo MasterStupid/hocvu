@@ -110,6 +110,8 @@ class DocumentRepositoryTests(unittest.TestCase):
         chunks = split_regulation(regulations[0], max_chars=800, overlap_sents=0)
         self.assertTrue(chunks)
         for chunk in chunks:
+            self.assertEqual(chunk.aid, "Điều 4")
+            self.assertEqual(chunk.clause_ids, ["2"])
             self.assertEqual(chunk.reg_title, "Văn bản 12/QĐ-ĐH - Điều kiện bảo lưu")
             self.assertEqual(chunk.version, "Quyết định 12/QĐ-ĐH")
             self.assertEqual(chunk.art_heading, "Điều kiện bảo lưu")

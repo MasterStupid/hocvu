@@ -113,6 +113,10 @@ Open **Quản lý tài liệu** from the top navigation or visit `http://127.0.0
 
 Enable **OCR tiếng Việt** for a screenshot/photo, scanned PDF, or DOCX containing scanned images. OCR runs locally with Tesseract: image files are read entirely; PDF OCR runs only on pages without a usable text layer; and DOCX OCR reads images embedded in the file. It works best with clear, upright Vietnamese text. PDFs/DOCX with normal selectable text keep their native extraction.
 
+The upload field **Điều / khoản** supplies the citation locator for the uploaded excerpt, for example `Điều 4, Khoản 2`. Its sections and chunk fragments retain that locator rather than being assigned new legal clause numbers. Leave it empty to keep automatically detected sections; other free-form locators are preserved as entered.
+
+Scanned-only PDFs are also detected automatically; enabling OCR additionally fills scan pages in mixed text/image PDFs. Document extraction never sends PDF page images to Gemini or another cloud model, regardless of `HV_LLM` or `GEMINI_API_KEY`. Those settings apply separately to optional AI answer rewriting, not OCR. OCR does not summarize the source or impose an LLM output-token limit. Older cached extractions are rebuilt from the original files when their extraction version is upgraded.
+
 ## Deploy: Netlify + Render
 
 The browser interface is static, but document upload, OCR, the search index,

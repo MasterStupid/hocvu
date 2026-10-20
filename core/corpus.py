@@ -424,4 +424,4 @@ def build_markdown(corpus: List[Regulation]) -> str:
         lines.append("---")
         lines.append("")
         
-    return "\\n".join(lines)
+    return "\n".join(lines)

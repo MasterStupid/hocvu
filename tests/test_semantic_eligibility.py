@@ -51,7 +51,7 @@ class SemanticEligibilityTests(unittest.TestCase):
             searcher.build(self.chunks)
             encoder_type.assert_called_once_with(config.embedding_model, MODELS)
             encoder.build.assert_called_once_with([
-                f"{chunk.art_heading}\n{chunk.text}" for chunk in self.chunks
+                chunk.text for chunk in self.chunks
             ], index_fingerprint=index_fingerprint(config))
         self.assertEqual(searcher.provider, "bm25+multilingual-e5")
         self.assertEqual(searcher.semantic_error, "")

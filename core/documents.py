@@ -28,12 +28,13 @@ class DocumentRepository:
     allowed_extensions = {".pdf", ".docx", ".png", ".jpg", ".jpeg", ".webp"}
     image_extensions = {".png", ".jpg", ".jpeg", ".webp"}
     max_bytes = 25 * 1024 * 1024
-    extraction_version = 4
+    extraction_version = 5
+    pdf_text_min_chars = 40
     # Bump whenever _make_articles (or anything else that changes article
     # headings/clauses of uploaded documents) changes its output. The saved
     # search index records this, and the server rebuilds a stale index at
     # startup so earlier uploads pick up the new citations automatically.
-    article_version = 1
+    article_version = 2
 
     @classmethod
     def article_build_version(cls) -> str:
@@ -380,73 +381,19 @@ class DocumentRepository:
         return reader
 
     def _extract_pdf(self, path: Path, use_ocr: bool) -> tuple[str, int]:
+        """Keep native PDF text; fill scan pages with local OCR, never an LLM."""
         reader = self._pdf_reader(path)
         pages = [page.extract_text() or "" for page in reader.pages]
         total_text_len = sum(len(p.strip()) for p in pages)
+        # Preserve scanned-only auto detection. The checkbox additionally
+        # enables OCR of scan pages in otherwise text-based, mixed PDFs.
         is_scanned = total_text_len < 100 or use_ocr
-        if is_scanned:
-            # 1. Ưu tiên VLM (Vision-Language Model) thông minh để khử nhiễu và đọc chính xác link/mã QR
-            vlm_text = self._extract_pdf_vlm(path)
-            if vlm_text:
-                return vlm_text, len(pages)
-            # 2. Fallback sang Tesseract OCR cục bộ
+        if is_scanned and any(len(text.strip()) < self.pdf_text_min_chars for text in pages):
             ocr_text = self._extract_pdf_ocr(path, pages)
             for index, text in enumerate(ocr_text):
                 if text:
                     pages[index] = f"{pages[index]}\n{text}".strip()
         return "\n".join(pages), len(pages)
-
-    def _extract_pdf_vlm(self, path: Path) -> str:
-        """Trích xuất và tóm tắt thông báo bằng mô hình VLM (Gemini Vision) với độ chính xác cao nhất."""
-        try:
-            from .settings import load_config
-            from .llm import GroundedLLM
-            import fitz
-            import base64
-            import json
-            import urllib.request
-
-            cfg = load_config()
-            if not cfg.gemini_key:
-                return ""
-
-            doc = fitz.open(str(path))
-            parts = [{
-                "text": (
-                    "Bạn là chuyên gia số hóa văn bản giáo dục đại học. Hãy phân tích toàn bộ các trang thông báo sau và thực hiện 2 việc:\n"
-                    "1. Tạo [TỔNG QUAN ĐIỀU HÀNH & HƯỚNG DẪN SINH VIÊN] ở đầu (gồm: Số hiệu, Ngày, Tiêu đề, Đối tượng áp dụng, Yêu cầu thông tin nộp, "
-                    "HẠN CHÓT HOÀN THÀNH, ĐƯỜNG DẪN LINK BIỂU MẪU CHÍNH XÁC từng chữ/số, CÁN BỘ VÀ SỐ ĐIỆN THOẠI LIÊN HỆ HỖ TRỢ).\n"
-                    "2. Trích xuất TOÀN VĂN SẠCH CỦA CÁC MỤC (I, II, III, IV...) theo định dạng Markdown. Bỏ qua nhiễu đốm ảnh của mã QR code và con dấu đỏ."
-                )
-            }]
-            for page in doc:
-                pix = page.get_pixmap(dpi=150)
-                img_bytes = pix.tobytes("jpeg")
-                parts.append({
-                    "inlineData": {
-                        "mimeType": "image/jpeg",
-                        "data": base64.b64encode(img_bytes).decode("utf-8")
-                    }
-                })
-            doc.close()
-
-            endpoint = GroundedLLM._gemini_endpoint(cfg.gemini_url, cfg.gemini_model)
-            payload = {
-                "contents": [{"parts": parts}],
-                "generationConfig": {"maxOutputTokens": 3500, "temperature": 0.1}
-            }
-            req = urllib.request.Request(
-                endpoint,
-                data=json.dumps(payload).encode("utf-8"),
-                headers={"x-goog-api-key": cfg.gemini_key, "Content-Type": "application/json"},
-                method="POST"
-            )
-            with urllib.request.urlopen(req, timeout=45) as resp:
-                body = json.loads(resp.read().decode("utf-8"))
-            extracted = GroundedLLM._gemini_output_text(body)
-            return extracted.strip()
-        except Exception:
-            return ""
 
     def _extract_pdf_ocr(self, path: Path, page_texts: list[str]) -> list[str]:
         """OCR only pages without a usable PDF text layer."""
@@ -458,7 +405,7 @@ class DocumentRepository:
         results = ["" for _ in page_texts]
         try:
             for index, page in enumerate(document):
-                if len(page_texts[index].strip()) >= 40:
+                if len(page_texts[index].strip()) >= self.pdf_text_min_chars:
                     continue
                 pixmap = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
                 results[index] = self._ocr_pil_image_from_bytes(pixmap.tobytes("png"))
@@ -544,9 +491,9 @@ class DocumentRepository:
                 blocks.append(f"## Nội dung ảnh OCR {number}\n{recognized}")
         return "\n".join(blocks)
 
-    def regulations(self) -> list[Regulation]:
+    def regulations(self, entries: list[dict] | None = None) -> list[Regulation]:
         regulations = []
-        entries = self.list()
+        entries = self.list() if entries is None else entries
         upgraded = False
         for entry in entries:
             extracted_path = self._extracted_path(entry["id"])
@@ -559,7 +506,7 @@ class DocumentRepository:
                 extracted_path.write_text(text, encoding="utf-8")
                 entry["extraction_version"] = self.extraction_version
                 upgraded = True
-            articles = self._make_articles(text, entry["title"])
+            articles = self._make_articles(text, entry["title"], entry.get("article_clause", ""))
             decision = entry.get("decision_number")
             regulations.append(Regulation(
                 rid=entry["rid"], title=entry["title"], category="Tài liệu tải lên",
@@ -594,7 +541,7 @@ class DocumentRepository:
         return bool(len(compact) < 240 and re.search(r"\.{3,}\s*\d{1,3}$", compact))
 
     @classmethod
-    def _make_articles(cls, text: str, document_title: str) -> list[Article]:
+    def _make_articles(cls, text: str, document_title: str, article_clause: str = "") -> list[Article]:
         paragraphs = [re.sub(r"\s+", " ", part).strip() for part in text.splitlines()]
         paragraphs = [part for part in paragraphs if part and not cls._is_table_of_contents_line(part)]
         articles: list[Article] = []
@@ -640,4 +587,30 @@ class DocumentRepository:
             else:
                 buffer.append(paragraph)
         flush()
-        return articles or [Article("Nội dung", document_title, [Clause("1", text[:6000])])]
+        articles = articles or [Article("Nội dung", document_title, [Clause("1", text[:6000])])]
+        locator = (article_clause or "").strip()
+        if not locator:
+            return articles
+        # This document-level locator describes the uploaded excerpt, not a
+        # starting number for inventing new legal clauses at each chunk boundary.
+        article_ids = re.findall(r"\bĐiều\s*(\d+[a-z]?)\b", locator, re.IGNORECASE)
+        clause_ids = re.findall(r"\bKhoản\s*(\d+[a-z]?)\b", locator, re.IGNORECASE)
+        remainder = re.sub(r"\b(?:Điều|Khoản)\s*\d+[a-z]?\b", "", locator, flags=re.IGNORECASE)
+        structured = (
+            len(article_ids) <= 1 and len(clause_ids) <= 1
+            and (article_ids or clause_ids) and not remainder.strip(" \t,;:/-")
+        )
+        aid = f"Điều {article_ids[0].lower()}" if structured and article_ids else (
+            "Nội dung" if structured else locator
+        )
+        heading = articles[0].heading if len(articles) == 1 else document_title
+        contents = []
+        for article in articles:
+            for index, clause in enumerate(article.clauses):
+                prefix = f"{article.heading}\n" if len(articles) > 1 and index == 0 else ""
+                contents.append(prefix + clause.content)
+        if structured and clause_ids:
+            clauses = [Clause(clause_ids[0].lower(), "\n\n".join(contents))]
+        else:
+            clauses = [Clause(str(index), content) for index, content in enumerate(contents, 1)]
+        return [Article(aid, heading, clauses)]

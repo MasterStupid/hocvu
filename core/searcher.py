@@ -58,7 +58,7 @@ class HybridSearcher:
             self.semantic_error = "Disabled by HV_SEMANTIC"
             return
         self.semantic = SemanticEncoder(self.config.embedding_model, MODELS)
-        passages = [f"{chunk.art_heading}\n{chunk.text}" for chunk in chunks]
+        passages = [self._evidence_text(chunk) for chunk in chunks]
         if not self.semantic.build(passages, index_fingerprint=index_fingerprint(self.config)):
             self.semantic_error = self.semantic.error
         else:
@@ -126,7 +126,7 @@ class HybridSearcher:
                 f"Index article version {data.get('article_version')!r} khác phiên bản hiện tại {article_version!r}."
             )
         if index_fingerprint is not None and data.get("index_fingerprint") != index_fingerprint:
-            raise StaleIndexError("Built-in corpus or chunking rules/settings have changed.")
+            raise StaleIndexError("Indexed sources, uploaded documents or chunking settings have changed.")
         if not isinstance(data.get("chunks"), list):
             raise ValueError("Index không hợp lệ: thiếu danh sách chunks. Hãy chạy lại 'python manage.py ingest'.")
         try:

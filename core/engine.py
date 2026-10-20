@@ -22,14 +22,17 @@ from .voice import VoiceManager
 
 
 def build_index(config: AppConfig, *, return_searcher: bool = False, index_path: Path = INDEX_JSON):
-    fingerprint = index_fingerprint(config)
     repository = DocumentRepository(DOCS)
-    corpus = build_corpus(seed=config.seed) + repository.regulations()
+    entries = repository.list()
+    corpus = build_corpus(seed=config.seed) + repository.regulations(entries=entries)
+    # Bind the index to the snapshot actually used, including any extraction
+    # upgrades. A later manifest edit must not be marked as already indexed.
+    fingerprint = index_fingerprint(config, DOCS, document_entries=entries)
     chunks = [chunk for regulation in corpus for chunk in split_regulation(regulation, config.max_chunk_chars, config.overlap_sents)]
     searcher = HybridSearcher(config)
     searcher.build(chunks)
     searcher.save(str(index_path), article_version=DocumentRepository.article_build_version(), index_fingerprint=fingerprint)
-    result = {"chunks": len(chunks), "documents": len(corpus), "uploaded": len(repository.list())}
+    result = {"chunks": len(chunks), "documents": len(corpus), "uploaded": len(entries)}
     # Reuse this instance after upload/reindex. Loading a just-saved index
     # would build semantic embeddings a second time on the same corpus.
     return (result, searcher) if return_searcher else result
@@ -56,7 +59,7 @@ class HocVuEngine:
         """Load the saved index, rebuilding it when missing or stale.
 
         Check uploaded-document extraction versions and a fingerprint of the
-        built-in corpus, splitter, and chunking settings. A matching index is
+        built-in corpus, splitter, chunking settings and uploaded manifest. A matching index is
         loaded as is; older indexes without metadata are rebuilt once.
         """
         if index_path.exists():
@@ -64,7 +67,7 @@ class HocVuEngine:
                 searcher = HybridSearcher.load(
                     str(index_path), config,
                     article_version=DocumentRepository.article_build_version(),
-                    index_fingerprint=index_fingerprint(config),
+                    index_fingerprint=index_fingerprint(config, DOCS),
                 )
                 return cls(config, searcher)
             except StaleIndexError as exc:
