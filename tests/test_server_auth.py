@@ -52,7 +52,7 @@ class BrowserAuthenticationTests(unittest.IsolatedAsyncioTestCase):
         response = await self.client.post(
             "/api/ask",
             auth=("hocvu", "test-access-only"),
-            headers={"Origin": "http://test"},
+            headers={"Origin": "http://test", "X-HocVu-Owner": "a" * 64},
             json={"question": "Điều kiện bảo lưu kết quả học tập là gì?"},
         )
         self.assertEqual(response.status_code, 200)

@@ -85,8 +85,39 @@ recognition and speech synthesis; browser vendors may process speech according
 to their own privacy settings. Audio is not uploaded to this Python server.
 
 **Mới** starts a separate conversation without deleting saved turns.
+The **Hội thoại đã lưu** picker shows conversations belonging to this browser
+profile, newest activity first, with their first question, saved-turn count and
+last update. Select one to reload its recent history and original evidence
+snapshots; selection survives page refresh. **Làm mới** retries discovery (and
+retries loading the selected history if it previously failed). Only grounded
+academic answers are saved; empty sessions, greetings and refusals do not
+appear in the list. Restoration does not regenerate answers or play audio.
+
+Conversation authorization is independent of the shared browser password.
+The UI creates a cryptographically random capability in localStorage and sends
+it only in the `X-HocVu-Owner` header, never in URLs or exports. The server
+persists only its SHA-256 digest and atomically binds a new session ID to it.
+`GET /api/conversations`, history reads/status, asking follow-ups and deletion
+all enforce that scope. Knowing another session ID or using the same shared
+browser password does **not** grant access. Foreign sessions return a generic
+404; conversation responses use `Cache-Control: no-store`.
+
+This is browser-profile ownership, not individual accounts: people sharing the
+same browser profile can access the same saved chats. Clearing localStorage,
+using private browsing, another browser/device or a different frontend origin
+does not carry access over. Keep the browser capability private like a password.
+Existing unowned legacy histories are not automatically claimed from a saved
+ID, because the old system did not record who owned them. An unavailable legacy
+selection opens a new session with an explanatory message, without deleting
+the old data. Explicit `X-HocVu-Token` API clients without an owner header
+retain access to unowned legacy/API sessions **only**, not browser-owned chats.
+Clients using shared HTTP Basic authentication must also send their own
+64-character lowercase hexadecimal `X-HocVu-Owner` capability for conversation
+operations. This header does not replace existing network authentication,
+origin checks or rate limits.
+
 **Xóa lịch sử** asks for confirmation, then permanently removes all saved turns
-of the current session only and opens a fresh conversation with an empty source
+of the currently selected session only and opens a fresh conversation with an empty source
 panel. Canceling or a failed request keeps the current conversation visible.
 Deletion is unavailable while that conversation is loading or awaiting an answer.
 The `DELETE /api/history?session_id=...` API requires exactly one explicit,
@@ -102,7 +133,7 @@ its turns are atomic with respect to saving answers, even across server
 processes sharing the SQLite database. A new or interrupted `POST /api/ask`
 using a closed ID receives HTTP **410** with `code: "session_closed"` and must
 use a fresh ID (or omit `session_id`); the server never silently reuses the old
-ID. Reading its history still returns `[]`, and repeated deletion is safe.
+ID. Reading its history within its owner's scope still returns `[]`, and repeated deletion is safe.
 `GET /api/history/status?session_id=...` returns `{session_id, closed}` under
 the existing access controls. Do not prune closed IDs independently of clients:
 they prevent delayed requests from resurrecting deleted data.

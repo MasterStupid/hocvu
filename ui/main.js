@@ -1,6 +1,11 @@
 (() => {
   'use strict';
 
+  // A per-browser bearer capability, independent of shared document login.
+  // Only its hash is stored server-side; never put it in URLs or exports.
+  const ownerKey = localStorage.getItem('hv_conversation_owner')
+    || (crypto.randomUUID() + crypto.randomUUID()).replaceAll('-', '');
+  localStorage.setItem('hv_conversation_owner', ownerKey);
   const state = {
     sessionId: localStorage.getItem('hv_session_id') || crypto.randomUUID(),
     theme: localStorage.getItem('hv_theme') || 'light',
@@ -10,6 +15,7 @@
     ignoreRecognitionResults: false, listenAfter: 0, speechId: 0, audio: null, speechTimer: null,
     lastAssistantSpeech: '', echoGuardUntil: 0,
     isDeleting: false, isRestoring: false, viewVersion: 0,
+    conversations: [], listVersion: 0,
   };
   localStorage.setItem('hv_session_id', state.sessionId);
 
@@ -24,12 +30,14 @@
     overlay: $('overlay'), welcome: $('welcome'), liveStatus: $('live-status'),
     newConversation: $('new-conversation'), exportConversation: $('export-conversation'),
     deleteHistory: $('delete-history'),
+    conversationSelect: $('conversation-select'), conversationRefresh: $('conversation-refresh'),
+    conversationStatus: $('conversation-status'),
     refDate: $('ref-date'),
   };
   const escapeHTML = (value) => { const box = document.createElement('div'); box.textContent = value || ''; return box.innerHTML; };
   const scrollBottom = () => { dom.thread.scrollTop = dom.thread.scrollHeight; };
   const api = async (url, options = {}) => {
-    const response = await fetch(url, { ...options, headers: { 'Content-Type': 'application/json', ...(options.headers || {}) } });
+    const response = await fetch(url, { ...options, cache: 'no-store', headers: { 'Content-Type': 'application/json', 'X-HocVu-Owner': ownerKey, ...(options.headers || {}) } });
     return HocVuAPI.readResponse(response, 'Không thể kết nối máy chủ.');
   };
   const setStatus = (online, message) => {
@@ -48,6 +56,8 @@
     dom.exportConversation.disabled = state.isDeleting;
     dom.mic.disabled = state.isDeleting || state.isRestoring;
     dom.live.disabled = !state.recognition || state.isDeleting || state.isRestoring;
+    dom.conversationSelect.disabled = state.isDeleting;
+    dom.conversationRefresh.disabled = state.isDeleting;
   };
   const updateFeatureControls = () => {
     dom.ai.classList.toggle('active', state.aiEnabled); dom.ai.setAttribute('aria-pressed', String(state.aiEnabled));
@@ -292,12 +302,19 @@
     state.isLoading = true; dom.input.value = ''; updateComposer(); setLiveStatus('Đang tìm trong tài liệu', 'working'); appendUser(question); appendTyping();
     try {
       const response = await api('/api/ask', { method: 'POST', body: JSON.stringify({ question, session_id: sessionId, use_ai: state.aiEnabled, ref_date: dom.refDate.value || null, with_audio: Boolean(state.ttsEnabled || state.liveEnabled) }) });
+      // Update the list even if the user left while the answer was generated.
+      void refreshConversations();
       if (viewVersion !== state.viewVersion) return;
       removeTyping(); appendAnswer(response);
     } catch (error) {
       if (viewVersion !== state.viewVersion) return;
       if (error.status === 410 && error.code === 'session_closed' && error.sessionId === sessionId) {
         forgetDeletedConversation(sessionId);
+        return;
+      }
+      if (error.code === 'session_unavailable') {
+        resetConversation(crypto.randomUUID());
+        setLiveStatus('Không có quyền truy cập hội thoại cũ. Đã mở hội thoại mới; bản lưu cũ không bị xóa.', 'error');
         return;
       }
       removeTyping(); appendError(error.message);
@@ -366,6 +383,68 @@
     resetConversation(crypto.randomUUID());
   }
 
+  function renderConversations() {
+    dom.conversationSelect.innerHTML = '';
+    const currentSaved = state.conversations.some(item => item.session_id === state.sessionId);
+    const addOption = (id, title) => {
+      const option = document.createElement('option');
+      option.value = id; option.textContent = title;
+      dom.conversationSelect.appendChild(option);
+    };
+    if (!currentSaved) addOption(state.sessionId, 'Hội thoại hiện tại · chưa có lượt được lưu');
+    state.conversations.forEach(item => {
+      const date = item.updated_at ? new Date(item.updated_at).toLocaleString('vi-VN') : 'Bản lưu cũ';
+      addOption(item.session_id, `${item.title} · ${item.turn_count} lượt · ${date}`);
+    });
+    dom.conversationSelect.value = state.sessionId;
+  }
+
+  async function refreshConversations() {
+    const version = ++state.listVersion;
+    dom.conversationStatus.textContent = 'Đang tải danh sách…';
+    try {
+      const conversations = await api('/api/conversations');
+      if (!Array.isArray(conversations)) throw new Error('Danh sách hội thoại không hợp lệ.');
+      if (version !== state.listVersion) return;
+      state.conversations = conversations;
+      renderConversations();
+      dom.conversationStatus.textContent = conversations.length
+        ? `${conversations.length} hội thoại đã lưu. Chọn để xem; dùng “Xóa lịch sử” để xóa hội thoại đã chọn.`
+        : 'Chưa có hội thoại đã lưu trong trình duyệt này.';
+    } catch (error) {
+      if (version === state.listVersion) dom.conversationStatus.textContent = `Không thể tải danh sách: ${error.message} Nhấn Làm mới để thử lại.`;
+    }
+  }
+
+  async function selectConversation(sessionId) {
+    if (!sessionId || state.isDeleting) return;
+    resetConversation(sessionId);
+    const version = state.viewVersion;
+    state.isRestoring = true; updateComposer();
+    setLiveStatus('Đang tải hội thoại…', 'working');
+    try {
+      const [history, status] = await Promise.all([
+        api(`/api/history?session_id=${encodeURIComponent(sessionId)}`),
+        api(`/api/history/status?session_id=${encodeURIComponent(sessionId)}`),
+      ]);
+      if (version !== state.viewVersion) return;
+      if (status.closed === true) { forgetDeletedConversation(sessionId); return; }
+      restoreHistory(history);
+      state.isRestoring = false; updateComposer();
+      if (!history.length) setLiveStatus('Hội thoại chưa có lượt được lưu.');
+    } catch (error) {
+      if (version !== state.viewVersion) return;
+      if (error.code === 'session_unavailable') {
+        resetConversation(crypto.randomUUID());
+        setLiveStatus('Không có quyền truy cập hội thoại cũ. Đã mở hội thoại mới; bản lưu cũ không bị xóa.', 'error');
+        void refreshConversations();
+      } else {
+        // Do not send into hidden context after a failed restoration.
+        setLiveStatus(`Chưa tải được hội thoại: ${error.message} Nhấn Làm mới hoặc chọn Mới.`, 'error');
+      }
+    }
+  }
+
   function resetConversation(sessionId) {
     stopLive();
     state.viewVersion++;
@@ -375,10 +454,14 @@
     dom.thread.querySelectorAll('.message:not(.welcome-message)').forEach((item) => item.remove());
     dom.input.value = ''; updateComposer();
     dom.welcome.hidden = false; updateEvidence([]); setLiveStatus('Hội thoại mới đã sẵn sàng');
+    renderConversations();
     dom.input.focus();
   }
 
   function forgetDeletedConversation(sessionId) {
+    state.listVersion++; // Invalidate list snapshots fetched before deletion.
+    state.conversations = state.conversations.filter(item => item.session_id !== sessionId);
+    renderConversations();
     if (sessionId !== state.sessionId) return;
     resetConversation(crypto.randomUUID());
     setLiveStatus('Hội thoại này đã bị xóa. Hội thoại mới đã sẵn sàng.');
@@ -412,6 +495,10 @@
     setLiveStatus('Đang xóa lịch sử…', 'working');
     try {
       await api(`/api/history?session_id=${encodeURIComponent(sessionId)}`, { method: 'DELETE' });
+      state.listVersion++;
+      state.conversations = state.conversations.filter(item => item.session_id !== sessionId);
+      renderConversations();
+      dom.conversationStatus.textContent = `${state.conversations.length} hội thoại đã lưu.`;
       announceDeletion(sessionId);
       if (viewVersion !== state.viewVersion) return;
       resetConversation(nextSessionId);
@@ -512,6 +599,13 @@
     dom.theme.addEventListener('click', () => { state.theme = state.theme === 'light' ? 'dark' : 'light'; document.documentElement.dataset.theme = state.theme; localStorage.setItem('hv_theme', state.theme); });
     dom.ai.addEventListener('click', () => { state.aiEnabled = !state.aiEnabled; localStorage.setItem('hv_ai_enabled', String(state.aiEnabled)); updateFeatureControls(); });
     dom.newConversation.addEventListener('click', startNewConversation);
+    dom.conversationSelect.addEventListener('change', () => {
+      void selectConversation(dom.conversationSelect.value);
+    });
+    dom.conversationRefresh.addEventListener('click', () => {
+      void refreshConversations();
+      if (state.isRestoring) void selectConversation(state.sessionId);
+    });
     dom.deleteHistory.addEventListener('click', deleteHistory);
     dom.exportConversation.addEventListener('click', exportConversation);
     dom.live.addEventListener('click', () => {
@@ -541,25 +635,19 @@
   }
   async function boot() {
     document.documentElement.dataset.theme = state.theme; updateFeatureControls(); bind(); setupVoice();
-    const viewVersion = state.viewVersion;
-    state.isRestoring = true; updateComposer();
+    // Independent loads prevent a history permission/network error from
+    // hiding documents, or a document error from discarding the conversation.
+    const restoring = selectConversation(state.sessionId);
+    const listing = refreshConversations();
     try {
-      const sessionId = state.sessionId;
-      const [health, documents, history, topics, sessionStatus] = await Promise.all([
-        api('/api/health'), api('/api/documents'), api(`/api/history?session_id=${encodeURIComponent(sessionId)}`), api('/api/suggestions'),
-        api(`/api/history/status?session_id=${encodeURIComponent(sessionId)}`),
+      const [health, documents, topics] = await Promise.all([
+        api('/api/health'), api('/api/documents'), api('/api/suggestions'),
       ]);
       setStatus(true, `Trực tuyến · ${health.documents} văn bản`);
       dom.documents.innerHTML = documents.map((doc) => `<article class="doc-item"><div class="doc-title">${escapeHTML(doc.title)}</div><div class="doc-meta">${escapeHTML(doc.rid)} · Bản ${escapeHTML(doc.version)}</div></article>`).join('');
       renderSuggestionTopics(topics);
-      if (viewVersion === state.viewVersion) {
-        if (sessionStatus.closed === true) forgetDeletedConversation(sessionId);
-        else restoreHistory(history);
-      }
     } catch (_) { setStatus(false, 'Mất kết nối'); dom.documents.innerHTML = '<p class="error">Không thể tải cơ sở tri thức.</p>'; }
-    finally {
-      if (viewVersion === state.viewVersion) { state.isRestoring = false; updateComposer(); }
-    }
+    await Promise.all([restoring, listing]);
   }
   document.addEventListener('DOMContentLoaded', boot);
 })();

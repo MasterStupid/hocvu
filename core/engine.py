@@ -279,8 +279,14 @@ class HocVuEngine:
     def list_sources(self) -> list[dict]:
         return [chunk.to_dict() for chunk in self.searcher.chunks]
 
-    def history(self, session_id: str) -> list[dict]:
-        return self.session.get_history(session_id, self.config.max_history)
+    def history(self, session_id: str, *, owner: str | None = None) -> list[dict]:
+        return self.session.get_history(session_id, self.config.max_history, owner=owner)
+
+    def authorize_session(self, session_id: str, owner: str, *, create: bool = False):
+        self.session.authorize(session_id, owner, create=create)
+
+    def list_conversations(self, owner: str) -> list[dict]:
+        return self.session.list_conversations(owner)
 
     def delete_history(self, session_id: str) -> int:
         return self.session.delete_history(session_id)
@@ -288,5 +294,5 @@ class HocVuEngine:
     def ensure_session_open(self, session_id: str):
         self.session.ensure_open(session_id)
 
-    def history_status(self, session_id: str) -> dict:
-        return {"session_id": session_id, "closed": self.session.is_closed(session_id)}
+    def history_status(self, session_id: str, *, owner: str | None = None) -> dict:
+        return {"session_id": session_id, "closed": self.session.is_closed(session_id, owner=owner)}

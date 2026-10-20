@@ -24,13 +24,14 @@ class ServerResponsivenessTests(unittest.IsolatedAsyncioTestCase):
             self.addCleanup(item.stop)
         self.client = httpx.AsyncClient(
             transport=httpx.ASGITransport(app=server.app), base_url="http://test",
-            headers={"Origin": "http://test"},
+            headers={"Origin": "http://test", "X-HocVu-Owner": "a" * 64},
         )
         self.addAsyncCleanup(self.client.aclose)
         self.loop_thread = threading.get_ident()
         self.engine = SimpleNamespace(
             list_documents=lambda: [], searcher=SimpleNamespace(provider="bm25", semantic_error=""),
             ask=lambda **kwargs: SimpleNamespace(to_dict=lambda: {"answer": "Đã trả lời."}),
+            authorize_session=lambda *args, **kwargs: None,
         )
 
     async def upload_directly(self, file):

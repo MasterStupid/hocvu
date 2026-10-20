@@ -12,3 +12,4 @@
 - [History evidence snapshots](history-evidence-snapshots.md) — restore evidence as assessed when answered; do not reconstruct missing legacy citations from today's corpus.
 - [Voice playback cancellation](voice-playback-cancellation.md) — stop every audio path and invalidate late callbacks, not just the browser speech synthesizer.
 - [History lifecycle](history-lifecycle.md) — New is not consent to delete; keep permanent deletion explicit and support exact legacy session names.
+- [Conversation ownership](conversation-ownership.md) — shared login and legacy session IDs do not prove ownership; discovery and all chat operations need separate scoped authority.

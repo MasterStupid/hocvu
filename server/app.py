@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+import hashlib
 import base64
 import binascii
 import json
@@ -24,7 +25,7 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from core.engine import HocVuEngine
-from core.session import SessionClosedError, validate_session_id
+from core.session import LEGACY_API_OWNER, SessionAccessError, SessionClosedError, validate_session_id
 from core.documents import DocumentError, DocumentNotFoundError, DocumentRepository
 from core.settings import AUD, INDEX_JSON, SERVER_META, UI, ensure_dirs, load_config
 from core.voice import VoiceManager, clean_text_for_tts, DEFAULT_VOICE, DEFAULT_RATE, RATE_PATTERN, MALE_VOICE
@@ -156,6 +157,33 @@ app = FastAPI(
 request_limiter = SlidingWindowLimiter()
 
 
+def conversation_owner(request: Request) -> str:
+    """Browser capability is separate from the shared document/API password.
+
+    Store only its digest. Never accept a query/body owner or silently fall
+    back to server-token authority when an invalid owner header is supplied.
+    """
+    key = request.headers.get("X-HocVu-Owner")
+    if key is not None:
+        if not re.fullmatch(r"[a-f0-9]{64}", key):
+            raise HTTPException(status_code=401, detail="Khóa truy cập hội thoại không hợp lệ.")
+        return hashlib.sha256(key.encode("ascii")).hexdigest()
+    token = request.headers.get("X-HocVu-Token", "")
+    if config.api_token and secrets.compare_digest(token.encode("utf-8"), config.api_token.encode("utf-8")):
+        return LEGACY_API_OWNER
+    raise HTTPException(status_code=401, detail="Cần khóa truy cập hội thoại của trình duyệt.")
+
+
+@app.exception_handler(SessionAccessError)
+async def session_access_handler(request: Request, exc: SessionAccessError):
+    return JSONResponse(
+        status_code=404,
+        content={"detail": "Không tìm thấy hội thoại trong phạm vi truy cập của trình duyệt này.",
+                 "code": "session_unavailable"},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @app.exception_handler(SessionClosedError)
 async def session_closed_handler(request: Request, exc: SessionClosedError):
     return JSONResponse(
@@ -225,6 +253,8 @@ async def rate_limit_and_auth_middleware(request: Request, call_next):
                 return JSONResponse(status_code=401, content={"error": "API token is required for network access."})
 
     response = await call_next(request)
+    if path == "/api/ask" or path.startswith(("/api/history", "/api/conversations")):
+        response.headers["Cache-Control"] = "no-store"
     return response
 
 
@@ -244,8 +274,10 @@ def health_check():
 
 
 @app.post("/api/ask", summary="Đặt câu hỏi tư vấn quy chế")
-async def ask_question(payload: AskRequest):
+async def ask_question(payload: AskRequest, request: Request):
     session_id = payload.session_id or str(uuid.uuid4())
+    owner = conversation_owner(request)
+    await run_in_threadpool(_call_engine, "authorize_session", session_id, owner, create=True)
     response = await run_in_threadpool(
         _call_engine, "ask",
         question=payload.question,
@@ -351,19 +383,27 @@ async def reindex_documents():
 
 
 @app.get("/api/history", summary="Lấy lịch sử hội thoại theo phiên")
-def get_history(response: Response, session_id: str = Query("", description="Mã phiên hội thoại")):
+def get_history(request: Request, response: Response, session_id: str = Query(..., min_length=1, description="Mã phiên hội thoại")):
     response.headers["Cache-Control"] = "no-store"
+    owner = conversation_owner(request)
     eng = get_engine()
-    return eng.history(session_id)
+    return eng.history(session_id, owner=owner)
+
+
+@app.get("/api/conversations", summary="Danh sách hội thoại trong phạm vi truy cập")
+def list_conversations(request: Request, response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    return _call_engine("list_conversations", conversation_owner(request))
 
 
 @app.get("/api/history/status", summary="Kiểm tra hội thoại đã bị xóa hay chưa")
 def history_status(
+    request: Request,
     response: Response,
     session_id: str = Query(..., min_length=1, description="Mã chính xác của phiên"),
 ):
     response.headers["Cache-Control"] = "no-store"
-    return _call_engine("history_status", session_id)
+    return _call_engine("history_status", session_id, owner=conversation_owner(request))
 
 
 @app.get("/api/suggestions", summary="Lấy danh mục câu hỏi gợi ý")
@@ -386,6 +426,8 @@ async def delete_history(
         validate_session_id(session_id)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    owner = conversation_owner(request)
+    await run_in_threadpool(_call_engine, "authorize_session", session_id, owner, create=True)
     deleted = await run_in_threadpool(_call_engine, "delete_history", session_id)
     return {"status": "deleted", "session_id": session_id, "deleted_turns": deleted}
 

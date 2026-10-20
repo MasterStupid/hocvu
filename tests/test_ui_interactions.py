@@ -23,3 +23,6 @@ class UiInteractionTests(unittest.TestCase):
 
     def test_shared_theme_and_typing_styles(self):
         self.run_script("test_ui_theme_styles.cjs")
+
+    def test_scoped_conversation_picker(self):
+        self.run_script("test_ui_conversations.cjs")

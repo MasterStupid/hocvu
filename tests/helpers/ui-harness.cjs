@@ -19,7 +19,7 @@ function loadUI(options = {}) {
     }
     set textContent(value) { this.text = value; this.html = null; }
     get textContent() { return this.text || ''; }
-    set innerHTML(value) { this.html = value; this.cache.clear(); }
+    set innerHTML(value) { this.html = value; this.children = []; this.cache.clear(); }
     get innerHTML() { return this.html ?? escape(this.text || ''); }
     appendChild(child) { child.parent = this; this.children.push(child); }
     remove() { if (this.parent) this.parent.children = this.parent.children.filter(child => child !== this); }
@@ -91,7 +91,7 @@ function loadUI(options = {}) {
   }
   const sandbox = {
     document, localStorage: { getItem(key) { return storage.get(key) || null; }, setItem(key, value) { storage.set(key, value); } },
-    crypto: { randomUUID() { return `test-session-${++nextSessionId}`; } }, navigator: {}, console, Blob,
+    crypto: { randomUUID() { return `00000000-0000-4000-8000-${(++nextSessionId).toString(16).padStart(12, '0')}`; } }, navigator: {}, console, Blob,
     URL: {
       createObjectURL(blob) { blobs.push(blob); return `blob:test-${blobs.length}`; },
       revokeObjectURL(url) { revokedURLs.push(url); },
@@ -120,6 +120,7 @@ function loadUI(options = {}) {
       renderAnswerCard, appendAnswer, restoreHistory, state, dom, appendTyping,
       speak, stopSpeech, stopLive, send, bind, startNewConversation,
        deleteHistory, boot, updateComposer, exportConversation, checkConversationStatus,
+       refreshConversations, selectConversation, renderConversations,
       setSpeechHook(callback) { speak = callback; }
     };
   })();`);

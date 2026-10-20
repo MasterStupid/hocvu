@@ -142,16 +142,23 @@ class HistoryApiTests(unittest.IsolatedAsyncioTestCase):
             engine = await asyncio.to_thread(make_engine, Path(directory))
             live = (await asyncio.to_thread(engine.ask, "Điều kiện bảo lưu?", "conversation")).to_dict()
             self.assertFalse(live["refused"])
+            # Legacy histories require explicit server-token authority, rather
+            # than a shared browser login or merely knowing the session ID.
+            from core.session import LEGACY_API_OWNER
+            engine.authorize_session("conversation", LEGACY_API_OWNER, create=True)
             with (
                 patch.object(server, "get_engine", return_value=engine),
+                patch.object(server.config, "api_token", "metadata-test-token"),
                 patch.object(server, "requires_api_token", False),
                 patch.object(server, "browser_auth_enabled", False),
             ):
                 async with httpx.AsyncClient(
                     transport=httpx.ASGITransport(app=server.app), base_url="http://test",
                 ) as client:
-                    response = await client.get("/api/history", params={"session_id": "conversation"})
-                    other = await client.get("/api/history", params={"session_id": "other"})
+                    response = await client.get("/api/history", params={"session_id": "conversation"},
+                                                headers={"X-HocVu-Token": "metadata-test-token"})
+                    other = await client.get("/api/history", params={"session_id": "other"},
+                                             headers={"X-HocVu-Token": "metadata-test-token"})
             self.assertEqual(response.status_code, 200)
             restored = response.json()[0]
             for key in ("refused", "references", "card", "confidence"):

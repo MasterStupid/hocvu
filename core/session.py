@@ -25,6 +25,13 @@ class SessionClosedError(Exception):
         super().__init__("Hội thoại này đã bị xóa. Hãy bắt đầu hội thoại mới với mã phiên mới.")
 
 
+class SessionAccessError(Exception):
+    """Do not distinguish a foreign session from an unavailable legacy one."""
+
+
+LEGACY_API_OWNER = "legacy-api"
+
+
 class SessionStore:
     def __init__(self, db_path: Path):
         self.db_path = db_path
@@ -69,7 +76,82 @@ class SessionStore:
                     session_id TEXT PRIMARY KEY NOT NULL
                 ) WITHOUT ROWID
             """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS session_owners (
+                    session_id TEXT PRIMARY KEY NOT NULL,
+                    owner TEXT NOT NULL,
+                    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                ) WITHOUT ROWID
+            """)
+            cursor.execute("CREATE INDEX IF NOT EXISTS session_owner_idx ON session_owners(owner)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS turns_session_idx ON turns(session_id, id)")
             conn.commit()
+        finally:
+            conn.close()
+
+    def authorize(self, session_id: str, owner: str, *, create: bool = False):
+        """Bind new IDs atomically; possession of a legacy ID is not ownership.
+
+        Only a server-token API client may access unowned legacy records. A
+        shared browser login is deliberately not sufficient authority.
+        """
+        validate_session_id(session_id)
+        if not owner:
+            raise SessionAccessError()
+        conn = sqlite3.connect(self.db_path)
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            self._authorize(conn, session_id, owner, create=create)
+            conn.commit()
+        finally:
+            conn.close()
+
+    def _authorize(self, conn, session_id: str, owner: str, *, create: bool = False):
+        row = conn.execute(
+            "SELECT owner FROM session_owners WHERE session_id = ?", (session_id,),
+        ).fetchone()
+        if row:
+            if row[0] != owner:
+                raise SessionAccessError()
+        else:
+            legacy = self._is_closed(conn, session_id) or conn.execute(
+                "SELECT 1 FROM turns WHERE session_id = ? LIMIT 1", (session_id,),
+            ).fetchone() is not None
+            if legacy and owner != LEGACY_API_OWNER:
+                raise SessionAccessError()
+            if create:
+                conn.execute(
+                    "INSERT INTO session_owners(session_id, owner) VALUES (?, ?)",
+                    (session_id, owner),
+                )
+
+    def list_conversations(self, owner: str) -> list[dict]:
+        """Return only saved, open sessions in this authority's scope."""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            conn.execute("BEGIN")
+            rows = conn.execute("""
+                SELECT t.session_id, MIN(t.id) AS first_id, MAX(t.id) AS last_id,
+                       COUNT(*) AS turn_count, o.updated_at
+                FROM turns t LEFT JOIN session_owners o ON o.session_id = t.session_id
+                WHERE (o.owner = ? OR (? = ? AND o.owner IS NULL))
+                  AND NOT EXISTS (
+                      SELECT 1 FROM closed_sessions c WHERE c.session_id = t.session_id
+                  )
+                GROUP BY t.session_id
+                ORDER BY last_id DESC
+            """, (owner, owner, LEGACY_API_OWNER)).fetchall()
+            result = []
+            for row in rows:
+                title = conn.execute(
+                    "SELECT question FROM turns WHERE id = ?", (row["first_id"],),
+                ).fetchone()[0]
+                result.append({
+                    "session_id": row["session_id"], "title": title[:120],
+                    "turn_count": row["turn_count"], "updated_at": row["updated_at"],
+                })
+            return result
         finally:
             conn.close()
 
@@ -79,10 +161,13 @@ class SessionStore:
             "SELECT 1 FROM closed_sessions WHERE session_id = ?", (session_id,),
         ).fetchone() is not None
 
-    def is_closed(self, session_id: str) -> bool:
+    def is_closed(self, session_id: str, *, owner: str | None = None) -> bool:
         validate_session_id(session_id)
         conn = sqlite3.connect(self.db_path)
         try:
+            if owner is not None:
+                conn.execute("BEGIN")
+                self._authorize(conn, session_id, owner)
             return self._is_closed(conn, session_id)
         finally:
             conn.close()
@@ -130,14 +215,23 @@ class SessionStore:
                 context_root or (question if not is_context_dependent(question) else ""),
                 *display_state,
             ))
+            conn.execute(
+                "UPDATE session_owners SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE session_id = ?",
+                (session_id,),
+            )
             conn.commit()
             return cursor.lastrowid
         finally:
             conn.close()
 
-    def get_history(self, session_id: str, limit: int) -> list[dict]:
+    def get_history(self, session_id: str, limit: int, *, owner: str | None = None) -> list[dict]:
         conn = sqlite3.connect(self.db_path)
         try:
+            if owner is not None:
+                # Authorization and data must share one snapshot, including
+                # when an unknown ID is claimed concurrently by another owner.
+                conn.execute("BEGIN")
+                self._authorize(conn, session_id, owner)
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute('''

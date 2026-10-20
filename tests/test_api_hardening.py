@@ -77,9 +77,10 @@ class ApiHardeningTests(unittest.IsolatedAsyncioTestCase):
                 invalid = await client.post("/api/ask", json={"question": "đ" * 4001})
                 self.assertEqual(invalid.status_code, 422)
                 get_engine.assert_not_called()
-                valid = await client.post("/api/ask", json={"question": "đ" * 4000})
+                valid = await client.post("/api/ask", json={"question": "đ" * 4000},
+                                          headers={"X-HocVu-Owner": "a" * 64})
                 self.assertEqual(valid.status_code, 200)
-                get_engine.assert_called_once()
+                self.assertEqual(get_engine.call_count, 2)  # ownership + ask
 
     async def test_percent_encoded_windows_traversal_pocs_are_rejected(self):
         # Synthetic fixtures only: never read the actual project's .env or DB.

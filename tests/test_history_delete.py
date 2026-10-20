@@ -218,7 +218,14 @@ class DeleteHistoryApiTests(unittest.IsolatedAsyncioTestCase):
                 response = await self.delete(headers=headers, auth=("hocvu", "synthetic-test-token"))
                 self.assertEqual(response.status_code, 403)
             get_engine.assert_not_called()
-        allowed = await self.delete(headers={"Origin": "http://test"}, auth=("hocvu", "synthetic-test-token"))
+        # A shared browser password alone no longer authorizes legacy histories.
+        missing_owner = await self.delete(headers={"Origin": "http://test"}, auth=("hocvu", "synthetic-test-token"))
+        self.assertEqual(missing_owner.status_code, 401)
+        allowed = await self.client.delete(
+            "/api/history", params={"session_id": "new-browser-session"},
+            headers={"Origin": "http://test", "X-HocVu-Owner": "a" * 64},
+            auth=("hocvu", "synthetic-test-token"),
+        )
         self.assertEqual(allowed.status_code, 200)
 
     async def test_token_cannot_bypass_cross_site_protection(self):

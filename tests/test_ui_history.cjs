@@ -178,7 +178,8 @@ test('live send exports UTF-8 text with full clauses, excerpts, assessment and c
   ui.bind();
   assert.equal(ui.dom.exportConversation.events.click, ui.exportConversation);
   await ui.send(response.question);
-  assert.equal(ui.calls.length, 1);
+  assert.equal(ui.calls.filter(([url]) => url !== '/api/conversations').length, 1);
+  const callsBeforeExport = ui.calls.length;
   const text = await downloadText(ui);
   assert.match(text, /^HOCVU AI — LỊCH SỬ HỘI THOẠI\nXuất lúc: .+\n\nBẠN:\n/);
   for (const value of [
@@ -192,7 +193,7 @@ test('live send exports UTF-8 text with full clauses, excerpts, assessment and c
   assert.doesNotMatch(text, /undefined|null|\[object Object\]|&lt;|&amp;|�/);
   const bytes = Buffer.from(await ui.blobs[0].arrayBuffer());
   assert.equal(bytes.toString('utf8'), text, 'Unicode survives the downloaded bytes');
-  assert.equal(ui.calls.length, 1, 'export makes no additional API calls');
+  assert.equal(ui.calls.length, callsBeforeExport, 'export makes no additional API calls');
 });
 
 test('live and restored snapshots produce identical export bodies', async () => {

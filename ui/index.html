@@ -7,7 +7,7 @@
     <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
     <title>HocVu AI &middot; Trợ lý quy chế đào tạo thông minh</title>
     <script src="theme.js?v=20261020-1"></script>
-    <link rel="stylesheet" href="styles.css?v=20261020-ui-fixes-1">
+    <link rel="stylesheet" href="styles.css?v=20261020-conversations-1">
 </head>
 <body>
     <!-- SVG Sprite -->
@@ -56,6 +56,26 @@
                 </button>
             </div>
         </header>
+
+        <section class="conversation-picker" aria-labelledby="conversation-picker-title">
+            <div class="conversation-picker-heading">
+                <div>
+                    <h2 id="conversation-picker-title">Hội thoại đã lưu</h2>
+                    <p class="conversation-privacy" id="conversation-privacy-copy">Chỉ các hội thoại được lưu trong trình duyệt này mới xuất hiện tại đây. Chỉ câu trả lời có căn cứ mới được lưu; xóa dữ liệu trình duyệt sẽ khiến bạn mất quyền truy cập.</p>
+                </div>
+                <button class="conversation-refresh" data-hv="conversation-refresh" type="button" aria-label="Làm mới danh sách hội thoại" title="Làm mới danh sách">
+                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5"></path><path d="M4 17v-5h5"></path><path d="M5.6 9a7 7 0 0 1 11.55-2.6L20 12"></path><path d="M18.4 15a7 7 0 0 1-11.55 2.6L4 12"></path></svg>
+                    <span>Làm mới</span>
+                </button>
+            </div>
+            <div class="conversation-picker-controls">
+                <label for="saved-conversation-select">Chọn hội thoại</label>
+                <select id="saved-conversation-select" data-hv="conversation-select" aria-describedby="conversation-privacy-copy">
+                    <option value="">Chọn hội thoại đã lưu</option>
+                </select>
+                <span class="conversation-status" data-hv="conversation-status" role="status" aria-live="polite">Đang tải danh sách hội thoại…</span>
+            </div>
+        </section>
 
         <div class="main-content">
             <!-- Left Sidebar: Documents -->
@@ -140,6 +160,6 @@
     </div>
     
     <script src="api-errors.js?v=20261019-1"></script>
-    <script src="main.js?v=20261020-ui-fixes-history-delete-1"></script>
+    <script src="main.js?v=20261020-conversations-1"></script>
 </body>
 </html>
