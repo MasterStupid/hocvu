@@ -187,18 +187,29 @@
   function cardMarkdown(segments, refs) {
     return [segments.map((segment) => segment.text).join('\n\n'), '', ...refs.map((ref, index) => `Nguồn [${index + 1}]: ${citeLabel(ref)} — ${ref.reg_title}\n${ref.excerpt}`)].join('\n');
   }
+  function hasSavedEvidence(response) {
+    const grounding = response.card?.grounding;
+    return typeof response.refused === 'boolean' && Array.isArray(response.references)
+      && grounding && Number.isFinite(grounding.level) && Number.isFinite(grounding.source_count)
+      && typeof grounding.label === 'string';
+  }
   function renderAnswerCard(response, refs, restore, cardId) {
     const card = response.card || {};
     const segments = card.verdict_segments?.length ? card.verdict_segments : [{ text: response.answer, cites: [] }];
     if (response.refused) return `<section class="refusal-card"><h3>Chưa tìm thấy căn cứ</h3><p>${escapeHTML(response.answer)}</p><p class="refusal-hint">Tôi không đoán mò khi nguồn chưa đủ rõ. Bạn có thể thử một trong các câu hỏi có căn cứ sau:</p><div class="follow-up-row">${(card.suggestions || []).map((question) => `<button class="follow-up-chip">${escapeHTML(question)}</button>`).join('')}</div></section>`;
+    if (response.intent === 'greeting') return `<p class="greeting-message">${escapeHTML(response.answer).replace(/\n/g, '<br>')}</p>`;
+    if (restore && !hasSavedEvidence(response)) {
+      return `<section class="history-message"><p>${escapeHTML(response.answer).replace(/\n/g, '<br>')}</p><p class="history-hint">Lượt đã lưu · Chi tiết căn cứ không có trong bản lưu này.</p></section>`;
+    }
     return `<section class="answer-card"><header class="answer-card-header"><div><span class="card-kicker">Phiếu kết quả tra cứu</span><h3>Kết luận</h3></div>${meter(card.grounding)}</header><div class="verdict-list">${segments.map((segment) => `<p>${escapeHTML(segment.text).replace(/\n/g, '<br>')} ${segment.cites.map((cite) => `<button class="citation-chip" data-citation="${cite}" aria-label="Xem nguồn ${cite}">[${cite}]</button>`).join('')}</p>`).join('')}</div>${card.notes?.length ? `<section class="card-notes"><h4>Lưu ý</h4>${card.notes.map((note) => `<p><span>${noteIcon(note.icon)}</span>${escapeHTML(note.text)}</p>`).join('')}</section>` : ''}<footer class="message-footer"><span class="intent-badge">${restore ? 'Lượt đã lưu' : 'Nguồn đã đối chiếu'}</span><button class="copy-btn" aria-label="Sao chép kèm nguồn">Sao chép kèm nguồn</button></footer></section>`;
   }
   function appendAnswer(response, { restore = false } = {}) {
     state.turn++; const refs = response.references || [];
     const segments = response.card?.verdict_segments || [{ text: response.answer, cites: [] }];
     const item = document.createElement('article'); item.className = `message bot${response.refused ? ' refused' : ''}`;
-    item.innerHTML = `<div class="avatar">AI</div><div class="bubble card-bubble">${renderAnswerCard(response, refs, restore, state.turn)}</div>`;
-    item.querySelectorAll('[data-citation]').forEach((button) => button.addEventListener('click', () => { const source = item.querySelector(`[data-source-index="${button.dataset.citation}"]`) || document.getElementById(`evidence-src-${button.dataset.citation}`); source?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); flashSource(button.dataset.citation); }));
+    const plain = !response.refused && (response.intent === 'greeting' || (restore && !hasSavedEvidence(response)));
+    item.innerHTML = `<div class="avatar">AI</div><div class="bubble${plain ? '' : ' card-bubble'}">${renderAnswerCard(response, refs, restore, state.turn)}</div>`;
+    item.querySelectorAll('[data-citation]').forEach((button) => button.addEventListener('click', () => { updateEvidence(refs); const source = item.querySelector(`[data-source-index="${button.dataset.citation}"]`) || document.getElementById(`evidence-src-${button.dataset.citation}`); source?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); flashSource(button.dataset.citation); }));
     item.querySelectorAll('[data-source-index]').forEach((card) => card.addEventListener('click', () => flashSource(card.dataset.sourceIndex)));
     item.querySelector('.copy-btn')?.addEventListener('click', () => copyAnswer(item.querySelector('.copy-btn'), cardMarkdown(segments, refs)));
     item.querySelectorAll('.follow-up-chip').forEach((button) => button.addEventListener('click', () => send(button.textContent)));
@@ -324,7 +335,14 @@
     if (!Array.isArray(turns) || !turns.length) return;
     turns.forEach((turn) => {
       appendUser(turn.question, { restore: true });
-      appendAnswer({ answer: turn.answer, intent: turn.intent }, { restore: true });
+      // Old engine rows used empty source IDs for academic refusals. Keep
+      // source-backed legacy rows unknown: their citations were never saved.
+      const legacyRefusal = turn.intent === 'unsafe'
+        || (turn.intent === 'academic_rules' && turn.article_id === '' && turn.rid === '');
+      appendAnswer({
+        ...turn,
+        refused: typeof turn.refused === 'boolean' ? turn.refused : (legacyRefusal ? true : null),
+      }, { restore: true });
     });
     setLiveStatus(`Đã khôi phục ${turns.length} lượt gần nhất`);
   }

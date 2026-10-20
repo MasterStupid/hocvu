@@ -203,6 +203,7 @@ class HocVuEngine:
             self.session.add_turn(
                 session_id, question, answer, intent.value, references[0].aid, references[0].rid,
                 context_question=context_question, context_root=context_root,
+                response=response.to_dict(),
             )
         return response
 

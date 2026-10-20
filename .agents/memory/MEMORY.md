@@ -9,3 +9,4 @@
 - [Document date integrity](document-date-integrity.md) — reject impossible detected dates; do not guess an effective date or relax search validity checks.
 - [Local OCR privacy](local-ocr-privacy.md) — OCR stays local regardless of answer-provider settings; preserve native text and invalidate obsolete extracted-text caches.
 - [ASGI execution boundaries](asgi-execution-boundaries.md) — offload heavy work; gate document writes before reading upload bytes, without serializing unrelated readers.
+- [History evidence snapshots](history-evidence-snapshots.md) — restore evidence as assessed when answered; do not reconstruct missing legacy citations from today's corpus.

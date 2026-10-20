@@ -1,4 +1,5 @@
 import sqlite3
+import json
 from pathlib import Path
 
 from .classifier import Classifier, Intent
@@ -30,9 +31,20 @@ class SessionStore:
                 )
             ''')
             columns = {row[1] for row in cursor.execute("PRAGMA table_info(turns)")}
-            for column in ("context_question", "context_root"):
+            additions = {
+                "context_question": "TEXT NOT NULL DEFAULT ''",
+                "context_root": "TEXT NOT NULL DEFAULT ''",
+                # NULL preserves the distinction between missing legacy state
+                # and an explicitly non-refused, grounded response.
+                "refused": "INTEGER",
+                "references_json": "TEXT",
+                "card_json": "TEXT",
+                "confidence": "REAL",
+                "refusal_reason": "TEXT",
+            }
+            for column, definition in additions.items():
                 if column not in columns:
-                    cursor.execute(f"ALTER TABLE turns ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
+                    cursor.execute(f"ALTER TABLE turns ADD COLUMN {column} {definition}")
             conn.commit()
         finally:
             conn.close()
@@ -40,6 +52,7 @@ class SessionStore:
     def add_turn(
         self, session_id: str, question: str, answer: str, intent: str,
         article_id: str, rid: str, *, context_question: str = "", context_root: str = "",
+        response: dict | None = None,
     ):
         # Also defend callers other than HocVuEngine. Old ungrounded rows remain
         # readable, but new greetings/refusals must not become conversation state.
@@ -47,18 +60,28 @@ class SessionStore:
             return None
         if Classifier().classify(question) != Intent.ACADEMIC_RULES:
             return None
+        if response is not None and response["refused"]:
+            return None
+        display_state = (
+            int(response["refused"]),
+            json.dumps(response["references"], ensure_ascii=False),
+            json.dumps(response["card"], ensure_ascii=False),
+            response["confidence"], response["refusal_reason"],
+        ) if response is not None else (None, None, None, None, None)
         conn = sqlite3.connect(self.db_path)
         try:
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT INTO turns (
                     session_id, question, answer, intent, article_id, rid,
-                    context_question, context_root
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    context_question, context_root, refused, references_json,
+                    card_json, confidence, refusal_reason
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 session_id, question, answer, intent, article_id, rid,
                 context_question or question,
                 context_root or (question if not is_context_dependent(question) else ""),
+                *display_state,
             ))
             conn.commit()
             return cursor.lastrowid
@@ -77,7 +100,21 @@ class SessionStore:
                 LIMIT ?
             ''', (session_id, limit))
             rows = cursor.fetchall()
-            return [dict(row) for row in reversed(rows)]
+            history = []
+            for row in reversed(rows):
+                turn = dict(row)
+                turn["refused"] = bool(turn["refused"]) if turn["refused"] in (0, 1) else None
+                for column, public_name, expected_type in (
+                    ("references_json", "references", list), ("card_json", "card", dict),
+                ):
+                    raw = turn.pop(column)
+                    try:
+                        value = json.loads(raw) if raw is not None else None
+                    except (ValueError, TypeError):
+                        value = None
+                    turn[public_name] = value if isinstance(value, expected_type) else None
+                history.append(turn)
+            return history
         finally:
             conn.close()
 
@@ -96,6 +133,7 @@ class SessionStore:
             history = conn.execute('''
                 SELECT question, context_question, context_root FROM turns
                 WHERE session_id = ? AND intent = ?
+                    AND COALESCE(refused, 0) = 0
                     AND TRIM(COALESCE(rid, '')) != ''
                     AND TRIM(COALESCE(article_id, '')) != ''
                 ORDER BY id DESC LIMIT ?
