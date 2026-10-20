@@ -2,74 +2,8 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const vm = require('node:vm');
 const { test } = require('node:test');
-
-// Execute the real app, exposing its private functions only in this test VM.
-// No alternate renderer or production test/auth bypass is shipped.
-function loadUI() {
-  const elements = new Map();
-  const escape = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  class Element {
-    constructor() {
-      this.children = []; this.dataset = {}; this.events = {}; this.cache = new Map();
-      this.classList = { add() {}, remove() {}, toggle() {} }; this.style = {};
-    }
-    set textContent(value) { this.text = value; this.html = null; }
-    get textContent() { return this.text || ''; }
-    set innerHTML(value) { this.html = value; this.cache.clear(); }
-    get innerHTML() { return this.html ?? escape(this.text || ''); }
-    appendChild(child) { this.children.push(child); }
-    addEventListener(name, callback) { this.events[name] = callback; }
-    scrollIntoView() { this.scrolled = true; }
-    querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
-    querySelectorAll(selector) {
-      if (this.cache.has(selector)) return this.cache.get(selector);
-      let items = [];
-      const attribute = selector === '[data-citation]' ? 'citation' : selector === '[data-source-index]' ? 'source-index' : null;
-      if (attribute) {
-        items = [...this.innerHTML.matchAll(new RegExp(`data-${attribute}="([^"]+)"`, 'g'))].map(match => {
-          const item = new Element();
-          item.dataset[attribute === 'citation' ? 'citation' : 'sourceIndex'] = match[1];
-          return item;
-        });
-      } else if (selector === '.copy-btn' && this.innerHTML.includes('class="copy-btn"')) {
-        items = [new Element()];
-      }
-      this.cache.set(selector, items);
-      return items;
-    }
-  }
-  const document = {
-    querySelector(selector) {
-      if (!elements.has(selector)) elements.set(selector, new Element());
-      return elements.get(selector);
-    },
-    querySelectorAll() { return []; },
-    createElement() { return new Element(); },
-    getElementById() { return new Element(); },
-    addEventListener() {},
-  };
-  const sandbox = {
-    document, localStorage: { getItem() { return null; }, setItem() {} },
-    crypto: { randomUUID() { return 'test-session'; } },
-    navigator: {}, window: {}, console, setTimeout() { return 1; },
-  };
-  const filename = path.join(__dirname, '..', 'ui', 'main.js');
-  const source = fs.readFileSync(filename, 'utf8');
-  assert.match(source, /\}\)\(\);\s*$/);
-  const instrumented = source.replace(/\}\)\(\);\s*$/, `
-    globalThis.testUI = {
-      renderAnswerCard, appendAnswer, restoreHistory, state, dom,
-      setSpeechHook(callback) { speak = callback; }
-    };
-  })();`);
-  vm.runInNewContext(instrumented, sandbox, { filename });
-  const ui = sandbox.testUI;
-  ui.speech = [];
-  ui.setSpeechHook((...args) => ui.speech.push(args));
-  return ui;
-}
+const { loadUI } = require('./helpers/ui-harness.cjs');
 
 function grounded(title = 'Quy định bảo lưu') {
   return {

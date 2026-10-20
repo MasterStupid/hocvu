@@ -7,7 +7,7 @@
     aiEnabled: localStorage.getItem('hv_ai_enabled') === 'true',
     ttsEnabled: false, liveEnabled: false, isLoading: false, isSpeaking: false,
     recognition: null, recognitionRunning: false, recognitionRequested: false, turn: 0, listenTimer: null, transcript: [], speechRetry: false, livePaused: false,
-    ignoreRecognitionResults: false, listenAfter: 0, speechId: 0,
+    ignoreRecognitionResults: false, listenAfter: 0, speechId: 0, audio: null, speechTimer: null,
     lastAssistantSpeech: '', echoGuardUntil: 0,
   };
   localStorage.setItem('hv_session_id', state.sessionId);
@@ -65,7 +65,7 @@
   }
   function appendTyping() {
     const item = document.createElement('article'); item.id = 'typing-indicator'; item.className = 'message bot typing';
-    item.innerHTML = '<div class="avatar">AI</div><div class="bubble"><div class="typing-indicator"><i></i><i></i><i></i></div></div>';
+    item.innerHTML = '<div class="avatar">AI</div><div class="bubble"><div class="typing-indicator" role="status" aria-label="Đang trả lời"><i class="typing-dot" aria-hidden="true"></i><i class="typing-dot" aria-hidden="true"></i><i class="typing-dot" aria-hidden="true"></i></div></div>';
     dom.thread.appendChild(item); scrollBottom();
   }
   const removeTyping = () => document.getElementById('typing-indicator')?.remove();
@@ -126,18 +126,37 @@
     return voices.find((voice) => /^vi(-|_)/i.test(voice.lang) && /hoaimy|namminh|vietnamese|việt/i.test(voice.name))
       || voices.find((voice) => /^vi(-|_)/i.test(voice.lang));
   }
+  function releaseAudio(audio) {
+    audio.onended = null; audio.onerror = null;
+    audio.pause();
+    audio.removeAttribute('src');
+    audio.load();
+  }
+  function stopSpeech() {
+    // Invalidate callbacks before cancel/load can deliver asynchronous events.
+    state.speechId++;
+    clearTimeout(state.speechTimer); state.speechTimer = null; state.speechRetry = false;
+    const audio = state.audio; state.audio = null;
+    if (audio) releaseAudio(audio);
+    window.speechSynthesis?.cancel();
+    state.isSpeaking = false;
+  }
   function speak(text, audioUrl = null) {
+    stopSpeech();
     if (!(state.ttsEnabled || state.liveEnabled)) {
       if (state.liveEnabled) state.livePaused = false;
       scheduleListening();
       return;
     }
-    const speechId = ++state.speechId;
+    const speechId = state.speechId;
     const spoken = speechText(text);
     state.lastAssistantSpeech = spoken;
     state.isSpeaking = true; setLiveStatus('AI đang đọc câu trả lời', 'working');
     const done = () => {
-      if (speechId !== state.speechId) return;
+      if (speechId !== state.speechId || !state.isSpeaking) return;
+      const audio = state.audio; state.audio = null;
+      if (audio) releaseAudio(audio);
+      clearTimeout(state.speechTimer); state.speechTimer = null; state.speechRetry = false;
       state.isSpeaking = false;
       if (!state.liveEnabled) setLiveStatus('Sẵn sàng nhập câu hỏi');
       else {
@@ -150,21 +169,30 @@
 
     if (audioUrl) {
       const audio = new Audio(audioUrl);
+      state.audio = audio;
       audio.onended = done;
-      audio.onerror = () => {
+      const fallback = () => {
+        if (speechId !== state.speechId || state.audio !== audio) return;
+        state.audio = null; releaseAudio(audio);
         speakBrowser(spoken, speechId, done);
       };
-      audio.play().catch(() => speakBrowser(spoken, speechId, done));
+      audio.onerror = fallback;
+      try { audio.play().catch(fallback); } catch (_) { fallback(); }
       return;
     }
     speakBrowser(spoken, speechId, done);
   }
 
   function speakBrowser(spoken, speechId, done) {
+    if (speechId !== state.speechId || !state.isSpeaking) return;
     if (!('speechSynthesis' in window)) { done(); return; }
     if (!speechSynthesis.getVoices().length && !state.speechRetry) {
       state.speechRetry = true;
-      setTimeout(() => { state.speechRetry = false; speakBrowser(spoken, speechId, done); }, 180);
+      state.speechTimer = setTimeout(() => {
+        if (speechId !== state.speechId) return;
+        state.speechTimer = null;
+        speakBrowser(spoken, speechId, done);
+      }, 180);
       return;
     }
     speechSynthesis.cancel();
@@ -242,6 +270,7 @@
   }
   async function send(text = dom.input.value.trim(), { source = 'text' } = {}) {
     const question = text.trim(); if (!question || state.isLoading) return;
+    stopSpeech();
     if (source === 'text') pauseRecognitionForTextTurn();
     else { clearTimeout(state.listenTimer); state.livePaused = true; }
     state.isLoading = true; dom.input.value = ''; updateComposer(); setLiveStatus('Đang tìm trong tài liệu', 'working'); appendUser(question); appendTyping();
@@ -262,7 +291,7 @@
     try { state.recognition.start(); } catch (_) { state.recognitionRequested = false; if (fromLive) scheduleListening(); }
   }
   function stopLive() {
-    state.liveEnabled = false; state.livePaused = false; clearTimeout(state.listenTimer); speechSynthesis?.cancel();
+    state.liveEnabled = false; state.livePaused = false; clearTimeout(state.listenTimer); stopSpeech();
     if (state.recognitionRunning || state.recognitionRequested) state.recognition.abort(); updateFeatureControls(); setLiveStatus('Sẵn sàng nhập câu hỏi');
   }
   function setupVoice() {
@@ -358,7 +387,7 @@
     dom.input.addEventListener('input', updateComposer);
     dom.input.addEventListener('keydown', (event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); send(); } });
     dom.form.addEventListener('submit', (event) => { event.preventDefault(); send(); });
-    dom.tts.addEventListener('click', () => { state.ttsEnabled = !state.ttsEnabled; if (!state.ttsEnabled && state.liveEnabled) stopLive(); else updateFeatureControls(); });
+    dom.tts.addEventListener('click', () => { state.ttsEnabled = !state.ttsEnabled; if (!state.ttsEnabled) { if (state.liveEnabled) stopLive(); else stopSpeech(); } updateFeatureControls(); });
     dom.mic.addEventListener('click', () => { state.recognitionRunning ? state.recognition.stop() : startListening(false); });
     dom.suggestions.addEventListener('click', (event) => {
       const topic = event.target.closest('[data-topic]');

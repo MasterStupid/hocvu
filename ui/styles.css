@@ -1,10 +1,14 @@
 :root {
+    color-scheme: light;
     /* Light Theme - Warm whites, soft sage/teal */
     --bg-primary: #f8fafc;
     --bg-secondary: #f1f5f9;
     --bg-glass: rgba(255, 255, 255, 0.7);
     --text-primary: #0f172a;
     --text-secondary: #475569;
+    --line: rgba(148, 163, 184, 0.4);
+    --muted: var(--text-secondary);
+    --ink: var(--text-primary);
     
     --accent: #0d9488;
     --accent-hover: #0f766e;
@@ -28,12 +32,14 @@
 }
 
 [data-theme="dark"] {
+    color-scheme: dark;
     /* Dark Theme - Deep navy, luminous teal */
     --bg-primary: #0f172a;
     --bg-secondary: #1e293b;
     --bg-glass: rgba(15, 23, 42, 0.8);
     --text-primary: #f8fafc;
     --text-secondary: #94a3b8;
+    --line: rgba(148, 163, 184, 0.3);
     
     --accent: #14b8a6;
     --accent-hover: #2dd4bf;
@@ -114,20 +120,20 @@ button:focus-visible, a:focus-visible, textarea:focus-visible {
 .document-date-dialog h2 { margin-top: 0; }
 .document-date-dialog p { overflow-wrap: anywhere; }
 .document-date-dialog label { display: grid; gap: .4rem; }
-.document-date-dialog input { min-width: 0; width: 100%; box-sizing: border-box; padding: .65rem; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.document-date-dialog input { min-width: 0; width: 100%; box-sizing: border-box; padding: .65rem; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg-secondary); color: var(--text-primary); }
 .document-date-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .65rem; margin-top: 1rem; }
 .document-date-dialog button:disabled { opacity: .6; cursor: wait; }
 .library-actions { display: flex; align-items: center; gap: .7rem; flex-wrap: wrap; }
 .upload-queue { margin-top: 1rem; display: grid; gap: .7rem; }
 .upload-queue h3 { margin: 0; font-size: .95rem; }
-.queue-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .35rem .75rem; padding: .8rem; border: 1px solid var(--line); border-radius: .8rem; background: rgba(255,255,255,.56); }
+.queue-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .35rem .75rem; padding: .8rem; border: 1px solid var(--line); border-radius: .8rem; background: var(--bg-glass); }
 .queue-item small { color: var(--muted); }
 .queue-fields { grid-column: 1 / -1; display: grid; grid-template-columns: .48fr 1fr 1fr 1fr auto; gap: .55rem; }
 .queue-fields label { display: grid; gap: .28rem; color: var(--muted); font-size: .75rem; }
-.queue-fields input { min-width: 0; padding: .5rem .55rem; border: 1px solid var(--line); border-radius: .5rem; background: #fff; color: var(--ink); }
+.queue-fields input { min-width: 0; padding: .5rem .55rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--bg-secondary); color: var(--ink); }
 .queue-fields .queue-ocr { display: flex; align-items: center; gap: .4rem; align-self: end; padding-bottom: .5rem; white-space: nowrap; }
 .queue-fields .queue-ocr input { min-width: auto; }
-.text-preview { margin-top: 1rem; padding: 1rem; border: 1px solid var(--line); border-radius: .8rem; background: rgba(255,255,255,.65); }
+.text-preview { margin-top: 1rem; padding: 1rem; border: 1px solid var(--line); border-radius: .8rem; background: var(--bg-glass); }
 .text-preview > div { display: flex; align-items: start; justify-content: space-between; gap: 1rem; }
 .text-preview h3 { margin: 0; }
 .text-preview p { margin: .4rem 0 .75rem; color: var(--muted); }
@@ -357,6 +363,8 @@ button:focus-visible, a:focus-visible, textarea:focus-visible {
 }
 
 .typing-dot {
+    display: block;
+    flex: none;
     width: 8px;
     height: 8px;
     background-color: var(--text-secondary);
@@ -366,6 +374,10 @@ button:focus-visible, a:focus-visible, textarea:focus-visible {
 
 .typing-dot:nth-child(1) { animation-delay: -0.32s; }
 .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
+@media (prefers-reduced-motion: reduce) {
+    .typing-dot { animation: none; transform: none; opacity: .7; }
+}
 
 @keyframes bounce {
     0%, 80%, 100% { transform: scale(0); }

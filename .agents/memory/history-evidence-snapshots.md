@@ -7,4 +7,8 @@ Saved answer presentation represents the evidence at the time of the original re
 
 **Why:** regulations can change or disappear, and a regulation/article ID does not identify the exact cited clauses, excerpt or assessment. Recomputing from today's corpus can silently attribute different evidence to the old answer.
 
-**How to apply:** retain the original presentation snapshot with newly accepted academic turns. Missing or corrupt legacy presentation must remain visibly unavailable, not become a fabricated weak/zero-source assessment or an asserted academic conclusion. Keep the existing grounded-only persistence and context policy; greetings remain ordinary chat messages, not legal result cards.
+**How to apply:** retain the original presentation snapshot with newly accepted academic turns. Missing or corrupt legacy presentation must remain visibly unavailable, not become a fabricated weak/zero-source assessment or an asserted academic conclusion. Keep the existing grounded-only persistence and context policy.
+
+New and restored greetings must remain ordinary chat messages, regardless of confidence or any card-shaped payload.
+
+**Why:** a greeting makes no regulatory claim to assess. Showing an academic conclusion or “Căn cứ yếu · 0 nguồn” incorrectly treats it as an unsupported academic answer.

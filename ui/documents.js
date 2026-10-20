@@ -2,7 +2,7 @@
   'use strict';
   const $ = (key) => document.querySelector(`[data-doc="${key}"]`);
   const dom = { form: $('upload-form'), input: $('file-input'), ocr: $('ocr'), queue: $('queue'), selected: $('selected-file'), status: $('status'), table: $('table'), count: $('count'), reindex: $('reindex'), zone: $('drop-zone'), upload: $('upload'), removeQueued: $('remove-queued'), removeLibrary: $('remove-library'), preview: $('preview'), previewTitle: $('preview-title'), previewMeta: $('preview-meta'), previewText: $('preview-text'), closePreview: $('close-preview') };
-  let queue = [], librarySelection = new Set();
+  let queue = [], librarySelection = new Set(), uploading = false;
   const escapeHTML = (value) => { const box = document.createElement('div'); box.textContent = value || ''; return box.innerHTML; };
   const formatSize = (bytes) => bytes < 1024 * 1024 ? `${Math.ceil(bytes / 1024)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   const setStatus = (message, type = '') => { dom.status.textContent = message; dom.status.className = `upload-status ${type}`; };
@@ -20,7 +20,7 @@
       setStatus('Đã sửa ngày áp dụng và cập nhật chỉ mục tìm kiếm.', 'success');
     },
   });
-  function updateSelected() { dom.selected.textContent = queue.length ? `${queue.length} tệp trong hàng đợi` : 'Chưa chọn tệp'; dom.upload.disabled = !queue.length; dom.removeQueued.disabled = !queue.some((item) => item.selected); }
+  function updateSelected() { dom.selected.textContent = queue.length ? `${queue.length} tệp trong hàng đợi` : 'Chưa chọn tệp'; dom.upload.disabled = uploading || !queue.length; dom.removeQueued.disabled = uploading || !queue.some((item) => item.selected); }
   function renderQueue() {
     dom.queue.innerHTML = queue.length ? `<h3>Hàng đợi tải lên</h3>${queue.map((item) => `<article class="queue-item"><label><input data-queue-select="${item.id}" type="checkbox" ${item.selected ? 'checked' : ''}> Chọn</label><strong>${escapeHTML(item.file.name)}</strong><small>${formatSize(item.file.size)}</small><div class="queue-fields"><label>STT<input data-queue-field="order" data-queue-id="${item.id}" type="number" min="1" value="${escapeHTML(item.order)}"></label><label>Số quyết định<input data-queue-field="decision_number" data-queue-id="${item.id}" value="${escapeHTML(item.decision_number)}"></label><label>Điều / khoản<input data-queue-field="article_clause" data-queue-id="${item.id}" value="${escapeHTML(item.article_clause)}"></label><label>Ngày áp dụng<input data-queue-field="document_date" data-queue-id="${item.id}" type="date" value="${escapeHTML(item.document_date)}"></label><label class="queue-ocr"><input data-queue-field="ocr" data-queue-id="${item.id}" type="checkbox" ${item.ocr ? 'checked' : ''}> OCR</label></div></article>`).join('')}` : '';
     dom.queue.querySelectorAll('[data-queue-select]').forEach((input) => input.addEventListener('change', () => { queue.find((entry) => entry.id === input.dataset.queueSelect).selected = input.checked; updateSelected(); }));
@@ -48,10 +48,32 @@
   ['dragenter', 'dragover'].forEach((event) => dom.zone.addEventListener(event, (e) => { e.preventDefault(); dom.zone.classList.add('dragging'); }));
   ['dragleave', 'drop'].forEach((event) => dom.zone.addEventListener(event, (e) => { e.preventDefault(); dom.zone.classList.remove('dragging'); }));
   dom.zone.addEventListener('drop', (event) => addFiles([...event.dataTransfer.files]));
-  dom.removeQueued.addEventListener('click', () => { queue = queue.filter((item) => !item.selected); renderQueue(); });
+  dom.removeQueued.addEventListener('click', () => { if (uploading) return; queue = queue.filter((item) => !item.selected); renderQueue(); });
   dom.removeLibrary.addEventListener('click', () => deleteDocuments([...librarySelection]));
   dom.closePreview.addEventListener('click', () => { dom.preview.hidden = true; });
-  dom.form.addEventListener('submit', async (event) => { event.preventDefault(); if (!queue.length) return; dom.upload.disabled = true; let done = 0; try { for (const item of [...queue]) { setStatus(`Đang xử lý ${done + 1}/${queue.length}: ${item.file.name}`); const body = new FormData(); body.append('file', item.file); body.append('ocr', item.ocr ? 'true' : 'false'); for (const key of ['order', 'decision_number', 'article_clause', 'document_date']) body.append(key, item[key]); await request('/api/documents/upload', { method: 'POST', body }); queue = queue.filter((entry) => entry.id !== item.id); done += 1; renderQueue(); } setStatus(`Đã tải lên và lập chỉ mục ${done} tài liệu.`, 'success'); await load(); } catch (error) { setStatus(`${done} tệp đã xong. ${error.message}`, 'error'); } finally { dom.upload.disabled = !queue.length; } });
+  dom.form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (uploading || !queue.length) return;
+    const batch = [...queue], total = batch.length;
+    uploading = true; updateSelected();
+    let done = 0;
+    try {
+      for (const item of batch) {
+        setStatus(`Đang xử lý ${done + 1}/${total}: ${item.file.name}`);
+        const body = new FormData();
+        body.append('file', item.file); body.append('ocr', item.ocr ? 'true' : 'false');
+        for (const key of ['order', 'decision_number', 'article_clause', 'document_date']) body.append(key, item[key]);
+        await request('/api/documents/upload', { method: 'POST', body });
+        queue = queue.filter((entry) => entry.id !== item.id);
+        done += 1; renderQueue();
+      }
+      setStatus(`Đã tải lên và lập chỉ mục ${done} tài liệu.`, 'success'); await load();
+    } catch (error) {
+      setStatus(`${done} tệp đã xong. ${error.message}`, 'error');
+    } finally {
+      uploading = false; updateSelected();
+    }
+  });
   dom.reindex.addEventListener('click', async () => { dom.reindex.disabled = true; setStatus('Đang xây dựng lại chỉ mục...'); try { const result = await request('/api/documents/reindex', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); setStatus(`Đã lập chỉ mục ${result.documents} tài liệu với ${result.chunks} đoạn nội dung.`, 'success'); await load(); } catch (error) { setStatus(error.message, 'error'); } finally { dom.reindex.disabled = false; } });
   renderQueue(); load().catch((error) => setStatus(error.message, 'error'));
 })();
