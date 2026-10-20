@@ -115,6 +115,7 @@ test('missing voices get one retry, then use the browser default without retryin
   ui.speak('Xin chào');
   ui.runTimers();
   assert.equal(ui.synthesis.spoken.length, 1);
+  ui.synthesis.spoken[0].onstart();
   assert.equal(ui.timers.size, 0);
 });
 
@@ -126,4 +127,38 @@ test('opening a new conversation stops audio and pending speech', () => {
   assert.equal(old.pauses, 1);
   assert.equal(ui.state.audio, null);
   assert.equal(ui.state.isSpeaking, false);
+});
+
+test('blocked browser speech is reported and cannot leave Live stuck speaking', () => {
+  const ui = enabled();
+  ui.state.liveEnabled = true;
+  ui.speak('Xin chào');
+  const utterance = ui.synthesis.spoken[0];
+  ui.runTimers();
+  assert.equal(ui.state.isSpeaking, false);
+  assert.equal(ui.dom.voiceHelp.hidden, false);
+  assert.match(ui.dom.voiceHelpText.textContent, /chưa phát được giọng đọc/);
+  const timer = ui.state.listenTimer;
+  utterance.onerror();
+  utterance.onend();
+  assert.equal(ui.state.listenTimer, timer, 'late callbacks must not restart the listening timer');
+});
+
+test('browser speech that starts is not timed out while a long answer is playing', () => {
+  const ui = enabled();
+  ui.speak('Một câu trả lời dài');
+  ui.synthesis.spoken[0].onstart();
+  assert.equal(ui.timers.size, 0);
+  ui.runTimers();
+  assert.equal(ui.state.isSpeaking, true);
+  ui.synthesis.spoken[0].onend();
+  assert.equal(ui.state.isSpeaking, false);
+});
+
+test('a browser synthesis exception is visible rather than leaving speech active', () => {
+  const ui = enabled({ speakError: new Error('Speech blocked') });
+  ui.speak('Xin chào');
+  assert.equal(ui.state.isSpeaking, false);
+  assert.equal(ui.timers.size, 0);
+  assert.equal(ui.dom.voiceHelp.hidden, false);
 });

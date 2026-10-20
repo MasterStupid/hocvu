@@ -6,7 +6,7 @@ const vm = require('node:vm');
 let nextSessionId = 0;
 
 function loadUI(options = {}) {
-  const elements = new Map(), timers = new Map(), audios = [];
+  const elements = new Map(), timers = new Map(), audios = [], recognitions = [];
   const calls = [], confirmations = [], storage = options.storage || new Map(), downloads = [], blobs = [], revokedURLs = [];
   const windowEvents = {}, documentEvents = {};
   let timerId = 0;
@@ -68,14 +68,26 @@ function loadUI(options = {}) {
       return null;
     },
     addEventListener(name, callback) { documentEvents[name] = callback; },
+    permissionsPolicy: options.microphoneAllowed === undefined ? undefined : {
+      allowsFeature(feature) { return feature !== 'microphone' || options.microphoneAllowed; },
+    },
   };
   const synthesis = {
     spoken: [], cancels: 0,
     voices: options.voices || [{ lang: 'vi-VN', name: 'Vietnamese' }],
     getVoices() { return this.voices; },
     cancel() { this.cancels++; },
-    speak(utterance) { this.spoken.push(utterance); },
+    speak(utterance) {
+      if (options.speakError) throw options.speakError;
+      this.spoken.push(utterance);
+    },
   };
+  class Recognition {
+    constructor() { this.starts = 0; this.stops = 0; this.aborts = 0; recognitions.push(this); }
+    start() { this.starts++; if (options.startError) throw options.startError; }
+    stop() { this.stops++; }
+    abort() { this.aborts++; }
+  }
   class Audio {
     constructor(src) {
       this.src = src; this.pauses = 0; this.loads = 0;
@@ -98,6 +110,9 @@ function loadUI(options = {}) {
     },
     window: {
       speechSynthesis: synthesis,
+      SpeechRecognition: options.noRecognition ? undefined : Recognition,
+      isSecureContext: options.secure ?? true,
+      location: { href: 'https://hocvu.example.test/' },
       addEventListener(name, callback) { windowEvents[name] = callback; },
       confirm(message) { confirmations.push(message); return options.confirm ?? true; },
     }, speechSynthesis: synthesis,
@@ -118,7 +133,7 @@ function loadUI(options = {}) {
   const instrumented = source.replace(/\}\)\(\);\s*$/, `
     globalThis.testUI = {
       renderAnswerCard, renderSuggestionTopics, appendAnswer, restoreHistory, state, dom, appendTyping,
-      speak, stopSpeech, stopLive, send, bind, startNewConversation,
+       speak, stopSpeech, stopLive, send, bind, startNewConversation, setupVoice, startListening,
        deleteHistory, boot, updateComposer, exportConversation, checkConversationStatus,
        refreshConversations, selectConversation, renderConversations,
       setSpeechHook(callback) { speak = callback; }
@@ -126,7 +141,7 @@ function loadUI(options = {}) {
   })();`);
   vm.runInNewContext(instrumented, sandbox, { filename });
   const ui = sandbox.testUI;
-  Object.assign(ui, { speech: [], synthesis, audios, timers, calls, confirmations, storage, downloads, blobs, revokedURLs, document, windowEvents, documentEvents });
+  Object.assign(ui, { speech: [], synthesis, audios, recognitions, timers, calls, confirmations, storage, downloads, blobs, revokedURLs, document, windowEvents, documentEvents });
   ui.storageEvent = (key, newValue) => windowEvents.storage?.({ key, newValue, storageArea: sandbox.localStorage });
   ui.runTimers = () => {
     const pending = [...timers.entries()];

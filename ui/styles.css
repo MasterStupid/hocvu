@@ -562,6 +562,20 @@ button:focus-visible, a:focus-visible, textarea:focus-visible {
 .live-status { color: var(--accent); font-weight: 650; }
 .live-status.listening { color: var(--success); }
 .live-status.working { color: var(--warning); }
+.live-status.error { color: var(--danger, #b42318); }
+.voice-help {
+    margin-top: 10px;
+    padding: 10px 14px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--bg-secondary);
+    font-size: 13px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+.voice-help[hidden] { display: none; }
+.voice-help p { margin: 0 0 6px; }
+.voice-help a { color: var(--accent); font-weight: 650; text-decoration: underline; }
 .ref-date { display: inline-flex; align-items: center; gap: .35rem; white-space: nowrap; }
 .ref-date input { border: 1px solid rgba(13, 148, 136, .35); border-radius: 4px; background: var(--bg-glass); color: var(--text-primary); font: inherit; font-size: .75rem; padding: .2rem .35rem; }
 

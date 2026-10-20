@@ -13,7 +13,7 @@
     ttsEnabled: false, liveEnabled: false, isLoading: false, isSpeaking: false,
     recognition: null, recognitionRunning: false, recognitionRequested: false, turn: 0, listenTimer: null, transcript: [], speechRetry: false, livePaused: false,
     ignoreRecognitionResults: false, listenAfter: 0, speechId: 0, audio: null, speechTimer: null,
-    lastAssistantSpeech: '', echoGuardUntil: 0,
+    lastAssistantSpeech: '', echoGuardUntil: 0, speechStartTimer: null,
     isDeleting: false, isRestoring: false, viewVersion: 0,
     conversations: [], listVersion: 0,
   };
@@ -28,6 +28,7 @@
     suggestions: $('suggestions'), menu: $('menu-btn'), left: $('left-sidebar'),
     right: $('right-sidebar'), closeLeft: $('close-left'), closeRight: $('close-right'),
     overlay: $('overlay'), welcome: $('welcome'), liveStatus: $('live-status'),
+    voiceHelp: $('voice-help'), voiceHelpText: $('voice-help-text'), voiceOpen: $('voice-open'),
     newConversation: $('new-conversation'), exportConversation: $('export-conversation'),
     deleteHistory: $('delete-history'),
     conversationSelect: $('conversation-select'), conversationRefresh: $('conversation-refresh'),
@@ -48,6 +49,21 @@
     dom.liveStatus.textContent = message;
     dom.liveStatus.className = `live-status ${kind}`.trim();
   };
+  function showVoiceIssue(message) {
+    setLiveStatus(message, 'error');
+    dom.voiceHelpText.textContent = message;
+    dom.voiceOpen.href = window.location.href;
+    dom.voiceHelp.hidden = false;
+  }
+  function voiceInputIssue() {
+    if (window.isSecureContext === false) return 'Micro cần kết nối HTTPS. Hãy mở ứng dụng qua địa chỉ HTTPS.';
+    const policy = document.permissionsPolicy || document.featurePolicy;
+    if (policy?.allowsFeature && !policy.allowsFeature('microphone')) {
+      return 'Khung xem trước đang chặn micro. Hãy mở ứng dụng trong tab riêng rồi cho phép micro.';
+    }
+    if (!state.recognition) return 'Trình duyệt này chưa hỗ trợ nhận dạng giọng nói. Hãy thử Chrome hoặc Edge trong tab riêng.';
+    return '';
+  }
   const updateComposer = () => {
     dom.input.style.height = 'auto'; dom.input.style.height = `${Math.min(dom.input.scrollHeight, 180)}px`;
     dom.send.disabled = !dom.input.value.trim() || state.isLoading || state.isDeleting || state.isRestoring;
@@ -55,7 +71,7 @@
     dom.deleteHistory.disabled = state.isLoading || state.isDeleting || state.isRestoring;
     dom.exportConversation.disabled = state.isDeleting;
     dom.mic.disabled = state.isDeleting || state.isRestoring;
-    dom.live.disabled = !state.recognition || state.isDeleting || state.isRestoring;
+    dom.live.disabled = state.isDeleting || state.isRestoring || (state.isLoading && !state.liveEnabled);
     dom.conversationSelect.disabled = state.isDeleting;
     dom.conversationRefresh.disabled = state.isDeleting;
   };
@@ -65,6 +81,8 @@
     dom.live.classList.toggle('active', state.liveEnabled); dom.live.setAttribute('aria-pressed', String(state.liveEnabled));
     dom.live.textContent = state.liveEnabled ? 'Live đang bật' : 'Live';
     dom.tts.classList.toggle('active', state.ttsEnabled);
+    dom.tts.setAttribute('aria-pressed', String(state.ttsEnabled));
+    dom.tts.title = state.ttsEnabled ? 'Đọc câu trả lời: bật' : 'Đọc câu trả lời: tắt';
   };
   function remember(role, text, extra = {}) {
     // Keep the evidence as it was displayed, independent of later responses.
@@ -154,6 +172,7 @@
     // Invalidate callbacks before cancel/load can deliver asynchronous events.
     state.speechId++;
     clearTimeout(state.speechTimer); state.speechTimer = null; state.speechRetry = false;
+    clearTimeout(state.speechStartTimer); state.speechStartTimer = null;
     const audio = state.audio; state.audio = null;
     if (audio) releaseAudio(audio);
     window.speechSynthesis?.cancel();
@@ -175,6 +194,7 @@
       const audio = state.audio; state.audio = null;
       if (audio) releaseAudio(audio);
       clearTimeout(state.speechTimer); state.speechTimer = null; state.speechRetry = false;
+      clearTimeout(state.speechStartTimer); state.speechStartTimer = null;
       state.isSpeaking = false;
       if (!state.liveEnabled) setLiveStatus('Sẵn sàng nhập câu hỏi');
       else {
@@ -203,7 +223,14 @@
 
   function speakBrowser(spoken, speechId, done) {
     if (speechId !== state.speechId || !state.isSpeaking) return;
-    if (!('speechSynthesis' in window)) { done(); return; }
+    const failed = () => {
+      if (speechId !== state.speechId || !state.isSpeaking) return;
+      // Invalidate late onend/onerror callbacks before freeing Live to listen.
+      done();
+      window.speechSynthesis?.cancel();
+      showVoiceIssue('Trình duyệt chưa phát được giọng đọc. Hãy kiểm tra âm thanh, thử lại trong tab riêng; bạn vẫn có thể hỏi bằng micro hoặc văn bản.');
+    };
+    if (!('speechSynthesis' in window)) { failed(); return; }
     if (!speechSynthesis.getVoices().length && !state.speechRetry) {
       state.speechRetry = true;
       state.speechTimer = setTimeout(() => {
@@ -219,9 +246,16 @@
     utterance.rate = state.liveEnabled ? .94 : 1;
     const voice = preferredVietnameseVoice();
     if (voice) utterance.voice = voice;
+    // Some embedded browsers never emit onend/onerror if speech is blocked.
+    // Time out only the start, not a long answer that is already playing.
+    state.speechStartTimer = setTimeout(failed, 5000);
+    utterance.onstart = () => {
+      if (speechId !== state.speechId) return;
+      clearTimeout(state.speechStartTimer); state.speechStartTimer = null;
+    };
     utterance.onend = done;
-    utterance.onerror = done;
-    speechSynthesis.speak(utterance);
+    utterance.onerror = failed;
+    try { speechSynthesis.speak(utterance); } catch (_) { failed(); }
   }
   function copyAnswer(button, answer) {
     const copied = () => { button.textContent = 'Đã chép'; setTimeout(() => { button.textContent = 'Sao chép'; }, 1600); };
@@ -325,14 +359,28 @@
       if (viewVersion === state.viewVersion) {
         state.isLoading = false; updateComposer();
         if (!state.liveEnabled && !state.isSpeaking) setLiveStatus('Sẵn sàng nhập câu hỏi');
+        if (state.liveEnabled && !state.isSpeaking) scheduleListening();
       }
     }
   }
   function startListening(fromLive = false) {
-    if (!state.recognition || state.recognitionRunning || state.recognitionRequested || state.isLoading || state.isDeleting || state.isRestoring || state.isSpeaking) return;
-    if (!fromLive) state.livePaused = false;
+    if (state.recognitionRunning || state.recognitionRequested || state.isLoading || state.isDeleting || state.isRestoring) return;
+    const issue = voiceInputIssue();
+    if (issue) { stopLive(); showVoiceIssue(issue); return; }
+    if (fromLive && (!state.liveEnabled || state.livePaused || state.isSpeaking)) return;
+    if (!fromLive) {
+      stopSpeech(); clearTimeout(state.listenTimer);
+      state.livePaused = false; state.listenAfter = 0; state.echoGuardUntil = 0;
+    }
+    dom.voiceHelp.hidden = true;
+    setLiveStatus('Đang mở micro… Hãy cho phép micro nếu trình duyệt hỏi.', 'listening');
+    state.ignoreRecognitionResults = false;
     state.recognitionRequested = true;
-    try { state.recognition.start(); } catch (_) { state.recognitionRequested = false; if (fromLive) scheduleListening(); }
+    try { state.recognition.start(); } catch (_) {
+      state.recognitionRequested = false;
+      stopLive();
+      showVoiceIssue('Chưa mở được micro. Hãy kiểm tra quyền micro của trang, mở tab riêng rồi thử lại.');
+    }
   }
   function stopLive() {
     state.liveEnabled = false; state.livePaused = false; clearTimeout(state.listenTimer); stopSpeech();
@@ -341,24 +389,33 @@
   }
   function setupVoice() {
     const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!Recognition) { dom.mic.title = 'Trình duyệt chưa hỗ trợ nhận dạng giọng nói'; dom.live.disabled = true; return; }
+    if (!Recognition) {
+      dom.mic.title = dom.live.title = 'Bấm để xem hướng dẫn dùng giọng nói trên trình duyệt được hỗ trợ';
+      return;
+    }
     const recognition = new Recognition(); recognition.lang = 'vi-VN'; recognition.interimResults = true; recognition.continuous = false;
     recognition.onstart = () => {
-      state.recognitionRunning = true;
-      if (state.livePaused || state.isLoading || state.isDeleting || state.isRestoring || state.isSpeaking) {
+      state.recognitionRunning = true; state.recognitionRequested = false;
+      if (state.ignoreRecognitionResults || state.livePaused || state.isLoading || state.isDeleting || state.isRestoring || state.isSpeaking) {
         state.ignoreRecognitionResults = true; recognition.abort(); return;
       }
       state.ignoreRecognitionResults = false; dom.mic.classList.add('active'); dom.mic.setAttribute('aria-label', 'Dừng ghi âm'); setLiveStatus('Đang nghe…', 'listening');
     };
     recognition.onend = () => { state.recognitionRunning = false; state.recognitionRequested = false; dom.mic.classList.remove('active'); dom.mic.setAttribute('aria-label', 'Nhập bằng giọng nói'); scheduleListening(); };
     recognition.onerror = (event) => {
-      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') { stopLive(); appendError('Trình duyệt chưa được cấp quyền micro. Hãy cho phép micro rồi bật Live lại.'); }
-      else if (event.error === 'no-speech') {
+      if (event.error === 'no-speech') {
         state.livePaused = state.liveEnabled;
         setLiveStatus(state.liveEnabled ? 'Không nghe thấy lời nói. Nhấn micro để nói tiếp.' : 'Không nghe thấy lời nói.');
       } else if (event.error !== 'aborted') {
-        state.livePaused = state.liveEnabled;
-        appendError('Không thể nhận dạng giọng nói. Hãy bấm micro để thử lại hoặc nhập bằng văn bản.');
+        const messages = {
+          'not-allowed': 'Micro chưa được cho phép. Hãy mở ứng dụng trong tab riêng, cho phép micro trong cài đặt quyền của trang rồi bật Live lại.',
+          'service-not-allowed': 'Trình duyệt đang chặn dịch vụ nhận dạng giọng nói. Hãy thử Chrome hoặc Edge trong tab riêng và kiểm tra quyền micro.',
+          'audio-capture': 'Không truy cập được micro. Hãy kiểm tra thiết bị, quyền micro của hệ điều hành và ứng dụng khác đang sử dụng micro.',
+          network: 'Dịch vụ nhận dạng giọng nói không kết nối được. Hãy kiểm tra Internet rồi bật Live lại.',
+          'language-not-supported': 'Trình duyệt chưa hỗ trợ nhận dạng tiếng Việt. Hãy thử Chrome hoặc Edge.',
+        };
+        stopLive();
+        showVoiceIssue(messages[event.error] || 'Không thể nhận dạng giọng nói. Hãy mở tab riêng, kiểm tra quyền micro hoặc nhập bằng văn bản.');
       }
     };
     recognition.onresult = (event) => {
@@ -377,6 +434,8 @@
       }
     };
     state.recognition = recognition;
+    const issue = voiceInputIssue();
+    if (issue) showVoiceIssue(issue);
   }
   function startNewConversation() {
     if (state.isDeleting) return;
@@ -611,13 +670,31 @@
     dom.live.addEventListener('click', () => {
       if (state.isDeleting || state.isRestoring) return;
       if (state.liveEnabled) { stopLive(); appendSystem('Đã dừng hội thoại Live.'); return; }
-      state.liveEnabled = true; state.livePaused = false; state.ttsEnabled = true; updateFeatureControls(); appendSystem('Chế độ Live đã bật. Tôi sẽ lắng nghe, trả lời và tự mở micro cho lượt tiếp theo. Bạn có thể bắt đầu nói.'); speak('Chế độ hội thoại Live đã bật. Bạn có thể bắt đầu nói.');
+      if (state.isLoading) return;
+      const issue = voiceInputIssue();
+      if (issue) { showVoiceIssue(issue); return; }
+      stopSpeech(); clearTimeout(state.listenTimer);
+      state.liveEnabled = true; state.livePaused = false; state.ttsEnabled = true;
+      state.listenAfter = 0; state.echoGuardUntil = 0;
+      dom.voiceHelp.hidden = true;
+      updateFeatureControls();
+      appendSystem('Chế độ Live đã bật. Hãy cho phép micro nếu trình duyệt hỏi, rồi bắt đầu nói. Tôi sẽ đọc câu trả lời và mở lại micro cho lượt tiếp theo.');
+      // Request microphone access during the click, not after a TTS greeting.
+      // A blocked or unavailable browser voice must not prevent listening.
+      startListening(true);
     });
     dom.input.addEventListener('input', updateComposer);
     dom.input.addEventListener('keydown', (event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); send(); } });
     dom.form.addEventListener('submit', (event) => { event.preventDefault(); send(); });
     dom.tts.addEventListener('click', () => { state.ttsEnabled = !state.ttsEnabled; if (!state.ttsEnabled) { if (state.liveEnabled) stopLive(); else stopSpeech(); } updateFeatureControls(); });
-    dom.mic.addEventListener('click', () => { state.recognitionRunning ? state.recognition.stop() : startListening(false); });
+    dom.mic.addEventListener('click', () => {
+      if (state.recognitionRunning || state.recognitionRequested) {
+        state.livePaused = state.liveEnabled;
+        state.ignoreRecognitionResults = true;
+        state.recognition.abort();
+        setLiveStatus('Đã dừng micro. Nhấn micro để nói tiếp.');
+      } else startListening(false);
+    });
     dom.suggestions.addEventListener('click', (event) => {
       const topic = event.target.closest('[data-topic]');
       if (topic) { const questions = dom.suggestions.querySelector(`[data-topic-questions="${topic.dataset.topic}"]`); const open = questions.hidden; questions.hidden = !open; topic.setAttribute('aria-expanded', String(open)); }
