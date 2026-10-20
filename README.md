@@ -84,6 +84,18 @@ then opens the microphone for the next turn. This uses the browser's speech
 recognition and speech synthesis; browser vendors may process speech according
 to their own privacy settings. Audio is not uploaded to this Python server.
 
+**Mới** starts a separate conversation without deleting saved turns.
+**Xóa lịch sử** asks for confirmation, then permanently removes all saved turns
+of the current session only and opens a fresh conversation with an empty source
+panel. Canceling or a failed request keeps the current conversation visible.
+Deletion is unavailable while that conversation is loading or awaiting an answer.
+The `DELETE /api/history?session_id=...` API requires exactly one explicit,
+nonempty session ID. Legacy names (including Unicode, spaces and punctuation)
+are matched exactly, never trimmed or interpreted as wildcards. It uses the
+existing authentication, origin checks and rate limit, and is idempotent for a
+session with no saved turns or an already-deleted session. It does not remove
+downloaded exports.
+
 DOCX works with the Python standard library. Install the dependencies before the first run:
 
 ```powershell

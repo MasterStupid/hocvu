@@ -9,6 +9,7 @@
     recognition: null, recognitionRunning: false, recognitionRequested: false, turn: 0, listenTimer: null, transcript: [], speechRetry: false, livePaused: false,
     ignoreRecognitionResults: false, listenAfter: 0, speechId: 0, audio: null, speechTimer: null,
     lastAssistantSpeech: '', echoGuardUntil: 0,
+    isDeleting: false, isRestoring: false, viewVersion: 0,
   };
   localStorage.setItem('hv_session_id', state.sessionId);
 
@@ -22,6 +23,7 @@
     right: $('right-sidebar'), closeLeft: $('close-left'), closeRight: $('close-right'),
     overlay: $('overlay'), welcome: $('welcome'), liveStatus: $('live-status'),
     newConversation: $('new-conversation'), exportConversation: $('export-conversation'),
+    deleteHistory: $('delete-history'),
     refDate: $('ref-date'),
   };
   const escapeHTML = (value) => { const box = document.createElement('div'); box.textContent = value || ''; return box.innerHTML; };
@@ -40,7 +42,12 @@
   };
   const updateComposer = () => {
     dom.input.style.height = 'auto'; dom.input.style.height = `${Math.min(dom.input.scrollHeight, 180)}px`;
-    dom.send.disabled = !dom.input.value.trim() || state.isLoading;
+    dom.send.disabled = !dom.input.value.trim() || state.isLoading || state.isDeleting || state.isRestoring;
+    dom.newConversation.disabled = state.isDeleting;
+    dom.deleteHistory.disabled = state.isLoading || state.isDeleting || state.isRestoring;
+    dom.exportConversation.disabled = state.isDeleting;
+    dom.mic.disabled = state.isDeleting || state.isRestoring;
+    dom.live.disabled = !state.recognition || state.isDeleting || state.isRestoring;
   };
   const updateFeatureControls = () => {
     dom.ai.classList.toggle('active', state.aiEnabled); dom.ai.setAttribute('aria-pressed', String(state.aiEnabled));
@@ -85,7 +92,7 @@
   }
   function scheduleListening() {
     clearTimeout(state.listenTimer);
-    if (!state.liveEnabled || state.livePaused || state.isLoading || state.isSpeaking || state.recognitionRunning) return;
+    if (!state.liveEnabled || state.livePaused || state.isLoading || state.isDeleting || state.isRestoring || state.isSpeaking || state.recognitionRunning) return;
     setLiveStatus('Live sẵn sàng lắng nghe', 'listening');
     // Leave a short acoustic gap after TTS finishes. Without it, Chromium can
     // feed the last syllables from the speaker back into SpeechRecognition.
@@ -269,29 +276,38 @@
     return shared / uniqueHeard.size >= 0.8;
   }
   async function send(text = dom.input.value.trim(), { source = 'text' } = {}) {
-    const question = text.trim(); if (!question || state.isLoading) return;
+    const question = text.trim(); if (!question || state.isLoading || state.isDeleting || state.isRestoring) return;
+    const sessionId = state.sessionId, viewVersion = state.viewVersion;
     stopSpeech();
     if (source === 'text') pauseRecognitionForTextTurn();
     else { clearTimeout(state.listenTimer); state.livePaused = true; }
     state.isLoading = true; dom.input.value = ''; updateComposer(); setLiveStatus('Đang tìm trong tài liệu', 'working'); appendUser(question); appendTyping();
     try {
-      const response = await api('/api/ask', { method: 'POST', body: JSON.stringify({ question, session_id: state.sessionId, use_ai: state.aiEnabled, ref_date: dom.refDate.value || null, with_audio: Boolean(state.ttsEnabled || state.liveEnabled) }) });
+      const response = await api('/api/ask', { method: 'POST', body: JSON.stringify({ question, session_id: sessionId, use_ai: state.aiEnabled, ref_date: dom.refDate.value || null, with_audio: Boolean(state.ttsEnabled || state.liveEnabled) }) });
+      if (viewVersion !== state.viewVersion) return;
       removeTyping(); appendAnswer(response);
     } catch (error) {
+      if (viewVersion !== state.viewVersion) return;
       removeTyping(); appendError(error.message);
       if (state.liveEnabled) state.livePaused = false;
       scheduleListening();
     }
-    finally { state.isLoading = false; updateComposer(); if (!state.liveEnabled && !state.isSpeaking) setLiveStatus('Sẵn sàng nhập câu hỏi'); }
+    finally {
+      if (viewVersion === state.viewVersion) {
+        state.isLoading = false; updateComposer();
+        if (!state.liveEnabled && !state.isSpeaking) setLiveStatus('Sẵn sàng nhập câu hỏi');
+      }
+    }
   }
   function startListening(fromLive = false) {
-    if (!state.recognition || state.recognitionRunning || state.recognitionRequested || state.isLoading || state.isSpeaking) return;
+    if (!state.recognition || state.recognitionRunning || state.recognitionRequested || state.isLoading || state.isDeleting || state.isRestoring || state.isSpeaking) return;
     if (!fromLive) state.livePaused = false;
     state.recognitionRequested = true;
     try { state.recognition.start(); } catch (_) { state.recognitionRequested = false; if (fromLive) scheduleListening(); }
   }
   function stopLive() {
     state.liveEnabled = false; state.livePaused = false; clearTimeout(state.listenTimer); stopSpeech();
+    state.ignoreRecognitionResults = true;
     if (state.recognitionRunning || state.recognitionRequested) state.recognition.abort(); updateFeatureControls(); setLiveStatus('Sẵn sàng nhập câu hỏi');
   }
   function setupVoice() {
@@ -300,7 +316,7 @@
     const recognition = new Recognition(); recognition.lang = 'vi-VN'; recognition.interimResults = true; recognition.continuous = false;
     recognition.onstart = () => {
       state.recognitionRunning = true;
-      if (state.livePaused || state.isLoading || state.isSpeaking) {
+      if (state.livePaused || state.isLoading || state.isDeleting || state.isRestoring || state.isSpeaking) {
         state.ignoreRecognitionResults = true; recognition.abort(); return;
       }
       state.ignoreRecognitionResults = false; dom.mic.classList.add('active'); dom.mic.setAttribute('aria-label', 'Dừng ghi âm'); setLiveStatus('Đang nghe…', 'listening');
@@ -319,7 +335,7 @@
     recognition.onresult = (event) => {
       let transcript = ''; let isFinal = false;
       for (let index = event.resultIndex; index < event.results.length; index += 1) { transcript += event.results[index][0].transcript; isFinal ||= event.results[index].isFinal; }
-      if (state.ignoreRecognitionResults || state.isSpeaking || state.isLoading) return;
+      if (state.ignoreRecognitionResults || state.isSpeaking || state.isLoading || state.isDeleting || state.isRestoring) return;
       dom.input.value = transcript.trim(); updateComposer();
       if (isFinal && transcript.trim()) {
         if (isLikelySpeakerEcho(transcript)) {
@@ -334,13 +350,39 @@
     state.recognition = recognition;
   }
   function startNewConversation() {
+    if (state.isDeleting) return;
+    resetConversation(crypto.randomUUID());
+  }
+
+  function resetConversation(sessionId) {
     stopLive();
-    state.sessionId = crypto.randomUUID();
+    state.viewVersion++;
+    state.sessionId = sessionId; state.isLoading = false; state.isRestoring = false;
     state.turn = 0; state.transcript = [];
     localStorage.setItem('hv_session_id', state.sessionId);
     dom.thread.querySelectorAll('.message:not(.welcome-message)').forEach((item) => item.remove());
+    dom.input.value = ''; updateComposer();
     dom.welcome.hidden = false; updateEvidence([]); setLiveStatus('Hội thoại mới đã sẵn sàng');
     dom.input.focus();
+  }
+  async function deleteHistory() {
+    if (state.isLoading || state.isDeleting || state.isRestoring) return;
+    const sessionId = state.sessionId;
+    if (!window.confirm('Xóa vĩnh viễn toàn bộ lịch sử đã lưu của hội thoại hiện tại? Dữ liệu phiên này sẽ không thể khôi phục. Các hội thoại khác không bị xóa.')) return;
+    // Allocate before deleting so success always has a fresh destination.
+    const nextSessionId = crypto.randomUUID();
+    state.isDeleting = true; stopLive(); updateComposer();
+    setLiveStatus('Đang xóa lịch sử…', 'working');
+    try {
+      await api(`/api/history?session_id=${encodeURIComponent(sessionId)}`, { method: 'DELETE' });
+      resetConversation(nextSessionId);
+      setLiveStatus('Đã xóa vĩnh viễn lịch sử. Hội thoại mới đã sẵn sàng.');
+    } catch (error) {
+      // Keep the ID, transcript and sources intact so a failed request is retryable.
+      setLiveStatus(`Chưa thể xác nhận xóa lịch sử: ${error.message}`, 'error');
+    } finally {
+      state.isDeleting = false; updateComposer();
+    }
   }
   function exportConversation() {
     if (!state.transcript.length) { setLiveStatus('Chưa có hội thoại để xuất'); return; }
@@ -379,8 +421,10 @@
     dom.theme.addEventListener('click', () => { state.theme = state.theme === 'light' ? 'dark' : 'light'; document.documentElement.dataset.theme = state.theme; localStorage.setItem('hv_theme', state.theme); });
     dom.ai.addEventListener('click', () => { state.aiEnabled = !state.aiEnabled; localStorage.setItem('hv_ai_enabled', String(state.aiEnabled)); updateFeatureControls(); });
     dom.newConversation.addEventListener('click', startNewConversation);
+    dom.deleteHistory.addEventListener('click', deleteHistory);
     dom.exportConversation.addEventListener('click', exportConversation);
     dom.live.addEventListener('click', () => {
+      if (state.isDeleting || state.isRestoring) return;
       if (state.liveEnabled) { stopLive(); appendSystem('Đã dừng hội thoại Live.'); return; }
       state.liveEnabled = true; state.livePaused = false; state.ttsEnabled = true; updateFeatureControls(); appendSystem('Chế độ Live đã bật. Tôi sẽ lắng nghe, trả lời và tự mở micro cho lượt tiếp theo. Bạn có thể bắt đầu nói.'); speak('Chế độ hội thoại Live đã bật. Bạn có thể bắt đầu nói.');
     });
@@ -406,6 +450,8 @@
   }
   async function boot() {
     document.documentElement.dataset.theme = state.theme; updateFeatureControls(); bind(); setupVoice();
+    const viewVersion = state.viewVersion;
+    state.isRestoring = true; updateComposer();
     try {
       const [health, documents, history, topics] = await Promise.all([
         api('/api/health'), api('/api/documents'), api(`/api/history?session_id=${encodeURIComponent(state.sessionId)}`), api('/api/suggestions'),
@@ -413,8 +459,11 @@
       setStatus(true, `Trực tuyến · ${health.documents} văn bản`);
       dom.documents.innerHTML = documents.map((doc) => `<article class="doc-item"><div class="doc-title">${escapeHTML(doc.title)}</div><div class="doc-meta">${escapeHTML(doc.rid)} · Bản ${escapeHTML(doc.version)}</div></article>`).join('');
       renderSuggestionTopics(topics);
-      restoreHistory(history);
+      if (viewVersion === state.viewVersion) restoreHistory(history);
     } catch (_) { setStatus(false, 'Mất kết nối'); dom.documents.innerHTML = '<p class="error">Không thể tải cơ sở tri thức.</p>'; }
+    finally {
+      if (viewVersion === state.viewVersion) { state.isRestoring = false; updateComposer(); }
+    }
   }
   document.addEventListener('DOMContentLoaded', boot);
 })();

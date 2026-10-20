@@ -46,8 +46,9 @@
             </div>
             <div class="top-actions">
                 <a class="document-link" href="documents.html">Quản lý tài liệu</a>
-                <button class="utility-button" data-hv="new-conversation" type="button" title="Bắt đầu một hội thoại mới">Mới</button>
+                <button class="utility-button" data-hv="new-conversation" type="button" title="Bắt đầu hội thoại mới, không xóa lịch sử đã lưu">Mới</button>
                 <button class="utility-button" data-hv="export-conversation" type="button" title="Tải hội thoại này về máy">Xuất</button>
+                <button class="utility-button delete-history-button" data-hv="delete-history" type="button" title="Xóa vĩnh viễn lịch sử đã lưu của hội thoại hiện tại" disabled>Xóa lịch sử</button>
                 <button class="ai-toggle" data-hv="ai-toggle" type="button" aria-pressed="false" title="AI diễn đạt theo nguồn">AI</button>
                 <button class="theme-toggle" data-hv="theme-toggle" aria-label="Chuyển đổi giao diện">
                     <svg class="icon-light"><use href="#icon-sun"></use></svg>
@@ -139,6 +140,6 @@
     </div>
     
     <script src="api-errors.js?v=20261019-1"></script>
-    <script src="main.js?v=20261020-ui-fixes-1"></script>
+    <script src="main.js?v=20261020-ui-fixes-history-delete-1"></script>
 </body>
 </html>

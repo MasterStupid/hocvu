@@ -11,3 +11,4 @@
 - [ASGI execution boundaries](asgi-execution-boundaries.md) — offload heavy work; gate document writes before reading upload bytes, without serializing unrelated readers.
 - [History evidence snapshots](history-evidence-snapshots.md) — restore evidence as assessed when answered; do not reconstruct missing legacy citations from today's corpus.
 - [Voice playback cancellation](voice-playback-cancellation.md) — stop every audio path and invalidate late callbacks, not just the browser speech synthesizer.
+- [History lifecycle](history-lifecycle.md) — New is not consent to delete; keep permanent deletion explicit and support exact legacy session names.

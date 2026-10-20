@@ -207,6 +207,8 @@ button:focus-visible, a:focus-visible, textarea:focus-visible {
 .theme-toggle:hover { background: var(--accent-soft); color: var(--accent); }
 .ai-toggle, .live-toggle, .utility-button { border: 1px solid rgba(13, 148, 136, .45); color: var(--accent); border-radius: var(--radius-full); padding: .42rem .7rem; font-size: .78rem; font-weight: 800; transition: .2s ease; }
 .ai-toggle:hover, .live-toggle:hover, .utility-button:hover { background: var(--accent-soft); }
+.delete-history-button { color: var(--danger); border-color: var(--danger); }
+.utility-button:disabled { opacity: .5; cursor: not-allowed; }
 .ai-toggle.active, .live-toggle.active { background: var(--accent); border-color: var(--accent); color: white; box-shadow: 0 0 0 3px var(--accent-soft); }
 .live-toggle { min-width: 3.5rem; }
 .live-note .avatar { font-size: .65rem; font-weight: 800; }
@@ -716,6 +718,8 @@ kbd {
     .message { max-width: 95%; }
     .composer-footer { display: none; }
     .top-actions .utility-button { display: none; }
+    .top-actions .delete-history-button { display: inline-block; }
+    .top-bar { flex-wrap: wrap; gap: .5rem; padding: .75rem; }
     .answer-card-header { flex-direction: column; }
     .card-bubble { width: 100%; }
 }

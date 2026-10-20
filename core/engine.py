@@ -277,3 +277,6 @@ class HocVuEngine:
 
     def history(self, session_id: str) -> list[dict]:
         return self.session.get_history(session_id, self.config.max_history)
+
+    def delete_history(self, session_id: str) -> int:
+        return self.session.delete_history(session_id)

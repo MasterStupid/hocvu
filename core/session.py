@@ -6,6 +6,17 @@ from .classifier import Classifier, Intent
 from .scenarios import is_context_dependent
 
 
+def validate_session_id(session_id: str) -> str:
+    """Require an explicit ID while preserving every nonempty legacy name.
+
+    Creation accepts arbitrary strings, including Unicode and punctuation.
+    Never trim, normalize or interpret a name as a wildcard/SQL selector.
+    """
+    if not isinstance(session_id, str) or not session_id:
+        raise ValueError("Mã phiên không hợp lệ.")
+    return session_id
+
+
 class SessionStore:
     def __init__(self, db_path: Path):
         self.db_path = db_path
@@ -115,6 +126,17 @@ class SessionStore:
                     turn[public_name] = value if isinstance(value, expected_type) else None
                 history.append(turn)
             return history
+        finally:
+            conn.close()
+
+    def delete_history(self, session_id: str) -> int:
+        validate_session_id(session_id)
+        conn = sqlite3.connect(self.db_path)
+        try:
+            # Equality and binding are intentional: no wildcard or all-session mode.
+            with conn:
+                cursor = conn.execute("DELETE FROM turns WHERE session_id = ?", (session_id,))
+            return cursor.rowcount
         finally:
             conn.close()
 

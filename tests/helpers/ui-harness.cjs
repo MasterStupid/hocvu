@@ -6,7 +6,9 @@ const vm = require('node:vm');
 
 function loadUI(options = {}) {
   const elements = new Map(), timers = new Map(), audios = [];
+  const calls = [], confirmations = [], storage = new Map();
   let timerId = 0;
+  let sessionId = 0;
   const escape = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   class Element {
     constructor() {
@@ -26,7 +28,7 @@ function loadUI(options = {}) {
     scrollIntoView() { this.scrolled = true; }
     querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
     querySelectorAll(selector) {
-      if (selector === '.message:not(.welcome-message)') return this.children.filter(child => child.className.startsWith('message'));
+      if (selector === '.message:not(.welcome-message)') return this.children.filter(child => child.className.startsWith('message') && !child.className.includes('welcome-message'));
       if (this.cache.has(selector)) return this.cache.get(selector);
       let items = [];
       const attribute = selector === '[data-citation]' ? 'citation' : selector === '[data-source-index]' ? 'source-index' : null;
@@ -44,6 +46,7 @@ function loadUI(options = {}) {
     }
   }
   const document = {
+    documentElement: { dataset: {} },
     querySelector(selector) {
       if (!elements.has(selector)) elements.set(selector, new Element());
       return elements.get(selector);
@@ -81,13 +84,21 @@ function loadUI(options = {}) {
     load() { this.loads++; }
   }
   const sandbox = {
-    document, localStorage: { getItem() { return null; }, setItem() {} },
-    crypto: { randomUUID() { return 'test-session'; } }, navigator: {}, console,
-    window: { speechSynthesis: synthesis }, speechSynthesis: synthesis,
+    document, localStorage: { getItem(key) { return storage.get(key) || null; }, setItem(key, value) { storage.set(key, value); } },
+    crypto: { randomUUID() { return `test-session-${++sessionId}`; } }, navigator: {}, console,
+    window: {
+      speechSynthesis: synthesis,
+      confirm(message) { confirmations.push(message); return options.confirm ?? true; },
+    }, speechSynthesis: synthesis,
     SpeechSynthesisUtterance: class { constructor(text) { this.text = text; } }, Audio,
     setTimeout(callback, delay) { timers.set(++timerId, { callback, delay }); return timerId; },
     clearTimeout(id) { timers.delete(id); },
-    fetch: options.fetch,
+    async fetch(url, requestOptions = {}) {
+      calls.push([url, requestOptions]);
+      if (options.fetch) return options.fetch(url, requestOptions);
+      const result = options.request ? await options.request(url, requestOptions) : {};
+      return result instanceof Response ? result : new Response(JSON.stringify(result));
+    },
     HocVuAPI: require('../../ui/api-errors.js'),
   };
   const filename = path.join(__dirname, '..', '..', 'ui', 'main.js');
@@ -97,12 +108,13 @@ function loadUI(options = {}) {
     globalThis.testUI = {
       renderAnswerCard, appendAnswer, restoreHistory, state, dom, appendTyping,
       speak, stopSpeech, stopLive, send, bind, startNewConversation,
+      deleteHistory, boot, updateComposer,
       setSpeechHook(callback) { speak = callback; }
     };
   })();`);
   vm.runInNewContext(instrumented, sandbox, { filename });
   const ui = sandbox.testUI;
-  Object.assign(ui, { speech: [], synthesis, audios, timers });
+  Object.assign(ui, { speech: [], synthesis, audios, timers, calls, confirmations, storage });
   ui.runTimers = () => {
     const pending = [...timers.entries()];
     for (const [id, timer] of pending) { timers.delete(id); timer.callback(); }

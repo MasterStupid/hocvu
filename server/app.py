@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from core.engine import HocVuEngine
+from core.session import validate_session_id
 from core.documents import DocumentError, DocumentNotFoundError, DocumentRepository
 from core.settings import AUD, INDEX_JSON, SERVER_META, UI, ensure_dirs, load_config
 from core.voice import VoiceManager, clean_text_for_tts, DEFAULT_VOICE, DEFAULT_RATE, RATE_PATTERN, MALE_VOICE
@@ -347,6 +348,24 @@ def get_history(session_id: str = Query("", description="Mã phiên hội thoạ
 def get_suggestions():
     eng = get_engine()
     return eng.suggestion_topics()
+
+
+@app.delete("/api/history", summary="Xóa vĩnh viễn lịch sử của đúng một phiên")
+async def delete_history(
+    request: Request,
+    session_id: str = Query(
+        ..., min_length=1,
+        description="Mã chính xác của phiên cần xóa",
+    ),
+):
+    if len(request.query_params.getlist("session_id")) != 1:
+        raise HTTPException(status_code=422, detail="Chỉ được chọn một mã phiên để xóa.")
+    try:
+        validate_session_id(session_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    deleted = await run_in_threadpool(_call_engine, "delete_history", session_id)
+    return {"status": "deleted", "session_id": session_id, "deleted_turns": deleted}
 
 
 # ── Endpoint Xử lý Giọng nói (Server-side Edge-TTS) ──────────────────────────
