@@ -1,13 +1,62 @@
 import base64
+import os
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
 import httpx
 
 from server import app as server
+from core import engine as engine_module, settings
+from core.settings import AppConfig
 
 
-class BrowserAuthenticationTests(unittest.IsolatedAsyncioTestCase):
+class IsolatedServerEngineTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        paths = {
+            "DATA": self.root, "RAW": self.root / "raw", "IDX": self.root / "index",
+            "AUD": self.root / "audio", "DOCS": self.root / "documents",
+            "MODELS": self.root / "models", "SESSION_DB": self.root / "sessions.db",
+            "INDEX_JSON": self.root / "index" / "index.json",
+            "SERVER_META": self.root / "server.json",
+        }
+        paths.update(
+            CORPUS_JSON=paths["RAW"] / "corpus.json",
+            CORPUS_MD=paths["RAW"] / "corpus.md",
+            QA_JSON=paths["RAW"] / "qa_testset.json",
+            EVAL_JSON=self.root / "eval_result.json",
+            EVAL_CSV=self.root / "eval_result.csv",
+        )
+        self.enterContext(patch.dict(os.environ, {"HV_SEMANTIC": "0"}))
+        self.enterContext(patch.multiple(settings, **paths))
+        self.enterContext(patch.multiple(engine_module, **{
+            key: paths[key] for key in ("AUD", "DOCS", "SESSION_DB", "INDEX_JSON")
+        }))
+        self.enterContext(patch.multiple(server, **{
+            key: paths[key] for key in ("AUD", "INDEX_JSON", "SERVER_META")
+        }))
+        self.enterContext(patch.object(server, "engine", None))
+        self.enterContext(patch.object(server, "config", AppConfig(
+            semantic_enabled=False, api_token="test-access-only",
+        )))
+        # Fail rather than downloading a real model if a test regresses.
+        self.enterContext(patch(
+            "core.searcher.SemanticEncoder",
+            side_effect=AssertionError("Authentication tests must stay offline"),
+        ))
+
+
+class BrowserAuthenticationTests(IsolatedServerEngineTests):
+    def test_engine_uses_only_temporary_state_without_models(self):
+        engine = server.get_engine()
+        self.assertFalse(engine.config.semantic_enabled)
+        self.assertEqual(engine.searcher.provider, "bm25")
+        self.assertEqual(engine.session.db_path, self.root / "sessions.db")
+        self.assertTrue((self.root / "index" / "index.json").is_file())
+        self.assertFalse(list((self.root / "models").iterdir()))
+
     async def asyncSetUp(self):
         # Synthetic test credential only; never use a workspace secret in tests.
         self.patches = [
@@ -151,7 +200,7 @@ class BrowserAuthenticationTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual((await self.client.get("/api/documents")).status_code, 401)
 
 
-class NetlifyProxyOriginTests(unittest.IsolatedAsyncioTestCase):
+class NetlifyProxyOriginTests(IsolatedServerEngineTests):
     """Netlify forwards the browser's site Origin to the separate API host."""
 
     async def asyncSetUp(self):

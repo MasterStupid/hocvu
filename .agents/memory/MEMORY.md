@@ -11,5 +11,7 @@
 - [ASGI execution boundaries](asgi-execution-boundaries.md) — offload heavy work; gate document writes before reading upload bytes, without serializing unrelated readers.
 - [History evidence snapshots](history-evidence-snapshots.md) — restore evidence as assessed when answered; do not reconstruct missing legacy citations from today's corpus.
 - [Voice playback cancellation](voice-playback-cancellation.md) — stop every audio path and invalidate late callbacks, not just the browser speech synthesizer.
+- [Netlify build configuration](netlify-build-configuration.md) — legacy proxy configuration belongs in the pre-build hook, not token-bearing rewrites of tracked files.
+- [Server test isolation](server-test-isolation.md) — import-time path aliases survive environment changes; isolate all resolved storage paths and disable real model loading.
 - [History lifecycle](history-lifecycle.md) — New is not consent to delete; keep permanent deletion explicit and support exact legacy session names.
 - [Conversation ownership](conversation-ownership.md) — shared login and legacy session IDs do not prove ownership; discovery and all chat operations need separate scoped authority.

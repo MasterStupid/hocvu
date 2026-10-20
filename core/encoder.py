@@ -1,7 +1,9 @@
 import hashlib
 import math
 from typing import List, Union
+from urllib.parse import urlsplit, urlunsplit
 from .nlp import tokenize, content_tokens, ngrams, normalize
+from .settings import clean_api_key
 
 def l2_norm(vec: List[float]) -> List[float]:
     norm = math.sqrt(sum(x * x for x in vec))
@@ -47,30 +49,53 @@ class SimHashEncoder:
 
 class OpenAIEncoder:
     def __init__(self, api_key: str, model: str = "text-embedding-3-small", dim: int = 1536, api_url: str = None):
-        self.api_key = api_key
+        self.api_key = clean_api_key(api_key)
+        if not self.api_key:
+            raise ValueError("OpenAI API key is missing or is an example placeholder.")
         self.model = model
         self.dim = dim
-        self.api_url = api_url or "https://api.openai.com/v1/embeddings"
+        parsed = urlsplit(api_url or "https://api.openai.com/v1")
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("OpenAI base URL must be a full HTTP(S) URL.")
+        path = parsed.path.rstrip("/")
+        if not path.endswith("/embeddings"):
+            path += "/embeddings"
+        self.api_url = urlunsplit((parsed.scheme, parsed.netloc, path, parsed.query, ""))
         
     def encode(self, text: str) -> List[float]:
         return self.encode_batch([text])[0]
         
     def encode_batch(self, texts: List[str]) -> List[List[float]]:
+        if not texts:
+            return []
         try:
             import urllib.request
             import json
             req = urllib.request.Request(self.api_url, method="POST")
             req.add_header("Content-Type", "application/json")
             req.add_header("Authorization", f"Bearer {self.api_key}")
-            data = json.dumps({"input": texts, "model": self.model}).encode("utf-8")
-            with urllib.request.urlopen(req, data=data) as response:
+            payload = {"input": texts, "model": self.model}
+            if self.model.startswith("text-embedding-3-"):
+                payload["dimensions"] = self.dim
+            data = json.dumps(payload).encode("utf-8")
+            with urllib.request.urlopen(req, data=data, timeout=35) as response:
                 res = json.loads(response.read().decode("utf-8"))
-                return [item["embedding"] for item in res["data"]]
-        except Exception:
-            return [[0.0] * self.dim for _ in texts]
+                items = sorted(res["data"], key=lambda item: item["index"])
+                if [item["index"] for item in items] != list(range(len(texts))):
+                    raise ValueError("Incomplete or duplicate embedding indices.")
+                vectors = [item["embedding"] for item in items]
+                for vector in vectors:
+                    if (len(vector) != self.dim
+                            or any(isinstance(value, bool) or not isinstance(value, (float, int))
+                                   or not math.isfinite(value) for value in vector)
+                            or not any(vector)):
+                        raise ValueError("Invalid embedding vector.")
+                return vectors
+        except Exception as exc:
+            raise RuntimeError("OpenAI embedding request failed; no vectors were generated.") from exc
 
 def build_encoder(config) -> Union[SimHashEncoder, OpenAIEncoder]:
-    if config.llm_backend == "openai" and getattr(config, 'openai_key', None):
+    if config.llm_backend == "openai" and clean_api_key(getattr(config, 'openai_key', "")):
         return OpenAIEncoder(
             api_key=config.openai_key, 
             model=getattr(config, 'openai_embed', "text-embedding-3-small"),

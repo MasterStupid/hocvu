@@ -11,12 +11,12 @@ from pathlib import Path
 @contextmanager
 def index_write_lock(destination: Path):
     # Never unlink this file: waiters must always lock the same inode.
-    with destination.with_name(destination.name + ".lock").open("a+b") as lock:
+    lock_path = destination.with_name(destination.name + ".lock")
+    descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT | getattr(os, "O_BINARY", 0), 0o600)
+    with os.fdopen(descriptor, "r+b") as lock:
         if os.name == "nt":
             import msvcrt
 
-            lock.write(b"\0")
-            lock.flush()
             while True:
                 lock.seek(0)
                 try:
@@ -25,6 +25,13 @@ def index_write_lock(destination: Path):
                 except OSError:
                     time.sleep(0.05)
             try:
+                # Windows permits byte-range locks beyond EOF. Initialize only
+                # while holding the lock, without append mode or truncation.
+                lock.seek(0, os.SEEK_END)
+                if lock.tell() == 0:
+                    lock.seek(0)
+                    lock.write(b"\0")
+                    lock.flush()
                 yield
             finally:
                 lock.seek(0)

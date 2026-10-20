@@ -12,6 +12,7 @@ import urllib.request
 from urllib.parse import quote, urlsplit, urlunsplit
 
 from .models import Reference
+from .settings import clean_api_key
 
 
 class LLMError(RuntimeError):
@@ -25,9 +26,9 @@ class GroundedLLM:
     @property
     def configured(self) -> bool:
         return (
-            self.config.llm_backend == "openai" and bool(self.config.openai_key)
+            self.config.llm_backend == "openai" and bool(clean_api_key(self.config.openai_key))
         ) or (
-            self.config.llm_backend == "gemini" and bool(self.config.gemini_key)
+            self.config.llm_backend == "gemini" and bool(clean_api_key(self.config.gemini_key))
         )
 
     def rewrite(

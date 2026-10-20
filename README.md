@@ -269,6 +269,9 @@ proxy keeps the API token out of the browser.
 Netlify publishes the `ui` directory and rewrites every `/api/*` request to
 Render with the private `X-HocVu-Token` header. Do not put either token in
 `ui/*.js`, a committed `.env` file, or the public site settings.
+The local build plugin injects this redirect into Netlify's in-memory build
+configuration. `prepare-netlify.mjs` only validates settings; it does not rewrite
+`netlify.toml` or create a token-bearing file, so repeated builds are safe.
 
 The demonstration regulations are generated from source code on the first
 startup. Files uploaded only to your old local `data/` folder are not committed

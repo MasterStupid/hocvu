@@ -90,6 +90,14 @@ def _b(name: str, fallback: bool) -> bool:
     raise ValueError(f"{name} phải là true/false (hoặc 1/0).")
 
 
+def clean_api_key(value: str | None) -> str:
+    """Treat old example values as unconfigured without assuming a key format."""
+    value = (value or "").strip()
+    if value.lower() in {"your-api-key-here", "your-gemini-api-key-here"}:
+        return ""
+    return value
+
+
 @dataclass(frozen=False)
 class AppConfig:
     """Tham số toàn hệ thống — ghi đè bằng env var khi cần."""
@@ -182,11 +190,11 @@ def load_config() -> AppConfig:
         llm_backend=_e("HV_LLM", "local").lower(),
         stt_backend=_e("HV_STT", "local").lower(),
         tts_backend=_e("HV_TTS", "local").lower(),
-        openai_key=_e("OPENAI_API_KEY", ""),
+        openai_key=clean_api_key(_e("OPENAI_API_KEY", "")),
         openai_url=_e("OPENAI_BASE_URL", "https://api.openai.com/v1"),
         openai_model=_e("OPENAI_MODEL", "gpt-4o-mini"),
         openai_embed=_e("OPENAI_EMBED_MODEL", "text-embedding-3-small"),
-        gemini_key=_e("GEMINI_API_KEY", ""),
+        gemini_key=clean_api_key(_e("GEMINI_API_KEY", "")),
         gemini_url=_e("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta"),
         gemini_model=_e("GEMINI_MODEL", "gemini-3.8-flash"),
         whisper_size=_e("WHISPER_MODEL", "small"),
@@ -198,6 +206,8 @@ def load_config() -> AppConfig:
     for name in ("top_k", "bm25_pool", "vec_pool", "embed_dim", "max_chunk_chars", "max_units", "max_history", "rate_limit_per_minute"):
         if getattr(config, name) <= 0:
             raise ValueError(f"{name} phải lớn hơn 0.")
+    if config.overlap_sents < 0:
+        raise ValueError("overlap_sents phải lớn hơn hoặc bằng 0.")
     for name in ("bm25_weight", "confidence_floor", "semantic_floor", "lexical_coverage_floor"):
         if not 0 <= getattr(config, name) <= 1:
             raise ValueError(f"{name} phải nằm trong khoảng 0 đến 1.")
