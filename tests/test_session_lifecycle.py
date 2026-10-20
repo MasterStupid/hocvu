@@ -118,6 +118,60 @@ sys.exit(1)
         self.assertEqual(other.get_history("selected", 100), [])
         self.assertTrue(other.is_closed("selected"))
 
+    def test_listing_keeps_one_snapshot_during_deletion_in_delete_and_wal_modes(self):
+        row_factory = sqlite3.Row
+        for mode in ("DELETE", "WAL"):
+            with self.subTest(journal_mode=mode):
+                path = self.path.with_name(f"sessions-{mode}.db")
+                store = SessionStore(path)
+                with sqlite3.connect(path) as conn:
+                    self.assertEqual(conn.execute(f"PRAGMA journal_mode={mode}").fetchone()[0], mode.lower())
+                # Initialization must also remain usable on an existing WAL DB.
+                other = SessionStore(path)
+                for session_id in ("selected", "survivor"):
+                    store.authorize(session_id, "a", create=True)
+                    add_turn(store, session_id)
+                add_turn(store, "selected")
+                before = store.list_conversations("a")
+                entered, release, deleting_started = threading.Event(), threading.Event(), threading.Event()
+
+                def pause(cursor, values):
+                    row = row_factory(cursor, values)
+                    if not entered.is_set():
+                        entered.set()
+                        if not release.wait(5):
+                            raise AssertionError("Test did not release conversation reader")
+                    return row
+
+                def delete():
+                    deleting_started.set()
+                    return other.delete_history("selected")
+
+                with ThreadPoolExecutor(max_workers=2) as pool, patch(
+                    "core.session.sqlite3.Row", side_effect=pause,
+                ):
+                    reading = pool.submit(store.list_conversations, "a")
+                    try:
+                        self.assertTrue(entered.wait(2))
+                        deleting = pool.submit(delete)
+                        self.assertTrue(deleting_started.wait(2))
+                        if mode == "WAL":
+                            # A reader must not hold a writer lock; WAL deletion
+                            # commits even while this old snapshot is paused.
+                            self.assertEqual(deleting.result(2), 2)
+                        else:
+                            self.assertFalse(deleting.done(), "DELETE commit must wait for the reader")
+                    finally:
+                        release.set()
+                    self.assertEqual(reading.result(3), before)
+                    self.assertEqual(deleting.result(3), 2)
+                self.assertEqual(
+                    [row["session_id"] for row in store.list_conversations("a")], ["survivor"],
+                )
+                self.assertTrue(other.is_closed("selected"))
+                with self.assertRaises(SessionClosedError):
+                    add_turn(other, "selected")
+
 
 class SessionLifecycleApiTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):

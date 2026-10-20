@@ -15,3 +15,4 @@
 - [Server test isolation](server-test-isolation.md) — isolate import-bound data paths and disable real models; run long subprocess-heavy suites in the background.
 - [History lifecycle](history-lifecycle.md) — New is not consent to delete; keep permanent deletion explicit and support exact legacy session names.
 - [Conversation ownership](conversation-ownership.md) — shared login and legacy session IDs do not prove ownership; discovery and all chat operations need separate scoped authority.
+- [SQLite journal policy](sqlite-journal-policy.md) — removing list-query round trips does not require WAL; any future WAL setup must be outside the initialization transaction.

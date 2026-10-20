@@ -134,6 +134,16 @@ Clients using shared HTTP Basic authentication must also send their own
 operations. This header does not replace existing network authentication,
 origin checks or rate limits.
 
+Conversation discovery uses one read-only SELECT for the aggregate and first
+question, regardless of the number of saved conversations. SQLite connections
+retain Python's default five-second lock timeout. Journal mode is left unchanged:
+WAL allows deletion to commit while a list reader holds an older snapshot, but
+enabling it is a separate storage decision (including backup handling for its
+`-wal`/`-shm` files). It cannot be enabled inside the initializer's
+`BEGIN IMMEDIATE`; any future WAL setup must run outside that transaction.
+Write transactions remain limited to database operations, never retrieval,
+LLM calls or audio generation.
+
 **Xóa lịch sử** asks for confirmation, then permanently removes all saved turns
 of the currently selected session only and opens a fresh conversation with an empty source
 panel. Canceling or a failed request keeps the current conversation visible.

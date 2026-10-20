@@ -131,27 +131,28 @@ class SessionStore:
         conn.row_factory = sqlite3.Row
         try:
             conn.execute("BEGIN")
+            # Join the first turn by primary key in the same read-only snapshot,
+            # rather than issuing one title lookup per conversation.
             rows = conn.execute("""
-                SELECT t.session_id, MIN(t.id) AS first_id, MAX(t.id) AS last_id,
-                       COUNT(*) AS turn_count, o.updated_at
-                FROM turns t LEFT JOIN session_owners o ON o.session_id = t.session_id
-                WHERE (o.owner = ? OR (? = ? AND o.owner IS NULL))
-                  AND NOT EXISTS (
-                      SELECT 1 FROM closed_sessions c WHERE c.session_id = t.session_id
-                  )
-                GROUP BY t.session_id
-                ORDER BY last_id DESC
+                SELECT summary.session_id, first_turn.question AS title,
+                       summary.turn_count, summary.updated_at
+                FROM (
+                    SELECT t.session_id, MIN(t.id) AS first_id, MAX(t.id) AS last_id,
+                           COUNT(*) AS turn_count, o.updated_at
+                    FROM turns t LEFT JOIN session_owners o ON o.session_id = t.session_id
+                    WHERE (o.owner = ? OR (? = ? AND o.owner IS NULL))
+                      AND NOT EXISTS (
+                          SELECT 1 FROM closed_sessions c WHERE c.session_id = t.session_id
+                      )
+                    GROUP BY t.session_id
+                ) summary
+                JOIN turns first_turn ON first_turn.id = summary.first_id
+                ORDER BY summary.last_id DESC
             """, (owner, owner, LEGACY_API_OWNER)).fetchall()
-            result = []
-            for row in rows:
-                title = conn.execute(
-                    "SELECT question FROM turns WHERE id = ?", (row["first_id"],),
-                ).fetchone()[0]
-                result.append({
-                    "session_id": row["session_id"], "title": title[:120],
-                    "turn_count": row["turn_count"], "updated_at": row["updated_at"],
-                })
-            return result
+            return [{
+                "session_id": row["session_id"], "title": row["title"][:120],
+                "turn_count": row["turn_count"], "updated_at": row["updated_at"],
+            } for row in rows]
         finally:
             conn.close()
 

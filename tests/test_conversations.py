@@ -59,6 +59,88 @@ class ConversationStoreTests(unittest.TestCase):
         self.assertEqual(len(store.list_conversations(LEGACY_API_OWNER)), 1)
         self.assertEqual(len(store.get_history("hội thoại 2024", 8, owner=LEGACY_API_OWNER)), 1)
 
+    def test_list_preserves_exact_titles_scopes_and_closed_filter_even_with_leftover_turns(self):
+        title = "  Điều kiện bảo lưu? " + "Tiếng Việt 🎓 " * 15
+        sessions = (
+            ("hội thoại / 1?", "a"), ("private", "b"), ("api", LEGACY_API_OWNER),
+            ("' OR 1=1 --", None), ("closed-owned", "a"), ("closed-legacy", None),
+            ("%", "a"),
+        )
+        for session_id, owner in sessions:
+            if owner is not None:
+                self.store.authorize(session_id, owner, create=True)
+            add_turn(self.store, session_id, title)
+        self.store.authorize("empty", "a", create=True)
+        add_turn(self.store, "hội thoại / 1?", "Còn điều kiện nào khác?")
+        # Keep residual turns deliberately: exclusion must use the tombstone,
+        # not rely on delete_history having physically removed every row.
+        with sqlite3.connect(self.path) as conn:
+            conn.executemany(
+                "INSERT INTO closed_sessions VALUES (?)",
+                [("closed-owned",), ("closed-legacy",)],
+            )
+            conn.execute("UPDATE session_owners SET updated_at = '2099-01-01T00:00:00Z'")
+            conn.execute(
+                "UPDATE session_owners SET updated_at = '2000-01-01T00:00:00Z' WHERE session_id = ?",
+                ("hội thoại / 1?",),
+            )
+        store = SessionStore(self.path)
+        self.assertEqual(store.list_conversations("a"), [
+            {"session_id": "hội thoại / 1?", "title": title[:120], "turn_count": 2,
+             "updated_at": "2000-01-01T00:00:00Z"},
+            {"session_id": "%", "title": title[:120], "turn_count": 1,
+             "updated_at": "2099-01-01T00:00:00Z"},
+        ])
+        self.assertEqual(store.list_conversations(LEGACY_API_OWNER), [
+            {"session_id": "' OR 1=1 --", "title": title[:120], "turn_count": 1,
+             "updated_at": None},
+            {"session_id": "api", "title": title[:120], "turn_count": 1,
+             "updated_at": "2099-01-01T00:00:00Z"},
+        ])
+        self.assertEqual([r["session_id"] for r in store.list_conversations("b")], ["private"])
+        self.assertEqual(store.list_conversations("unknown"), [])
+
+    def test_list_uses_one_select_regardless_of_conversation_count_or_scope(self):
+        connect = sqlite3.connect
+        statements = []
+
+        def traced_connect(*args, **kwargs):
+            conn = connect(*args, **kwargs)
+            conn.set_trace_callback(statements.append)
+            return conn
+
+        previous_count = 0
+        for count in (0, 1, 100):
+            # Seed in bulk so fixture setup does not dominate this regression.
+            with connect(self.path) as conn:
+                for index in range(previous_count, count):
+                    for owner in ("a", LEGACY_API_OWNER, None):
+                        session_id = f"{owner}-{index}"
+                        if owner is not None:
+                            conn.execute(
+                                "INSERT INTO session_owners(session_id, owner) VALUES (?, ?)",
+                                (session_id, owner),
+                            )
+                        conn.executemany(
+                            "INSERT INTO turns(session_id, question, answer) VALUES (?, ?, '')",
+                            [(session_id, f"First {index}"), (session_id, "Follow-up")],
+                        )
+            previous_count = count
+            for owner, expected_count in (("a", count), (LEGACY_API_OWNER, 2 * count), ("b", 0)):
+                with self.subTest(count=count, owner=owner):
+                    statements.clear()
+                    with patch("core.session.sqlite3.connect", side_effect=traced_connect):
+                        rows = self.store.list_conversations(owner)
+                    self.assertEqual(len(rows), expected_count)
+                    self.assertTrue(all(row["turn_count"] == 2 for row in rows))
+                    self.assertTrue(all(row["title"].startswith("First ") for row in rows))
+                    selects = [sql for sql in statements if sql.lstrip().upper().startswith("SELECT")]
+                    self.assertEqual(len(selects), 1, statements)
+                    self.assertFalse(any(
+                        sql.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE", "BEGIN IMMEDIATE"))
+                        for sql in statements
+                    ), statements)
+
     def test_simultaneous_claims_never_reassign_a_session(self):
         def claim(owner):
             try:
