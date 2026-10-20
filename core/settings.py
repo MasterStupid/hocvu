@@ -19,8 +19,8 @@ ROOT = Path(__file__).resolve().parents[1]
 def _load_dotenv(path: Path) -> None:
     """Load simple KEY=value local settings without a third-party dependency.
 
-    Existing process variables always win, which lets Render/Netlify-style
-    hosts manage secrets normally while keeping local `.env` convenient.
+    Existing process variables always win, so host-managed secrets take
+    precedence while local `.env` remains convenient.
     """
     if not path.is_file():
         return

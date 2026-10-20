@@ -20,9 +20,8 @@ pages. No frontend build or separate service is needed.
   API clients can still send the `X-HocVu-Token` header. `/api/health` is public.
   Browser-authenticated POST/DELETE requests must include a matching `Origin`;
   cross-site mutations are rejected and cross-origin CORS access is disabled.
-- `HV_TRUSTED_ORIGINS` (optional, comma-separated exact origins) allows a
-  separate frontend such as the Netlify proxy to send POST/DELETE requests.
-  It is not needed for the Replit preview, which is same-origin.
+- The UI and API share one origin. Leave `HV_TRUSTED_ORIGINS` empty for the
+  normal single-server setup; keep the existing cross-site protection enabled.
   If the preview cannot display the browser's login prompt, open the preview in
   a new tab and sign in there.
 - `HV_SEMANTIC=0` uses the existing BM25 search without downloading embedding

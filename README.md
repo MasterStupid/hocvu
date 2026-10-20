@@ -25,6 +25,24 @@ imports and local binds. API clients send `X-HocVu-Token`; with
 `HV_BROWSER_AUTH=1`, browsers can instead use the native Basic login.
 `/api/health` remains public. Missing credentials never open the API.
 
+### Export the bundled demo data
+
+```bash
+python manage.py generate
+```
+
+This creates UTF-8 `corpus.json`, `corpus.md`, and `qa_testset.json` in
+`data/raw/` (or `HV_DATA_DIR/raw/` when configured), and prints their paths and
+document/question counts. `HV_SEED` controls the repeatable QA ordering.
+Rerunning the command replaces only these three demo exports. It does not
+open the chat database, modify uploaded documents or the search index, download
+models, or call an AI provider.
+
+These are demonstration data, not newly generated official regulations.
+Retrieval still uses the bundled source plus uploaded documents; editing an
+export does not change the active corpus. Run `python manage.py ingest` separately
+when you want to rebuild the search index.
+
 ### Reverse proxies and request limits
 
 The request limit (`HV_RATE_LIMIT_PER_MINUTE`, default 120) runs before
@@ -235,48 +253,24 @@ máy chủ dừng, khôi phục cả manifest/chỉ mục từ bản sao lưu đ
 và rà soát lại. **Khởi động lại máy chủ** sau thành công để nạp chỉ mục mới.
 Chạy lại lệnh rà soát để biết số tài liệu còn cần xác nhận ngày.
 
-## Deploy: Netlify + Render
+## Single-server hosting
 
-The browser interface is static, but document upload, OCR, the search index,
-and conversation storage require Python and a writable disk. This repository
-therefore deploys the **UI on Netlify** and the **API on Render**. The Netlify
-proxy keeps the API token out of the browser.
+The existing Python server serves both the `ui/` pages and `/api/*` routes
+from the same origin. In Replit, use the **Start application** workflow:
 
-1. Push this repository to GitHub, then on Render choose **New → Web Service**
-   and connect the repository. Select the included `Dockerfile`; Render will
-   use it automatically. Set the health check path to `/api/health`.
-2. In Render's environment variables, add a strong random `HV_API_TOKEN`, set
-   `HV_SEMANTIC=0`, and set `HV_DATA_DIR=/var/data`. If using the optional AI
-   rewriting switch, also add `HV_LLM=gemini`, `GEMINI_API_KEY`, and optionally
-   `GEMINI_MODEL=gemini-3.8-flash`.
-3. Attach a Render persistent disk mounted at `/var/data`. This is required to
-   keep uploaded documents, the OCR output, index, and chat database across
-   deploys. Without it, Render's filesystem is temporary and the knowledge
-   base is reset whenever the service is rebuilt or restarted.
-4. After Render is live, copy its HTTPS address, such as
-   `https://hocvu-api.onrender.com`. On Netlify choose **Add new site → Import
-   an existing project**, select the same GitHub repository, and leave the
-   build settings to `netlify.toml`.
-5. In Netlify's **Environment variables**, set `HOCVU_API_URL` to the Render
-   HTTPS address (without a trailing slash) and `HOCVU_API_TOKEN` to the exact
-   same value as `HV_API_TOKEN` on Render. Trigger a new deploy.
-6. Copy the Netlify site's address, such as `https://hocvu.netlify.app`, and
-   add it on Render as `HV_TRUSTED_ORIGINS` (comma-separate multiple exact
-   origins, no wildcards or paths). Redeploy Render. Without it, the API
-   rejects proxied questions, uploads, deletes, and reindexing to prevent other
-   websites from using the Netlify proxy's token.
+```sh
+python manage.py serve --host 0.0.0.0 --port 5000
+```
 
-Netlify publishes the `ui` directory and rewrites every `/api/*` request to
-Render with the private `X-HocVu-Token` header. Do not put either token in
-`ui/*.js`, a committed `.env` file, or the public site settings.
-The local build plugin injects this redirect into Netlify's in-memory build
-configuration. `prepare-netlify.mjs` only validates settings; it does not rewrite
-`netlify.toml` or create a token-bearing file, so repeated builds are safe.
+There is no separate frontend deployment, frontend build step, or token-injecting
+proxy. Keep `HV_API_TOKEN` on the server; never copy it into browser JavaScript.
+The UI uses relative API URLs. Leave `HV_TRUSTED_ORIGINS` empty for this normal
+setup; existing authentication, rate limits and cross-site protections still apply.
 
-The demonstration regulations are generated from source code on the first
-startup. Files uploaded only to your old local `data/` folder are not committed
-to Git and will not appear in the cloud automatically; upload them again from
-the **Quản lý tài liệu** page after the first deployment.
+This cleanup does not change the storage backend. Uploaded documents, indexes,
+audio and SQLite sessions retain the existing git-ignored `data/` layout (or
+`HV_DATA_DIR`). Back up those files and configure and verify persistent storage
+separately before relying on a published service to retain them.
 
 ## Research workflow
 

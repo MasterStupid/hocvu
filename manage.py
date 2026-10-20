@@ -3,7 +3,9 @@ import json
 import os
 import sys
 import uuid
-from core.settings import load_config, ensure_dirs, INDEX_JSON, EVAL_JSON, DOCS, SERVER_META
+from core.settings import load_config, ensure_dirs, INDEX_JSON, EVAL_JSON, DOCS, SERVER_META, RAW
+from core.corpus import build_corpus, build_qa, build_markdown
+from core.index_storage import atomic_write, index_write_lock
 from core.documents import DocumentError, DocumentRepository
 from core.document_recovery import recover_document_dates
 from pathlib import Path
@@ -11,12 +13,39 @@ from core.engine import build_index, HocVuEngine
 from core.evaluation import evaluate
 from server.app import main as serve_main
 
+
+def generate_demo_data(config, output_dir: Path) -> dict:
+    """Export the bundled demo corpus without opening the engine or user stores."""
+    corpus = build_corpus(seed=config.seed)
+    questions = build_qa(corpus, seed=config.seed)
+    payloads = {
+        "corpus.json": json.dumps(
+            [regulation.to_dict() for regulation in corpus], ensure_ascii=False, indent=2,
+        ) + "\n",
+        "corpus.md": build_markdown(corpus) + "\n",
+        "qa_testset.json": json.dumps(
+            [question.to_dict() for question in questions], ensure_ascii=False, indent=2,
+        ) + "\n",
+    }
+    output_dir.mkdir(parents=True, exist_ok=True)
+    with index_write_lock(output_dir / "corpus.json"):
+        for filename, text in payloads.items():
+            atomic_write(output_dir / filename, text.encode("utf-8"))
+    return {
+        "seed": config.seed,
+        "documents": len(corpus),
+        "articles": sum(len(regulation.articles) for regulation in corpus),
+        "questions": len(questions),
+        "files": [str(output_dir / filename) for filename in payloads],
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description="HocVu AI CLI")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
     
     subparsers.add_parser("doctor", help="Check environment")
-    subparsers.add_parser("generate", help="Generate mock data")
+    subparsers.add_parser("generate", help="Export bundled demo regulations and QA data")
     subparsers.add_parser("ingest", help="Build index")
 
     subparsers.add_parser("audit-document-dates", help="Read-only audit of invalid stored document dates")
@@ -41,6 +70,14 @@ def main():
     
     args = parser.parse_args()
     config = load_config()
+    if args.command == "generate":
+        try:
+            result = generate_demo_data(config, RAW)
+        except OSError:
+            print("Không thể xuất dữ liệu mẫu. Kiểm tra dung lượng và quyền ghi thư mục dữ liệu.", file=sys.stderr)
+            raise SystemExit(1) from None
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return
     if args.command in {"audit-document-dates", "repair-document-dates"}:
         repository = DocumentRepository(DOCS, create_dirs=False)
         try:
@@ -70,9 +107,6 @@ def main():
         print("Checking environment...")
         print(f"Config loaded: {config.summary()}")
         print(f"Index exists: {INDEX_JSON.exists()}")
-        
-    elif args.command == "generate":
-        print("Generating mock data... (Not implemented)")
         
     elif args.command == "ingest":
         print("Building index...")

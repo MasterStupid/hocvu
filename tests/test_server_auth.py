@@ -77,14 +77,14 @@ class BrowserAuthenticationTests(IsolatedServerEngineTests):
             item.stop()
 
     async def test_pages_and_api_require_login(self):
-        for path in ["/", "/documents.html", "/main.js", "/api-errors.js", "/api/documents", "/docs"]:
+        for path in ["/", "/documents.html", "/main.js", "/documents.js", "/theme.js", "/styles.css", "/api-errors.js", "/api/documents", "/docs"]:
             with self.subTest(path=path):
                 response = await self.client.get(path)
                 self.assertEqual(response.status_code, 401)
                 self.assertIn("Basic", response.headers["www-authenticate"])
 
     async def test_browser_login_serves_pages_and_api(self):
-        for path in ["/", "/documents.html", "/main.js", "/api-errors.js", "/api/suggestions"]:
+        for path in ["/", "/documents.html", "/main.js", "/documents.js", "/theme.js", "/styles.css", "/api-errors.js", "/api/suggestions"]:
             with self.subTest(path=path):
                 response = await self.client.get(
                     path, auth=("hocvu", "test-access-only")
@@ -200,8 +200,8 @@ class BrowserAuthenticationTests(IsolatedServerEngineTests):
             self.assertEqual((await self.client.get("/api/documents")).status_code, 401)
 
 
-class NetlifyProxyOriginTests(IsolatedServerEngineTests):
-    """Netlify forwards the browser's site Origin to the separate API host."""
+class TrustedOriginProtectionTests(IsolatedServerEngineTests):
+    """Keep exact-origin authorization covered independently of hosting vendors."""
 
     async def asyncSetUp(self):
         self.patches = [
@@ -211,14 +211,14 @@ class NetlifyProxyOriginTests(IsolatedServerEngineTests):
             patch.object(server, "browser_auth_enabled", False),
             patch.object(
                 server, "trusted_origins",
-                server.parse_trusted_origins("https://hocvu-site.netlify.app"),
+                server.parse_trusted_origins("https://frontend.example.test"),
             ),
         ]
         for item in self.patches:
             item.start()
         self.client = httpx.AsyncClient(
             transport=httpx.ASGITransport(app=server.app),
-            base_url="https://hocvu-api.onrender.com",
+            base_url="https://api.example.test",
         )
         self.proxy_headers = {
             "X-HocVu-Token": "test-access-only",
@@ -230,10 +230,10 @@ class NetlifyProxyOriginTests(IsolatedServerEngineTests):
         for item in reversed(self.patches):
             item.stop()
 
-    async def test_trusted_netlify_site_can_ask_and_upload(self):
+    async def test_explicitly_trusted_origin_can_ask_and_upload(self):
         headers = {
             **self.proxy_headers,
-            "Origin": "https://hocvu-site.netlify.app",
+            "Origin": "https://frontend.example.test",
             "Sec-Fetch-Site": "same-origin",
         }
         ask = await self.client.post(
@@ -249,11 +249,11 @@ class NetlifyProxyOriginTests(IsolatedServerEngineTests):
             )
             self.assertEqual(upload.status_code, 201)
 
-    async def test_attacker_cannot_use_netlify_proxy_token(self):
+    async def test_valid_token_does_not_bypass_origin_checks(self):
         for extra in [
             {"Origin": "https://attacker.example"},
-            {"Origin": "https://hocvu-site.netlify.app.attacker.example"},
-            {"Origin": "https://hocvu-site.netlify.app", "Sec-Fetch-Site": "cross-site"},
+            {"Origin": "https://frontend.example.test.attacker.example"},
+            {"Origin": "https://frontend.example.test", "Sec-Fetch-Site": "cross-site"},
         ]:
             with self.subTest(headers=extra):
                 with patch.object(server, "get_engine") as get_engine:
@@ -266,13 +266,16 @@ class NetlifyProxyOriginTests(IsolatedServerEngineTests):
                     get_engine.assert_not_called()
 
     def test_invalid_trusted_origin_configuration_fails_clearly(self):
-        for value in ["*.netlify.app", "https://*.netlify.app", "https://site.netlify.app/path", "hocvu.netlify.app"]:
+        for value in ["*.example.test", "https://*.example.test", "https://frontend.example.test/path", "frontend.example.test"]:
             with self.subTest(value=value):
                 with self.assertRaisesRegex(RuntimeError, "HV_TRUSTED_ORIGINS"):
                     server.parse_trusted_origins(value)
 
     def test_trusted_origins_are_normalized(self):
         self.assertEqual(
-            server.parse_trusted_origins(" https://Site.Netlify.app/ , http://localhost:8888 "),
-            frozenset({"https://site.netlify.app", "http://localhost:8888"}),
+            server.parse_trusted_origins(" https://Frontend.Example.Test/ , http://localhost:8888 "),
+            frozenset({"https://frontend.example.test", "http://localhost:8888"}),
         )
+
+    def test_single_origin_setup_needs_no_trusted_external_frontend(self):
+        self.assertEqual(server.parse_trusted_origins(""), frozenset())

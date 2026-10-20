@@ -65,7 +65,7 @@ def parse_trusted_origins(value: str) -> frozenset[str]:
             or parts.fragment
         ):
             raise RuntimeError(
-                "HV_TRUSTED_ORIGINS phải là danh sách origin đầy đủ, ví dụ https://hocvu.netlify.app"
+                "HV_TRUSTED_ORIGINS phải là danh sách origin đầy đủ, ví dụ https://frontend.example.test"
             )
         origins.add(f"{parts.scheme}://{parts.netloc}".lower())
     return frozenset(origins)
@@ -151,7 +151,7 @@ app = FastAPI(
     openapi_url="/openapi.json" if os.environ.get("HV_API_DOCS", "0") == "1" else None,
 )
 
-# The bundled UI and Netlify's API proxy are same-origin. Do not enable
+# The bundled UI and API are served from the same origin. Do not enable
 # credentialed cross-origin browser access to the editable regulation corpus.
 
 request_limiter = SlidingWindowLimiter()
