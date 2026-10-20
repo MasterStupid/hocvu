@@ -1,8 +1,12 @@
 import argparse
+import json
 import os
 import sys
 import uuid
-from core.settings import load_config, ensure_dirs, INDEX_JSON, EVAL_JSON
+from core.settings import load_config, ensure_dirs, INDEX_JSON, EVAL_JSON, DOCS, SERVER_META
+from core.documents import DocumentError, DocumentRepository
+from core.document_recovery import recover_document_dates
+from pathlib import Path
 from core.engine import build_index, HocVuEngine
 from core.evaluation import evaluate
 from server.app import main as serve_main
@@ -14,6 +18,12 @@ def main():
     subparsers.add_parser("doctor", help="Check environment")
     subparsers.add_parser("generate", help="Generate mock data")
     subparsers.add_parser("ingest", help="Build index")
+
+    subparsers.add_parser("audit-document-dates", help="Read-only audit of invalid stored document dates")
+    repair_parser = subparsers.add_parser("repair-document-dates", help="Offline recovery of selected invalid document dates")
+    repair_parser.add_argument("--plan", type=Path, required=True, help="Administrator's JSON selection and confirmed dates")
+    repair_parser.add_argument("--apply", action="store_true", help="Apply the plan (default: read-only dry run)")
+    repair_parser.add_argument("--confirm", action="store_true", help="Confirm the dates were checked by an administrator")
     
     ask_parser = subparsers.add_parser("ask", help="Ask a question")
     ask_parser.add_argument("question", help="The question to ask")
@@ -31,6 +41,29 @@ def main():
     
     args = parser.parse_args()
     config = load_config()
+    if args.command in {"audit-document-dates", "repair-document-dates"}:
+        repository = DocumentRepository(DOCS, create_dirs=False)
+        try:
+            # Always report the count first, even if the repair plan is invalid.
+            print(json.dumps(repository.audit_document_dates(), ensure_ascii=False), flush=True)
+            if args.command == "repair-document-dates":
+                try:
+                    plan = json.loads(args.plan.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    raise DocumentError("Không đọc được kế hoạch JSON hợp lệ.") from None
+                print(json.dumps(recover_document_dates(
+                    config, repository, INDEX_JSON, plan,
+                    apply=args.apply, confirmed=args.confirm, server_meta=SERVER_META,
+                ), ensure_ascii=False))
+        except (DocumentError, OSError) as exc:
+            # Never echo arbitrary parser/extractor errors or document content.
+            message = str(exc) if isinstance(exc, DocumentError) else "Không thể đọc/ghi dữ liệu phục hồi."
+            print(message, file=sys.stderr)
+            raise SystemExit(1) from None
+        except Exception:
+            print("Phục hồi thất bại. Giữ máy chủ dừng và kiểm tra tệp gốc/chỉ mục; không ghi nội dung tài liệu vào log.", file=sys.stderr)
+            raise SystemExit(1) from None
+        return
     ensure_dirs()
     
     if args.command == "doctor":
@@ -72,7 +105,6 @@ def main():
         if not INDEX_JSON.exists():
             print("Index not found.")
             return
-        import json
         with open(INDEX_JSON, 'r', encoding='utf-8') as f:
             data = json.load(f)
         chunks = data.get('chunks', [])

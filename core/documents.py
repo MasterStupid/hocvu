@@ -45,11 +45,12 @@ class DocumentRepository:
         """
         return f"extraction-{cls.extraction_version}.articles-{cls.article_version}"
 
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, *, create_dirs: bool = True):
         self.root = root
-        self.root.mkdir(parents=True, exist_ok=True)
         self.extracted_root = self.root / "extracted"
-        self.extracted_root.mkdir(parents=True, exist_ok=True)
+        if create_dirs:
+            self.root.mkdir(parents=True, exist_ok=True)
+            self.extracted_root.mkdir(parents=True, exist_ok=True)
         self.manifest = self.root / "manifest.json"
         self.manifest_backup = self.root / "manifest.json.bak"
 
@@ -104,13 +105,17 @@ class DocumentRepository:
         cleaned = re.sub(r"[^\w.() -]", "_", Path(name).name, flags=re.UNICODE).strip(" .")
         return cleaned[:120] or "tai_lieu"
 
-    def list(self) -> list[dict]:
+    @staticmethod
+    def _ordered_entries(entries: list[dict]) -> list[dict]:
         def key(item: dict):
             try:
                 return int(item.get("order", 999999))
             except (TypeError, ValueError):
                 return 999999
-        return sorted(self._read_manifest(), key=key)
+        return sorted(entries, key=key)
+
+    def list(self) -> list[dict]:
+        return self._ordered_entries(self._read_manifest())
 
     @staticmethod
     def _metadata(raw: dict | None) -> dict:
@@ -219,6 +224,76 @@ class DocumentRepository:
         entries.append(entry)
         self._write_manifest(entries)
         return entry
+
+    @staticmethod
+    def document_date_issue(value) -> str | None:
+        """Missing dates use the upload day; malformed dates must be repaired."""
+        if value is None or value == "":
+            return None
+        if not isinstance(value, str):
+            return "invalid_date_type"
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+            return "invalid_date_format"
+        try:
+            date.fromisoformat(value)
+        except ValueError:
+            return "invalid_calendar_date"
+        return None
+
+    def audit_document_dates(self) -> dict:
+        """Read only: never extract text, restore backups, or guess dates."""
+        content, entries = self._date_manifest_snapshot()
+        affected = []
+        for entry in entries:
+            issue = self.document_date_issue(entry.get("document_date"))
+            if issue:
+                # Deliberately omit titles, filenames, text and arbitrary fields.
+                affected.append({"id": entry.get("id"), "rid": entry.get("rid"), "issue": issue})
+        return {
+            "total": len(entries), "affected_count": len(affected),
+            "affected": affected, "manifest_sha256": hashlib.sha256(content).hexdigest(),
+        }
+
+    def _date_manifest_snapshot(self) -> tuple[bytes, list[dict]]:
+        exists = self.manifest.exists()
+        content = self.manifest.read_bytes() if exists else b""
+        try:
+            entries = json.loads(content) if exists else []
+        except (ValueError, UnicodeError):
+            raise DocumentError("Danh mục bị lỗi. Hãy kiểm tra bản sao lưu; rà soát không tự khôi phục tệp.") from None
+        if not isinstance(entries, list) or any(not isinstance(entry, dict) for entry in entries):
+            raise DocumentError("Danh mục tài liệu phải chứa các bản ghi metadata.")
+        return content, entries
+
+    def prepare_date_repairs(self, plan: dict) -> tuple[list[dict], list[dict]]:
+        """Validate an administrator's selection without changing any files."""
+        content, entries = self._date_manifest_snapshot()
+        if not isinstance(plan, dict) or plan.get("manifest_sha256") != hashlib.sha256(content).hexdigest():
+            raise DocumentError("Danh mục đã thay đổi hoặc thiếu mã kiểm tra. Hãy rà soát và xác nhận lại.")
+        changes = plan.get("corrections")
+        if not isinstance(changes, list) or not changes:
+            raise DocumentError("Cần chọn ít nhất một tài liệu trong corrections.")
+        if any(not isinstance(entry.get("id"), str) or not entry["id"] for entry in entries):
+            raise DocumentError("Mã tài liệu trong danh mục bị thiếu hoặc sai định dạng.")
+        by_id = {entry.get("id"): entry for entry in entries}
+        if None in by_id or len(by_id) != len(entries):
+            raise DocumentError("Mã tài liệu trong danh mục bị thiếu hoặc trùng.")
+        selected, seen = [], set()
+        for change in changes:
+            if not isinstance(change, dict) or set(change) != {"id", "document_date"}:
+                raise DocumentError("Mỗi lựa chọn chỉ được chứa id và document_date.")
+            item_id, new_date = change["id"], change["document_date"]
+            if not isinstance(item_id, str) or item_id not in by_id or item_id in seen:
+                raise DocumentError("Mã tài liệu được chọn không tồn tại hoặc bị lặp.")
+            entry = by_id[item_id]
+            if not self.document_date_issue(entry.get("document_date")):
+                raise DocumentError("Chỉ phục hồi tài liệu có ngày sai; không sửa tài liệu không bị ảnh hưởng.")
+            if not isinstance(new_date, str) or not new_date or self.document_date_issue(new_date):
+                raise DocumentError("Ngày được xác nhận phải là ngày lịch hợp lệ theo YYYY-MM-DD.")
+            selected.append({"id": item_id, "rid": entry["rid"], "document_date": new_date})
+            entry["document_date"] = new_date
+            seen.add(item_id)
+        return entries, selected
 
     @staticmethod
     def _explicit_subject(text: str) -> str:
@@ -491,21 +566,26 @@ class DocumentRepository:
                 blocks.append(f"## Nội dung ảnh OCR {number}\n{recognized}")
         return "\n".join(blocks)
 
-    def regulations(self, entries: list[dict] | None = None) -> list[Regulation]:
+    def regulations(
+        self, entries: list[dict] | None = None, *, refresh_extraction: bool = True,
+    ) -> list[Regulation]:
         regulations = []
-        entries = self.list() if entries is None else entries
+        entries = self.list() if entries is None else self._ordered_entries(entries)
         upgraded = False
         for entry in entries:
             extracted_path = self._extracted_path(entry["id"])
-            if extracted_path.exists() and entry.get("extraction_version") == self.extraction_version:
+            if extracted_path.exists() and (
+                not refresh_extraction or entry.get("extraction_version") == self.extraction_version
+            ):
                 text = extracted_path.read_text(encoding="utf-8")
             else:
                 # Documents uploaded before a parser improvement are upgraded
                 # automatically on their next reindex.
                 text, _ = self.extract(self.root / entry["stored_name"], use_ocr=entry.get("ocr", False))
-                extracted_path.write_text(text, encoding="utf-8")
-                entry["extraction_version"] = self.extraction_version
-                upgraded = True
+                if refresh_extraction:
+                    extracted_path.write_text(text, encoding="utf-8")
+                    entry["extraction_version"] = self.extraction_version
+                    upgraded = True
             articles = self._make_articles(text, entry["title"], entry.get("article_clause", ""))
             decision = entry.get("decision_number")
             regulations.append(Regulation(

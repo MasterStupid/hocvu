@@ -117,6 +117,63 @@ The upload field **Điều / khoản** supplies the citation locator for the upl
 
 Scanned-only PDFs are also detected automatically; enabling OCR additionally fills scan pages in mixed text/image PDFs. Document extraction never sends PDF page images to Gemini or another cloud model, regardless of `HV_LLM` or `GEMINI_API_KEY`. Those settings apply separately to optional AI answer rewriting, not OCR. OCR does not summarize the source or impose an LLM output-token limit. Older cached extractions are rebuilt from the original files when their extraction version is upgraded.
 
+
+### Phục hồi ngày sai của tài liệu cũ
+
+Lệnh sau **chỉ đọc metadata**, không OCR, không ghi nội dung tài liệu vào log,
+không tự khôi phục manifest từ bản sao lưu, và không đoán ngày thay thế:
+
+```sh
+python manage.py audit-document-dates
+```
+
+Kết quả JSON cho biết `total`, `affected_count`, các mã `id`/`rid` bị ảnh hưởng
+và `manifest_sha256`. Ngày không tồn tại (ví dụ 31/02), sai định dạng hoặc sai
+kiểu dữ liệu đều được báo. Ngày trống/không có vẫn dùng ngày tải lên như trước;
+ngày hợp lệ trong tương lai không phải là lỗi. Lệnh chỉ kiểm tra thư mục dữ liệu
+của môi trường đang chạy (`HV_DATA_DIR`), không kiểm tra một bản cài đặt khác.
+
+Quản trị viên kiểm tra tài liệu gốc và xác nhận ngày áp dụng chính xác.
+Tạo `data/date-repairs.json` (không đưa vào Git), chỉ chọn những tài liệu cần sửa:
+
+```json
+{
+  "manifest_sha256": "chép nguyên mã từ kết quả rà soát",
+  "corrections": [
+    {"id": "mã id đầy đủ của tài liệu bị ảnh hưởng", "document_date": "2026-02-28"}
+  ]
+}
+```
+
+Xem trước, không ghi dữ liệu:
+
+```sh
+python manage.py repair-document-dates --plan data/date-repairs.json
+```
+
+Trước khi áp dụng, **dừng máy chủ và mọi tiến trình ghi dữ liệu** (kể cả máy chủ
+khởi chạy trực tiếp bằng Uvicorn), sao lưu thư mục dữ liệu. Chạy trên đúng môi
+trường chứa tài liệu; chỉ người quản trị có quyền truy cập shell nên chạy lệnh.
+`--confirm` xác nhận các ngày đã được quản trị viên kiểm tra, không phải ngày
+do công cụ tự chọn:
+
+```sh
+python manage.py repair-document-dates --plan data/date-repairs.json --apply --confirm
+```
+
+Lệnh luôn báo số bị ảnh hưởng trước. Manifest thay đổi sau khi lập kế hoạch,
+mã không tồn tại/trùng, ngày thay thế không hợp lệ và tài liệu vốn không bị lỗi
+đều bị từ chối. Công cụ dựng chỉ mục tạm qua engine, kiểm tra tìm kiếm không thấy
+tài liệu trước ngày áp dụng và thấy tài liệu đúng/sau ngày đó rồi mới lưu.
+Kiểm tra dùng BM25 ngoại tuyến, không cần tải mô hình hoặc gửi câu hỏi đến LLM.
+Tệp gốc, bản trích xuất, mã tài liệu và mọi metadata khác giữ nguyên; tài liệu
+không được chọn không đổi. Lỗi dựng/kiểm tra không ghi metadata/chỉ mục; lỗi
+ghi thông thường được hoàn tác. Các tệp `.bak` giữ manifest và chỉ mục trước khi
+phục hồi. Không ngắt tiến trình trong lúc lưu; nếu mất điện/dừng cưỡng bức, giữ
+máy chủ dừng, khôi phục cả manifest/chỉ mục từ bản sao lưu đã tạo trước khi chạy
+và rà soát lại. **Khởi động lại máy chủ** sau thành công để nạp chỉ mục mới.
+Chạy lại lệnh rà soát để biết số tài liệu còn cần xác nhận ngày.
+
 ## Deploy: Netlify + Render
 
 The browser interface is static, but document upload, OCR, the search index,

@@ -535,6 +535,6 @@ class HybridSearcher:
             start = datetime.strptime(chunk.valid_from, "%Y-%m-%d").date() if chunk.valid_from else date.min
             end = datetime.strptime(chunk.valid_until, "%Y-%m-%d").date() if chunk.valid_until else date.max
             return start <= at <= end
-        except ValueError:
+        except (ValueError, TypeError):
             # Invalid metadata must never make a document appear valid.
             return False

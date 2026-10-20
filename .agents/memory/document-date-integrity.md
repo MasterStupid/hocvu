@@ -14,3 +14,9 @@ Correcting an existing document's date must not require deleting or re-uploading
 **Why:** the user requested in-place date corrections with the same document code and file.
 
 **How to apply:** require an explicit, valid replacement date and do not treat a failed index update as a successful correction.
+
+A calendar-valid date is not necessarily the correct effective date. Legacy recovery must use the administrator's reading of the original document, not a nearby valid day, the upload date, or today's date. Missing dates and valid future dates are not evidence of this legacy corruption.
+
+**Why:** changing an effective date changes which historical questions the document may answer. The user explicitly requested selected, confirmed corrections rather than an automatic data migration.
+
+**How to apply:** keep legacy invalid-date recovery separate from ordinary effective-date editing. Audit the actual target environment before claiming any old documents have been recovered.

@@ -12,7 +12,7 @@ from .documents import DocumentRepository
 from .generator import DECLINE_MSG, Generator
 from .index_version import index_fingerprint
 from .llm import GroundedLLM, LLMError
-from .models import Response
+from .models import Regulation, Response
 from .searcher import HybridSearcher, StaleIndexError
 from .scenarios import comparison_subjects, comparison_topic, expand_retrieval_query, is_attendance_training_scenario, is_comparison_query, is_context_dependent, is_contextual_follow_up, is_historical_query, is_version_comparison_query
 from .session import SessionStore
@@ -21,18 +21,28 @@ from .splitter import split_regulation
 from .voice import VoiceManager
 
 
-def build_index(config: AppConfig, *, return_searcher: bool = False, index_path: Path = INDEX_JSON):
-    repository = DocumentRepository(DOCS)
-    entries = repository.list()
-    corpus = build_corpus(seed=config.seed) + repository.regulations(entries=entries)
-    # Bind the index to the snapshot actually used, including any extraction
-    # upgrades. A later manifest edit must not be marked as already indexed.
+def build_index(
+    config: AppConfig, *, return_searcher: bool = False, index_path: Path = INDEX_JSON,
+    uploaded_regulations: list[Regulation] | None = None,
+    document_entries: list[dict] | None = None,
+):
+    if uploaded_regulations is None:
+        repository = DocumentRepository(DOCS)
+        entries = repository.list()
+        uploaded_regulations = repository.regulations(entries=entries)
+    else:
+        if document_entries is None:
+            raise ValueError("An explicit uploaded corpus requires its manifest snapshot.")
+        entries = DocumentRepository._ordered_entries(document_entries)
+    corpus = build_corpus(seed=config.seed) + uploaded_regulations
+    # Hash the exact snapshot used for chunks, including extraction upgrades.
+    # Recovery supplies its confirmed, not-yet-published metadata snapshot.
     fingerprint = index_fingerprint(config, DOCS, document_entries=entries)
     chunks = [chunk for regulation in corpus for chunk in split_regulation(regulation, config.max_chunk_chars, config.overlap_sents)]
     searcher = HybridSearcher(config)
     searcher.build(chunks)
     searcher.save(str(index_path), article_version=DocumentRepository.article_build_version(), index_fingerprint=fingerprint)
-    result = {"chunks": len(chunks), "documents": len(corpus), "uploaded": len(entries)}
+    result = {"chunks": len(chunks), "documents": len(corpus), "uploaded": len(uploaded_regulations)}
     # Reuse this instance after upload/reindex. Loading a just-saved index
     # would build semantic embeddings a second time on the same corpus.
     return (result, searcher) if return_searcher else result
