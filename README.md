@@ -286,10 +286,11 @@ proxy. Keep `HV_API_TOKEN` on the server; never copy it into browser JavaScript.
 The UI uses relative API URLs. Leave `HV_TRUSTED_ORIGINS` empty for this normal
 setup; existing authentication, rate limits and cross-site protections still apply.
 
-This cleanup does not change the storage backend. Uploaded documents, indexes,
-audio and SQLite sessions retain the existing git-ignored `data/` layout (or
-`HV_DATA_DIR`). Back up those files and configure and verify persistent storage
-separately before relying on a published service to retain them.
+For Replit publishing, use the persistent storage backend described in
+[`docs/persistent-storage.md`](docs/persistent-storage.md): App Storage keeps
+originals and extracted text, PostgreSQL keeps metadata/history, and local
+indexes are rebuilt when missing. Local SQLite mode remains available for
+offline development, but is rejected inside a published app.
 
 ## Research workflow
 

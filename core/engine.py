@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import time
+import threading
 from datetime import date
 from pathlib import Path
 
@@ -17,7 +18,8 @@ from .question_focus import question_focus
 from .regulation_queries import answer_metadata
 from .searcher import HybridSearcher, StaleIndexError
 from .scenarios import comparison_subjects, comparison_topic, expand_retrieval_query, is_attendance_training_scenario, is_comparison_query, is_context_dependent, is_contextual_follow_up, is_historical_query, is_version_comparison_query
-from .session import SessionStore
+from .storage_backend import document_repository, session_store, writing, storage_backend
+from .persistent_documents import rollback_index
 from .settings import AUD, DOCS, INDEX_JSON, SESSION_DB, AppConfig
 from .splitter import split_regulation
 from .voice import VoiceManager
@@ -51,15 +53,17 @@ def build_index(
 
 
 class HocVuEngine:
-    def __init__(self, config: AppConfig, searcher: HybridSearcher):
+    def __init__(self, config: AppConfig, searcher: HybridSearcher, *, documents=None):
         self.config = config
         self.searcher = searcher
         self.classifier = Classifier()
         self.generator = Generator(config)
         self.llm = GroundedLLM(config)
         self.voice = VoiceManager(config, AUD)
-        self.session = SessionStore(SESSION_DB)
-        self.documents = DocumentRepository(DOCS)
+        self.session = session_store(SESSION_DB)
+        self.documents = documents if documents is not None else document_repository(DOCS)
+        self._corpus_lock = threading.RLock()
+        self._indexed_revision = getattr(self.documents, "revision", None)
         self._suggestion_topics = build_suggestion_topics(config.seed)
 
     @classmethod
@@ -74,6 +78,13 @@ class HocVuEngine:
         built-in corpus, splitter, chunking settings and uploaded manifest. A matching index is
         loaded as is; older indexes without metadata are rebuilt once.
         """
+        repository = document_repository(DOCS)
+        with rollback_index(repository, index_path), writing(repository):
+            searcher = cls._load_searcher(config, index_path)
+            return cls(config, searcher, documents=repository)
+
+    @staticmethod
+    def _load_searcher(config, index_path):
         if index_path.exists():
             try:
                 searcher = HybridSearcher.load(
@@ -81,14 +92,28 @@ class HocVuEngine:
                     article_version=DocumentRepository.article_build_version(),
                     index_fingerprint=index_fingerprint(config, DOCS),
                 )
-                return cls(config, searcher)
+                return searcher
             except StaleIndexError as exc:
                 print(f"Rebuilding search index: {exc}")
         _, searcher = build_index(config, return_searcher=True, index_path=index_path)
-        return cls(config, searcher)
+        return searcher
+
+    def _refresh_corpus(self):
+        """Other processes may have committed a new durable document revision."""
+        repository = self.documents
+        if not getattr(repository, "durable", False):
+            return
+        if repository.state.revision() != self._indexed_revision:
+            with self._corpus_lock:
+                if repository.state.revision() != self._indexed_revision:
+                    with rollback_index(repository, INDEX_JSON), writing(repository):
+                        _, searcher = build_index(self.config, return_searcher=True)
+                    self.searcher = searcher
+                    self._indexed_revision = repository.revision
 
     def ask(self, question: str, session_id: str, ref_date: str | None = None, with_audio: bool = False, use_context: bool = True, use_ai: bool = False, record_session: bool = True) -> Response:
         started = time.perf_counter()
+        self._refresh_corpus()
         self.ensure_session_open(session_id)
         question = (question or "").strip()
         intent = self.classifier.classify(question)
@@ -244,6 +269,11 @@ class HocVuEngine:
         return response
 
     def list_documents(self) -> list[dict]:
+        self._refresh_corpus()
+        with self._corpus_lock:
+            return self._list_documents()
+
+    def _list_documents(self) -> list[dict]:
         docs = {}
         chunk_counts = {}
         for chunk in self.searcher.chunks:
@@ -266,35 +296,69 @@ class HocVuEngine:
         }])["items"][0]
 
     def add_documents(self, uploads: list[dict]) -> dict:
-        with self.documents.adding_many(uploads) as items:
-            stats, searcher = build_index(self.config, return_searcher=True)
-        self.searcher = searcher
+        with self._corpus_lock, rollback_index(self.documents, INDEX_JSON):
+            with self.documents.adding_many(uploads) as items:
+                stats, searcher = build_index(self.config, return_searcher=True)
+            self.searcher = searcher
+            self._indexed_revision = getattr(self.documents, "revision", None)
         return {"items": items, "index": stats}
 
     def remove_document(self, item_id: str) -> None:
         self.remove_documents([item_id])
 
     def remove_documents(self, item_ids: list[str]) -> dict:
-        with self.documents.removing_many(item_ids) as result:
-            stats, searcher = build_index(self.config, return_searcher=True)
+        with self._corpus_lock, rollback_index(self.documents, INDEX_JSON):
+            with self.documents.removing_many(item_ids) as result:
+                stats, searcher = build_index(self.config, return_searcher=True)
             self.searcher = searcher
+            self._indexed_revision = getattr(self.documents, "revision", None)
         return {**result, "index": stats}
 
     def update_document_date(self, item_id: str, document_date: str) -> dict:
-        with self.documents.change_date(item_id, document_date) as item:
-            _, searcher = build_index(self.config, return_searcher=True)
-        self.searcher = searcher
+        with self._corpus_lock, rollback_index(self.documents, INDEX_JSON):
+            with self.documents.change_date(item_id, document_date) as item:
+                _, searcher = build_index(self.config, return_searcher=True)
+            self.searcher = searcher
+            self._indexed_revision = getattr(self.documents, "revision", None)
         return item
 
     def document_text(self, item_id: str) -> dict:
-        result = self.documents.get_text(item_id)
-        item = next((entry for entry in self.documents.list() if entry["id"] == item_id), None)
-        result["chunk_count"] = sum(1 for chunk in self.searcher.chunks if item and chunk.rid == item["rid"])
-        return result
+        self._refresh_corpus()
+        with self._corpus_lock:
+            result = self.documents.get_text(item_id)
+            item = next((entry for entry in self.documents.list() if entry["id"] == item_id), None)
+            result["chunk_count"] = sum(1 for chunk in self.searcher.chunks if item and chunk.rid == item["rid"])
+            return result
 
     def rebuild_index(self) -> dict:
-        result, self.searcher = build_index(self.config, return_searcher=True)
+        with self._corpus_lock:
+            with rollback_index(self.documents, INDEX_JSON), writing(self.documents):
+                result, searcher = build_index(self.config, return_searcher=True)
+            self.searcher = searcher
+            self._indexed_revision = getattr(self.documents, "revision", None)
         return result
+
+    def storage_status(self) -> dict:
+        self._refresh_corpus()
+        return {
+            "backend": storage_backend(),
+            "persistent": getattr(self.documents, "durable", False),
+            "document_revision": getattr(self.documents, "revision", None),
+        }
+
+    def backup_storage(self) -> dict:
+        from .storage_transfer import backup_local, backup_persistent
+        with self._corpus_lock:
+            if getattr(self.documents, "durable", False):
+                result = backup_persistent(self.documents)
+            else:
+                result = backup_local(SESSION_DB.parent)
+        # Do not expose filesystem paths or the private backup's object key.
+        return {
+            "filename": Path(result["path"]).name,
+            "documents": result["documents"], "turns": result["turns"],
+            "persistent_copy": bool(result.get("backup_key")),
+        }
 
     def list_sources(self) -> list[dict]:
         return [chunk.to_dict() for chunk in self.searcher.chunks]

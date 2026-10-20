@@ -12,4 +12,8 @@ python -m pip install --quiet --disable-pip-version-check \
 
 # Rebuild the search index so merged retrieval/document changes take effect.
 # Uploaded documents are kept; only the derived index is regenerated.
+# Schema application is development-only. Publish owns the production diff.
+if [[ -n "${DATABASE_URL:-}" && "${REPLIT_DEPLOYMENT:-0}" != "1" ]]; then
+  python manage.py init-storage-schema
+fi
 HV_SEMANTIC="${HV_SEMANTIC:-0}" python manage.py ingest

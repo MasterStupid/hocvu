@@ -3,7 +3,7 @@ import json
 import os
 import sys
 import uuid
-from core.settings import load_config, ensure_dirs, INDEX_JSON, EVAL_JSON, DOCS, SERVER_META, RAW
+from core.settings import load_config, ensure_dirs, INDEX_JSON, EVAL_JSON, DOCS, SERVER_META, RAW, DATA
 from core.corpus import build_corpus, build_qa, build_markdown
 from core.index_storage import atomic_write, index_write_lock
 from core.documents import DocumentError, DocumentRepository
@@ -47,6 +47,12 @@ def main():
     subparsers.add_parser("doctor", help="Check environment")
     subparsers.add_parser("generate", help="Export bundled demo regulations and QA data")
     subparsers.add_parser("ingest", help="Build index")
+    subparsers.add_parser("backup-storage", help="Create a private verified data backup")
+    migrate_parser = subparsers.add_parser("migrate-storage", help="Import a backup into empty Replit storage (development only)")
+    migrate_parser.add_argument("--backup", type=Path, help="Use a verified existing HocVu backup")
+    migrate_parser.add_argument("--apply", action="store_true")
+    migrate_parser.add_argument("--confirm", action="store_true")
+    subparsers.add_parser("init-storage-schema", help="Apply PostgreSQL schema in development only; never use in production")
 
     subparsers.add_parser("audit-document-dates", help="Read-only audit of invalid stored document dates")
     repair_parser = subparsers.add_parser("repair-document-dates", help="Offline recovery of selected invalid document dates")
@@ -70,6 +76,43 @@ def main():
     
     args = parser.parse_args()
     config = load_config()
+    if args.command in {"backup-storage", "migrate-storage", "init-storage-schema"}:
+        from core.persistent_db import StorageUnavailable, connect_database
+        from core.storage_backend import document_repository, storage_backend
+        from core.storage_transfer import backup_local, backup_persistent, import_backup
+        try:
+            if args.command == "init-storage-schema":
+                if os.environ.get("REPLIT_DEPLOYMENT") == "1":
+                    raise StorageUnavailable("Schema production chỉ được áp dụng qua Publish.")
+                with connect_database() as connection:
+                    connection.execute((Path(__file__).parent / "migrations" / "001_persistent_storage.sql").read_text())
+                result = {"schema": "ready", "environment": "development"}
+            elif args.command == "backup-storage":
+                repository = document_repository(DOCS)
+                result = backup_persistent(repository) if storage_backend() == "replit" else backup_local(DATA)
+            else:
+                if args.apply and SERVER_META.exists():
+                    try:
+                        pid = int(json.loads(SERVER_META.read_text())["pid"])
+                        os.kill(pid, 0)
+                    except (ProcessLookupError, ValueError, KeyError, json.JSONDecodeError):
+                        pass
+                    else:
+                        raise StorageUnavailable("Hãy dừng máy chủ trước khi chuyển dữ liệu để không bỏ sót lượt hỏi/tài liệu mới.")
+                backup = args.backup
+                if backup is None:
+                    saved = backup_local(DATA)
+                    backup = Path(saved["path"])
+                    print(json.dumps({"backup": saved["path"], "documents": saved["documents"], "turns": saved["turns"]}), flush=True)
+                result = import_backup(backup, apply=args.apply, confirmed=args.confirm)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        except (StorageUnavailable, DocumentError) as exc:
+            print(str(exc), file=sys.stderr)
+            raise SystemExit(1) from None
+        except Exception:
+            print("Thao tác lưu trữ thất bại; không chuyển sang lưu cục bộ và không ghi đè dữ liệu đích.", file=sys.stderr)
+            raise SystemExit(1) from None
+        return
     if args.command == "generate":
         try:
             result = generate_demo_data(config, RAW)
@@ -79,6 +122,10 @@ def main():
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
     if args.command in {"audit-document-dates", "repair-document-dates"}:
+        from core.storage_backend import storage_backend
+        if storage_backend() == "replit":
+            print("Công cụ phục hồi ngày offline chỉ dùng với bản sao cục bộ. Với kho bền vững, sửa ngày qua trang quản lý.", file=sys.stderr)
+            raise SystemExit(1)
         repository = DocumentRepository(DOCS, create_dirs=False)
         try:
             # Always report the count first, even if the repair plan is invalid.
@@ -110,7 +157,11 @@ def main():
         
     elif args.command == "ingest":
         print("Building index...")
-        build_index(config)
+        from core.storage_backend import storage_backend
+        if storage_backend() == "replit":
+            HocVuEngine.load_or_build(config, INDEX_JSON).rebuild_index()
+        else:
+            build_index(config)
         print("Done.")
         
     elif args.command == "ask":

@@ -3,6 +3,7 @@
   const $ = (key) => document.querySelector(`[data-doc="${key}"]`);
   const dom = { form: $('upload-form'), input: $('file-input'), ocr: $('ocr'), queue: $('queue'), selected: $('selected-file'), status: $('status'), table: $('table'), count: $('count'), reindex: $('reindex'), zone: $('drop-zone'), upload: $('upload'), removeQueued: $('remove-queued'), removeLibrary: $('remove-library'), preview: $('preview'), previewTitle: $('preview-title'), previewMeta: $('preview-meta'), previewText: $('preview-text'), closePreview: $('close-preview') };
   let queue = [], librarySelection = new Set(), uploading = false;
+  dom.backup = $('backup'); dom.backupDownload = $('backup-download'); dom.storageStatus = $('storage-status');
   const MAX_BATCH_FILES = 20, MAX_BATCH_BYTES = 50 * 1024 * 1024;
   const escapeHTML = (value) => { const box = document.createElement('div'); box.textContent = value || ''; return box.innerHTML; };
   const formatSize = (bytes) => bytes < 1024 * 1024 ? `${Math.ceil(bytes / 1024)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
@@ -27,6 +28,7 @@
     dom.removeQueued.disabled = uploading || !queue.some((item) => item.selected);
     dom.removeLibrary.disabled = uploading || !librarySelection.size;
     dom.reindex.disabled = uploading;
+    dom.backup.disabled = uploading;
     dom.queue.querySelectorAll('input').forEach((input) => { input.disabled = uploading; });
     dom.table.querySelectorAll('[data-delete], [data-library-select], [data-edit-date]').forEach((input) => { input.disabled = uploading; });
   }
@@ -111,5 +113,24 @@
     }
   });
   dom.reindex.addEventListener('click', async () => { if (uploading) return; uploading = true; updateSelected(); setStatus('Đang xây dựng lại chỉ mục...'); try { const result = await request('/api/documents/reindex', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); await refreshAfterCommit(`Đã lập chỉ mục ${result.documents} tài liệu với ${result.chunks} đoạn nội dung.`); } catch (error) { setStatus(mutationError(error), 'error'); } finally { uploading = false; updateSelected(); } });
+  dom.backup.addEventListener('click', async () => {
+    if (uploading || !confirm('Bản sao lưu bao gồm tài liệu và toàn bộ lịch sử hội thoại, chỉ dành cho quản trị. Tiếp tục?')) return;
+    uploading = true; updateSelected(); dom.backupDownload.hidden = true;
+    setStatus('Đang tạo và kiểm tra bản sao lưu riêng tư…');
+    try {
+      const result = await request('/api/admin/storage/backup', { method: 'POST' });
+      dom.backupDownload.href = `/api/admin/storage/backups/${encodeURIComponent(result.filename)}`;
+      dom.backupDownload.hidden = false;
+      setStatus(result.persistent_copy
+        ? 'Đã sao lưu riêng tư trên App Storage. Có thể tải thêm một bản về máy.'
+        : 'Đã tạo bản sao lưu cục bộ. Hãy tải về máy; bản này chưa được lưu bền vững trên App Storage.', result.persistent_copy ? 'success' : 'warning');
+    } catch (error) { setStatus(error.message, 'error'); }
+    finally { uploading = false; updateSelected(); }
+  });
+  request('/api/admin/storage').then((info) => {
+    dom.storageStatus.textContent = info.persistent
+      ? 'Lưu bền vững: App Storage + PostgreSQL. Chỉ mục cục bộ có thể tự dựng lại.'
+      : 'Cảnh báo: đang lưu cục bộ. Phải chuyển dữ liệu trước khi publish.';
+  }).catch(() => { dom.storageStatus.textContent = 'Chưa xác minh được nơi lưu dữ liệu. Không publish trước khi kiểm tra.'; });
   renderQueue(); load().catch((error) => setStatus(error.message, 'error'));
 })();

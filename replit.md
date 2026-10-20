@@ -45,12 +45,30 @@ The first startup generates the bundled **demonstration** regulations and index.
 They are not official university regulations. Upload reviewed documents on
 `/documents.html` before relying on the answers.
 
-Uploaded files, indexes, audio, and SQLite sessions remain in the existing
-git-ignored `data/` directory. Keep the original storage layout. This workspace
-setup does not configure published-app persistent storage.
+Storage has two explicit modes:
+- `HV_STORAGE_BACKEND=local`: offline development, local documents + SQLite/WAL.
+- `HV_STORAGE_BACKEND=replit`: private App Storage files + PostgreSQL metadata
+  and history. `data/` is a disposable document/index cache, not the source of truth.
+  Published apps refuse local mode; storage failures never fall back to SQLite.
+
+See `docs/persistent-storage.md` for setup, backup/import, and first-publish checks.
+Create/select an App Storage bucket and set the non-secret `HV_STORAGE_BUCKET_ID`
+if it is not the default bucket. Development and production share immutable
+objects, but each database has its own manifest and history. Never delete blobs
+just because one environment no longer references them.
+
+Schema source: `migrations/001_persistent_storage.sql`. Apply it in development
+only (`python manage.py init-storage-schema`); Publish manages the production
+schema diff. No startup DDL or production migration hooks.
+
+Backups contain private chat history. Keep them private, ignored by Git and
+excluded from publish; document-management administrators can explicitly create
+and download them. SQLite backups use SQLite's backup API (including WAL).
+Import is explicit, confirmed, idempotent, and rejects a nonempty destination.
+Never auto-import a stale local cache or assign legacy unowned sessions to a browser.
 
 ```sh
-python -m unittest discover -s tests -v
+HV_STORAGE_BACKEND=local python -m unittest discover -s tests -v
 python manage.py evaluate
 ```
 

@@ -254,3 +254,30 @@ test('all other mutation actions are blocked while a batch is active', async () 
   finish();
   await pending;
 });
+
+test('administrator can create and download a private persistent backup', async () => {
+  const ui = await loadDocuments(undefined, [], async url => {
+    if (url === '/api/admin/storage/backup') return {
+      ok: true, json: async () => ({
+        filename: 'hocvu-20261020T000000Z-1234abcd.zip', persistent_copy: true,
+      }),
+    };
+  });
+  await ui.dom.backup.events.click();
+  assert.equal(ui.requests.filter(r => r.url === '/api/admin/storage/backup').length, 1);
+  assert.equal(ui.dom.backupDownload.hidden, false);
+  assert.equal(ui.dom.backupDownload.href, '/api/admin/storage/backups/hocvu-20261020T000000Z-1234abcd.zip');
+  assert.match(ui.dom.status.textContent, /App Storage/);
+  assert.equal(ui.dom.backup.disabled, false);
+});
+
+test('local backup warns that downloading it is necessary', async () => {
+  const ui = await loadDocuments(undefined, [], async url => {
+    if (url === '/api/admin/storage/backup') return {
+      ok: true, json: async () => ({ filename: 'hocvu-20261020T000000Z-1234abcd.zip', persistent_copy: false }),
+    };
+  });
+  await ui.dom.backup.events.click();
+  assert.match(ui.dom.status.textContent, /chưa được lưu bền vững/);
+  assert.equal(ui.dom.status.className, 'upload-status warning');
+});

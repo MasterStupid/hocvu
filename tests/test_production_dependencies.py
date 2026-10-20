@@ -24,7 +24,7 @@ class ProductionDependencyTests(unittest.TestCase):
         development = requirements("requirements.txt")
         for name in (
             "fastapi", "uvicorn", "python-multipart", "edge-tts",
-            "pypdf", "pillow", "pytesseract", "pymupdf",
+            "pypdf", "pillow", "pytesseract", "pymupdf", "psycopg", "replit-object-storage",
         ):
             with self.subTest(package=name):
                 self.assertIn(name, production)
@@ -36,7 +36,7 @@ class ProductionDependencyTests(unittest.TestCase):
     def test_runtime_modules_import_and_upload_routes_register(self):
         for module in (
             "fastapi", "uvicorn", "python_multipart", "edge_tts",
-            "pypdf", "PIL", "pytesseract", "fitz",
+            "pypdf", "PIL", "pytesseract", "fitz", "psycopg", "replit.object_storage",
         ):
             with self.subTest(module=module):
                 importlib.import_module(module)

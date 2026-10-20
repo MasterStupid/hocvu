@@ -13,6 +13,7 @@ data/
 
 # Replit uploads and pasted working notes are not application source
 /attached_assets/
+/generated-artifacts/
 
 # OS/editor files
 .DS_Store

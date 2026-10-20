@@ -894,7 +894,7 @@ class SemanticFeatureEvidenceTests(unittest.TestCase):
 
     def ask(self, searcher, encoder, question):
         encoder.similarities.reset_mock()
-        with patch("core.engine.SessionStore", return_value=MagicMock()):
+        with patch("core.engine.session_store", return_value=MagicMock()):
             engine = HocVuEngine(searcher.config, searcher)
         response = engine.ask(
             question, "semantic-feature", use_context=False,

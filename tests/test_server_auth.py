@@ -135,6 +135,9 @@ class BrowserAuthenticationTests(IsolatedServerEngineTests):
             ("DELETE", "/api/documents/example", {}),
             ("PATCH", "/api/documents/example/date", {"json": {"document_date": "2026-10-20"}}),
             ("POST", "/api/documents/reindex", {}),
+            ("GET", "/api/admin/storage", {}),
+            ("POST", "/api/admin/storage/backup", {}),
+            ("GET", "/api/admin/storage/backups/hocvu-20261020T000000Z-1234abcd.zip", {}),
         ]:
             with self.subTest(path=path), patch.object(server, "get_engine") as engine:
                 response = await self.client.request(
@@ -186,6 +189,32 @@ class BrowserAuthenticationTests(IsolatedServerEngineTests):
                 )
                 self.assertEqual(response.status_code, 200, response.text)
                 getattr(engine.return_value, engine_method).assert_called_once()
+
+    async def test_backup_requires_admin_and_returns_no_private_storage_paths(self):
+        result = {
+            "filename": "hocvu-20261020T000000Z-1234abcd.zip",
+            "documents": 1, "turns": 3, "persistent_copy": True,
+        }
+        with patch.object(server, "get_engine") as engine:
+            engine.return_value.backup_storage.return_value = result
+            response = await self.client.post(
+                "/api/admin/storage/backup", auth=("hocvu", "test-access-only"),
+                headers={"Origin": "http://test"},
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json(), result)
+            engine.return_value.backup_storage.assert_called_once()
+        backup_root = self.root / "generated-artifacts" / "backups"
+        backup_root.mkdir(parents=True)
+        (backup_root / result["filename"]).write_bytes(b"private-backup")
+        with patch.object(server, "ROOT", self.root):
+            downloaded = await self.client.get(
+                "/api/admin/storage/backups/" + result["filename"],
+                auth=("hocvu", "test-access-only"),
+            )
+            self.assertEqual(downloaded.status_code, 200)
+            self.assertEqual(downloaded.content, b"private-backup")
+            self.assertEqual(downloaded.headers["cache-control"], "no-store")
 
     async def test_browser_login_serves_pages_and_api(self):
         for path in ["/", "/documents.html", "/main.js", "/documents.js", "/theme.js", "/styles.css", "/api-errors.js", "/api/suggestions"]:

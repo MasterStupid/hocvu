@@ -199,6 +199,7 @@ class DocumentBatchAPITests(unittest.IsolatedAsyncioTestCase):
         self.enterContext(patch.object(repository, "extract", return_value=("Nội dung tài liệu đủ dài để lập chỉ mục.", 1)))
         _, searcher = build_index(config, return_searcher=True, index_path=index)
         self.engine = HocVuEngine.__new__(HocVuEngine)
+        self.engine._corpus_lock = threading.RLock()
         self.engine.documents, self.engine.config, self.engine.searcher = repository, config, searcher
         def snapshot():
             return {str(path.relative_to(root)): path.read_bytes() for path in root.rglob("*") if path.is_file()}

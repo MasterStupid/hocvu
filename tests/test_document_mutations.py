@@ -4,6 +4,7 @@ import shutil
 from pathlib import Path
 import tempfile
 import unittest
+import threading
 from unittest.mock import patch
 
 from core.documents import DocumentError, DocumentRepository
@@ -30,6 +31,7 @@ class DocumentMutationTests(unittest.TestCase):
         _, searcher = build_index(self.config, return_searcher=True, index_path=self.index)
         # These operations do not need voice/session stores or server startup.
         self.engine = HocVuEngine.__new__(HocVuEngine)
+        self.engine._corpus_lock = threading.RLock()
         self.engine.config = self.config
         self.engine.documents = self.repository
         self.engine.searcher = searcher

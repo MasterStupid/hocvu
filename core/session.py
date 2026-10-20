@@ -175,7 +175,7 @@ class SessionStore:
                       AND NOT EXISTS (
                           SELECT 1 FROM closed_sessions c WHERE c.session_id = t.session_id
                       )
-                    GROUP BY t.session_id
+                    GROUP BY t.session_id, o.updated_at
                 ) summary
                 JOIN turns first_turn ON first_turn.id = summary.first_id
                 ORDER BY summary.last_id DESC

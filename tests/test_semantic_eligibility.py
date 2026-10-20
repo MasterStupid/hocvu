@@ -73,7 +73,7 @@ class SemanticEligibilityTests(unittest.TestCase):
         return hits
 
     def ask(self, searcher, encoder, question):
-        with patch("core.engine.SessionStore", return_value=MagicMock()):
+        with patch("core.engine.session_store", return_value=MagicMock()):
             engine = HocVuEngine(searcher.config, searcher)
         response = engine.ask(
             question, "semantic-eligibility", use_context=False,
@@ -150,7 +150,7 @@ class SemanticEligibilityTests(unittest.TestCase):
                 # The refusal outcome and reason must match lexical-only search.
                 lexical = HybridSearcher(replace(searcher.config, semantic_enabled=False))
                 lexical.build(self.chunks)
-                with patch("core.engine.SessionStore", return_value=MagicMock()):
+                with patch("core.engine.session_store", return_value=MagicMock()):
                     baseline = HocVuEngine(lexical.config, lexical).ask(
                         question, "lexical-baseline", use_context=False,
                         record_session=False, ref_date=self.ref_date,

@@ -18,3 +18,5 @@ pytesseract>=0.3.10
 
 # HTTP client used by API regression tests
 httpx>=0.28.1
+psycopg[binary]>=3.2
+replit-object-storage>=1.0

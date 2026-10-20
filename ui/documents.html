@@ -15,8 +15,13 @@
         <h1>Quản lý tài liệu</h1>
         <p>Thêm PDF, DOCX hoặc ảnh để lập chỉ mục cho HocVu AI.</p>
       </div>
-      <button class="reindex-button" data-doc="reindex" type="button">Xây dựng lại chỉ mục</button>
+      <div class="library-actions">
+        <button class="reindex-button" data-doc="backup" type="button">Sao lưu dữ liệu</button>
+        <button class="reindex-button" data-doc="reindex" type="button">Xây dựng lại chỉ mục</button>
+      </div>
     </header>
+    <p class="upload-status" data-doc="storage-status" role="status">Đang kiểm tra nơi lưu dữ liệu…</p>
+    <a class="back-link" data-doc="backup-download" hidden>Tải bản sao lưu riêng tư</a>
 
     <section class="upload-panel" aria-labelledby="upload-title">
       <h2 id="upload-title">Thêm tài liệu</h2>
@@ -64,6 +69,6 @@
   </dialog>
   <script src="api-errors.js?v=20261019-1"></script>
   <script src="document-date-editor.js?v=20261020-1"></script>
-  <script src="documents.js?v=20261020-batch-1"></script>
+  <script src="documents.js?v=20261020-storage-1"></script>
 </body>
 </html>

@@ -29,7 +29,8 @@ from starlette.datastructures import UploadFile as StarletteUploadFile
 from core.engine import HocVuEngine
 from core.session import LEGACY_API_OWNER, SessionAccessError, SessionClosedError, validate_session_id
 from core.documents import DocumentError, DocumentNotFoundError, DocumentRepository
-from core.settings import AUD, INDEX_JSON, SERVER_META, UI, ensure_dirs, load_config
+from core.settings import AUD, INDEX_JSON, SERVER_META, UI, ROOT, ensure_dirs, load_config
+from core.persistent_db import StorageUnavailable
 from core.voice import VoiceManager, clean_text_for_tts, DEFAULT_VOICE, DEFAULT_RATE, RATE_PATTERN, MALE_VOICE
 from server.security import SlidingWindowLimiter, client_address, parse_trusted_proxies
 
@@ -265,6 +266,14 @@ async def session_closed_handler(request: Request, exc: SessionClosedError):
     )
 
 
+@app.exception_handler(StorageUnavailable)
+async def storage_unavailable_handler(request: Request, exc: StorageUnavailable):
+    return JSONResponse(
+        status_code=503, content={"detail": str(exc)},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @app.middleware("http")
 async def rate_limit_and_auth_middleware(request: Request, call_next):
     path = request.url.path
@@ -393,6 +402,27 @@ def public_catalog():
         {key: item.get(key, "") for key in ("rid", "title", "version")}
         for item in get_engine().list_documents()
     ]
+
+
+@app.get("/api/admin/storage", summary="Trạng thái lưu trữ (chỉ quản trị)")
+def storage_status():
+    return _call_engine("storage_status")
+
+
+@app.post("/api/admin/storage/backup", summary="Sao lưu tài liệu và toàn bộ lịch sử (chỉ quản trị)")
+async def backup_storage():
+    return await _mutate_documents("backup_storage")
+
+
+@app.get("/api/admin/storage/backups/{filename}", summary="Tải bản sao lưu riêng tư (chỉ quản trị)")
+def download_storage_backup(filename: str):
+    if not re.fullmatch(r"hocvu-[0-9]{8}T[0-9]{6}Z-[a-f0-9]{8}\.zip", filename):
+        raise HTTPException(status_code=404, detail="Không tìm thấy bản sao lưu.")
+    root = ROOT / "generated-artifacts" / "backups"
+    path = root / filename
+    if path.is_symlink() or not path.is_file():
+        raise HTTPException(status_code=404, detail="Bản sao lưu không có trong cache; kiểm tra bản riêng tư trên App Storage.")
+    return FileResponse(path, filename=filename, media_type="application/zip", headers={"Cache-Control": "no-store"})
 
 
 @app.post("/api/documents/upload", status_code=status.HTTP_201_CREATED, summary="Tải lên tài liệu quy chế mới")
