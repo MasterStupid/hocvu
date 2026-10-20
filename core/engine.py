@@ -252,13 +252,13 @@ class HocVuEngine:
         return list(docs.values())
 
     def add_document(self, filename: str, content: bytes, use_ocr: bool = False, metadata: dict | None = None) -> dict:
-        item = self.documents.add(filename, content, use_ocr=use_ocr, metadata=metadata)
-        _, self.searcher = build_index(self.config, return_searcher=True)
+        with self.documents.adding(filename, content, use_ocr=use_ocr, metadata=metadata) as item:
+            _, self.searcher = build_index(self.config, return_searcher=True)
         return item
 
     def remove_document(self, item_id: str) -> None:
-        self.documents.remove(item_id)
-        _, self.searcher = build_index(self.config, return_searcher=True)
+        with self.documents.removing(item_id):
+            _, self.searcher = build_index(self.config, return_searcher=True)
 
     def update_document_date(self, item_id: str, document_date: str) -> dict:
         with self.documents.change_date(item_id, document_date) as item:

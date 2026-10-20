@@ -6,6 +6,7 @@ import io
 import hashlib
 import re
 import shutil
+import tempfile
 import uuid
 import zipfile
 from contextlib import contextmanager
@@ -139,7 +140,51 @@ class DocumentRepository:
             "document_date": document_date or None,
         }
 
+    @contextmanager
+    def _manifest_transaction(self):
+        """Stage rollback copies before any writes, including the backup.
+
+        Restore by rename rather than rewriting JSON: a failed index build may
+        have exhausted disk space. Document writers must remain serialized.
+        """
+        with tempfile.TemporaryDirectory(prefix=".manifest-", dir=self.root) as temporary:
+            snapshots = {}
+            for path in (self.manifest, self.manifest_backup):
+                snapshot = Path(temporary) / path.name
+                if path.exists():
+                    shutil.copy2(path, snapshot)
+                    snapshots[path] = snapshot
+                else:
+                    snapshots[path] = None
+            try:
+                yield
+            except BaseException:
+                for path, snapshot in snapshots.items():
+                    if snapshot is None:
+                        path.unlink(missing_ok=True)
+                    else:
+                        snapshot.replace(path)
+                self.manifest.with_suffix(".tmp").unlink(missing_ok=True)
+                raise
+
     def add(self, filename: str, content: bytes, use_ocr: bool = False, metadata: dict | None = None) -> dict:
+        with self.adding(filename, content, use_ocr=use_ocr, metadata=metadata) as item:
+            return item
+
+    @contextmanager
+    def adding(self, filename: str, content: bytes, use_ocr: bool = False, metadata: dict | None = None):
+        """Keep a new upload only if the caller's index build succeeds."""
+        item_id = uuid.uuid4().hex
+        path = self.root / f"{item_id}{Path(filename).suffix.lower()}"
+        try:
+            with self._manifest_transaction():
+                yield self._add(filename, content, use_ocr, metadata, item_id)
+        except BaseException:
+            path.unlink(missing_ok=True)
+            self._extracted_path(item_id).unlink(missing_ok=True)
+            raise
+
+    def _add(self, filename: str, content: bytes, use_ocr: bool, metadata: dict | None, item_id: str) -> dict:
         suffix = Path(filename).suffix.lower()
         if suffix not in self.allowed_extensions:
             raise DocumentError("Chỉ hỗ trợ PDF, DOCX hoặc ảnh PNG/JPG/WEBP khi bật OCR.")
@@ -156,7 +201,6 @@ class DocumentRepository:
         for existing in entries:
             if self._content_hash(existing) == content_hash:
                 raise DocumentError(f"Tệp trùng với tài liệu đã tải lên: {existing.get('filename', 'không rõ tên')}.")
-        item_id = uuid.uuid4().hex
         metadata = self._metadata(metadata)
         safe_name = self._safe_name(filename)
         path = self.root / f"{item_id}{suffix}"
@@ -415,13 +459,23 @@ class DocumentRepository:
             raise
 
     def remove(self, item_id: str) -> None:
-        entries = self._read_manifest()
-        selected = next((item for item in entries if item["id"] == item_id), None)
-        if not selected:
-            raise DocumentError("Không tìm thấy tài liệu.")
+        with self.removing(item_id):
+            pass
+
+    @contextmanager
+    def removing(self, item_id: str):
+        """Hide the entry for reindexing, retaining files until it succeeds."""
+        with self._manifest_transaction():
+            entries = self._read_manifest()
+            selected = next((item for item in entries if item["id"] == item_id), None)
+            if not selected:
+                raise DocumentError("Không tìm thấy tài liệu.")
+            self._write_manifest([item for item in entries if item["id"] != item_id])
+            yield
+        # The manifest/index commit has succeeded. Cleanup errors must not
+        # resurrect an entry that the committed search index no longer has.
         (self.root / selected["stored_name"]).unlink(missing_ok=True)
         self._extracted_path(item_id).unlink(missing_ok=True)
-        self._write_manifest([item for item in entries if item["id"] != item_id])
 
     def get_text(self, item_id: str) -> dict:
         entry = next((item for item in self._read_manifest() if item["id"] == item_id), None)

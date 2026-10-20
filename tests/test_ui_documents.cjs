@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { test } = require('node:test');
 
-async function loadDocuments(onUpload = async () => {}) {
+async function loadDocuments(onUpload = async () => {}, items = []) {
   const elements = new Map(), messages = [], uploads = [];
   class Element {
     constructor(key) { this.key = key; this.events = {}; this.checked = false; this.classList = { add() {}, remove() {} }; }
@@ -37,7 +37,7 @@ async function loadDocuments(onUpload = async () => {}) {
         await onUpload(options.body, uploads.length);
         return { ok: true, json: async () => ({ id: String(uploads.length) }) };
       }
-      return { ok: true, json: async () => [] };
+      return { ok: true, json: async () => items };
     },
   };
   const filename = path.join(__dirname, '..', 'ui', 'documents.js');
@@ -114,4 +114,18 @@ test('empty queues never start a request', async () => {
   const ui = await loadDocuments();
   await ui.submit();
   assert.equal(ui.uploads.length, 0);
+});
+
+test('library preview, deletion and date edit buttons never submit a form', async () => {
+  const ui = await loadDocuments(undefined, [{
+    id: 'synthetic', rid: 'UPL-SYNTHETIC', kind: 'uploaded',
+    title: 'Tài liệu', filename: 'document.pdf', format: 'PDF', status: 'ready',
+  }]);
+  const buttons = ui.dom.table.innerHTML.match(/<button\b[^>]*>/g) || [];
+  assert.equal(buttons.length, 3);
+  for (const attribute of ['data-edit-date', 'data-preview', 'data-delete']) {
+    const button = buttons.find(tag => tag.includes(`${attribute}=`));
+    assert.ok(button, `missing ${attribute}`);
+    assert.match(button, /\btype="button"/);
+  }
 });

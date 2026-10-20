@@ -117,7 +117,7 @@ function loadUI(options = {}) {
   assert.match(source, /\}\)\(\);\s*$/);
   const instrumented = source.replace(/\}\)\(\);\s*$/, `
     globalThis.testUI = {
-      renderAnswerCard, appendAnswer, restoreHistory, state, dom, appendTyping,
+      renderAnswerCard, renderSuggestionTopics, appendAnswer, restoreHistory, state, dom, appendTyping,
       speak, stopSpeech, stopLive, send, bind, startNewConversation,
        deleteHistory, boot, updateComposer, exportConversation, checkConversationStatus,
        refreshConversations, selectConversation, renderConversations,

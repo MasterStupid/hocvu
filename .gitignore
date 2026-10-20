@@ -11,6 +11,9 @@ venv/
 # Runtime data: uploaded documents, OCR text, indexes, model downloads, logs and chat history
 data/
 
+# Replit uploads and pasted working notes are not application source
+/attached_assets/
+
 # OS/editor files
 .DS_Store
 Thumbs.db

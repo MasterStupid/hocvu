@@ -21,6 +21,9 @@ class UiInteractionTests(unittest.TestCase):
     def test_document_upload_batches(self):
         self.run_script("test_ui_documents.cjs")
 
+    def test_dynamic_action_button_types(self):
+        self.run_script("test_ui_button_types.cjs")
+
     def test_shared_theme_and_typing_styles(self):
         self.run_script("test_ui_theme_styles.cjs")
 
