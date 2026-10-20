@@ -9,6 +9,12 @@ Retrieval and primary-passage validation must use the same expanded question mea
 
 **How to apply:** test the selected article and statement, not merely a regulation-level hit. Preserve Vietnamese diacritics when recognizing framing as well as evidence, and keep unsupported named categories/features in the grounded topic.
 
+Distinguish a conditional “khi nào ... bị ...” from a calendar or duration request. Recognize an explicit temporary study-break-and-return frame before applying generic absence synonyms; bare “nghỉ” must not become a formal leave request.
+
+**Why:** a calendar-only evidence gate discarded a valid academic-warning threshold. Conversely, normalizing every “nghỉ” to absence lost the meaning of pausing study and returning later; treating every absence as formal leave would be equally unsafe.
+
+**How to apply:** require the appropriate conditional or duration evidence in the source, preserve extra reasons and unknown features, and test missing-rule refusals. In unaccented questions, remove a grammatical operator as a phrase rather than dropping ambiguous words globally (“thì”/“thi”).
+
 Preserve complementary evidence for conjoined requests such as conditions plus duration. Each passage must establish the shared subject and its own requested aspect; it need not establish every requested aspect alone.
 
 **Why:** requiring an eligibility passage to also contain a deadline discarded valid conditions and prevented the deadline's separate article from being selected.

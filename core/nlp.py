@@ -60,6 +60,25 @@ def expand_academic_terms(text: str) -> str:
     replaces a student's wording with an equivalent retrieval term.
     """
     normalized = normalize(text)
+    # An explicit temporary study break followed by returning to study is
+    # different from missing classes. Do this before the ordinary absence alias;
+    # preserve any reasons, qualifications or unknown features around the frame.
+    pause_return = (
+        r"\b(?:nghỉ|nghi)(?:\s+(?:học|hoc))?\s+"
+        r"(?:một thời gian|mot thoi gian|tạm thời|tam thoi)\s+"
+        r"(?:rồi|roi|sau đó|sau do)\s+"
+        r"(?:quay lại|quay lai|trở lại|tro lai)\s+(?:học|hoc)"
+        r"(?:\s+(?:tiếp|tiep))?\b"
+    )
+    if re.search(pause_return, normalized, flags=re.IGNORECASE):
+        normalized = re.sub(pause_return, "bảo lưu", normalized, flags=re.IGNORECASE)
+        # Resolve only a duration reference to the same break, not every
+        # later mention of missing a class in a potentially compound question.
+        normalized = re.sub(
+            r"\b(?:nghỉ|nghi)(?:\s+(?:học|hoc))?"
+            r"(?=\s+(?:tối đa|toi da|bao lâu|bao lau)\b)",
+            "bảo lưu", normalized, flags=re.IGNORECASE,
+        )
     replacements = (
         (r"\bgpa\b", "điểm trung bình tích lũy"),
         (r"\bđrl\b|\brl\b", "điểm rèn luyện"),

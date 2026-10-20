@@ -546,9 +546,13 @@ class HybridSearcher:
                 category = re.search(r"\b(?:loại|loai)\s+(\w+)", query)
                 if category and cls._query_form(category[1]) not in cls._supported_terms(query, hit.chunk):
                     continue
-            if requested.kind in {"timing", "payment_time", "actor", "amount", "conditions"}:
+            if requested.kind in {"timing", "payment_time", "trigger", "actor", "amount", "conditions"}:
                 terms = {cls._query_form(term) for term in accented_content_tokens(query)
                          if not cls._is_non_specific(term) and not term.isdigit()}
+                if requested.kind == "trigger":
+                    # The passive question operator need not be repeated in
+                    # "Warning applies when ..."; keep every substantive term.
+                    terms.difference_update(cls._term_forms("bị"))
                 if requested.duration:
                     # Conjoined aspects may be grounded by complementary
                     # clauses; each clause must still state the whole subject.

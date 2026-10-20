@@ -58,11 +58,24 @@ def question_focus(question: str) -> QuestionFocus:
             "hiện hành", "là bản nào", "là văn bản nào", "nào", "hiện tại",
         )), "metadata_current")
     if re.search(r"\b(?:thoi gian nao|khi nao|luc nao|bao gio|bao lau)\b", q):
-        return QuestionFocus(without_phrases(question, (
+        topic = without_phrases(question, (
             "vào thời gian nào", "thời gian nào", "khi nào", "lúc nào",
             "bao giờ", "bao lâu", "được phát", "được chi trả", "chi trả",
-            "thời gian", "được", "là",
-        )), "payment_time" if re.search(r"\b(?:phat|chi tra|chuyen khoan)\b", q) else "timing")
+            "thời gian", "thì được", "được", "là",
+        ))
+        topic = re.sub(r"^(?:muốn|muon)\s+", "", topic)
+        kind = "timing"
+        # "When is a student warned?" asks for a trigger, not a calendar.
+        # Explicit duration questions ("bị ... bao lâu") remain temporal.
+        if (
+            re.search(r"\b(?:khi nao|luc nao|bao gio)\b", q)
+            and not re.search(r"\b(?:bao lau|thoi gian nao)\b", q)
+            and re.search(r"\b(?:bị|bi)\b", normalize(question).lower())
+        ):
+            kind = "trigger"
+        if re.search(r"\b(?:phat|chi tra|chuyen khoan)\b", q):
+            kind = "payment_time"
+        return QuestionFocus(topic, kind)
     if re.match(r"^(?:ai|nguoi nao|don vi nao)\b", q):
         topic = without_phrases(question, ("ai là người", "người nào", "đơn vị nào", "ai", "là"))
         # The ordinary Vietnamese operation, not a corpus-specific answer.
@@ -97,6 +110,8 @@ def question_focus(question: str) -> QuestionFocus:
 
 def facet_supported(kind: str, body_ascii: str) -> bool:
     """A topic match alone cannot answer when/who/how-much questions."""
+    if kind == "trigger":
+        return bool(re.search(r"\b(?:khi|neu|se bi|thi bi)\b|:\s*bi\b", body_ascii))
     if kind in {"timing", "payment_time"}:
         if kind == "payment_time" and not re.search(r"\b(?:chuyen khoan|chi tra|phat|thanh toan|tra tien)\b", body_ascii):
             return False
