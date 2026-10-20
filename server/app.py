@@ -16,21 +16,27 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlsplit
 
 import uvicorn
+import anyio
 from fastapi import FastAPI, HTTPException, Request, Response, UploadFile, File, Form, Query, status
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 from core.engine import HocVuEngine
 from core.documents import DocumentError, DocumentNotFoundError, DocumentRepository
 from core.settings import AUD, INDEX_JSON, SERVER_META, UI, ensure_dirs, load_config
-from core.voice import VoiceManager, clean_text_for_tts, DEFAULT_VOICE, MALE_VOICE
+from core.voice import VoiceManager, clean_text_for_tts, DEFAULT_VOICE, DEFAULT_RATE, RATE_PATTERN, MALE_VOICE
 from server.security import SlidingWindowLimiter, client_address, parse_trusted_proxies
 
 
 # ── Global Engine & Voice State ──────────────────────────────────────────────
 engine: HocVuEngine | None = None
 _engine_lock = threading.Lock()
+_voice_lock = threading.Lock()
+# Offloaded writers must not race the manifest's read/modify/write cycle.
+# Wait asynchronously, before reading upload bytes or occupying a worker.
+_document_write_lock = anyio.Lock()
 voice_manager: VoiceManager | None = None
 requires_api_token = True
 config = load_config()
@@ -97,8 +103,20 @@ def get_engine() -> HocVuEngine:
 def get_voice_manager() -> VoiceManager:
     global voice_manager
     if voice_manager is None:
-        voice_manager = VoiceManager(config=config, audio_dir=AUD)
+        with _voice_lock:
+            if voice_manager is None:
+                voice_manager = VoiceManager(config=config, audio_dir=AUD)
     return voice_manager
+
+
+def _call_engine(method: str, *args, **kwargs):
+    """Keep lazy model initialization and the entire operation off the loop."""
+    return getattr(get_engine(), method)(*args, **kwargs)
+
+
+async def _mutate_documents(method: str, *args, **kwargs):
+    async with _document_write_lock:
+        return await run_in_threadpool(_call_engine, method, *args, **kwargs)
 
 
 # ── Pydantic Request / Response Models ───────────────────────────────────────
@@ -113,7 +131,7 @@ class AskRequest(BaseModel):
 class TTSRequest(BaseModel):
     text: str = Field(..., description="Văn bản cần đọc")
     voice: Optional[str] = Field(DEFAULT_VOICE, description="Tên giọng đọc (vi-VN-HoaiMyNeural hoặc vi-VN-NamMinhNeural)")
-    rate: Optional[str] = Field("+0%", description="Tốc độ đọc, ví dụ: +0%, +10%, -10%")
+    rate: Optional[str] = Field(DEFAULT_RATE, pattern=RATE_PATTERN, max_length=12, description="Tốc độ đọc, ví dụ: +0%, +10%, -10%")
 
 
 class DocumentDateRequest(BaseModel):
@@ -202,7 +220,7 @@ async def rate_limit_and_auth_middleware(request: Request, call_next):
 
 # ── Các Endpoint Nghiệp vụ (API Routes) ──────────────────────────────────────
 @app.get("/api/health", summary="Kiểm tra trạng thái hệ thống")
-async def health_check():
+def health_check():
     eng = get_engine()
     return {
         "status": "ok",
@@ -217,9 +235,9 @@ async def health_check():
 
 @app.post("/api/ask", summary="Đặt câu hỏi tư vấn quy chế")
 async def ask_question(payload: AskRequest):
-    eng = get_engine()
     session_id = payload.session_id or str(uuid.uuid4())
-    response = eng.ask(
+    response = await run_in_threadpool(
+        _call_engine, "ask",
         question=payload.question,
         session_id=session_id,
         ref_date=payload.ref_date,
@@ -231,7 +249,7 @@ async def ask_question(payload: AskRequest):
     # Nếu client yêu cầu kèm âm thanh server
     if payload.with_audio and not result.get("audio_url"):
         try:
-            vm = get_voice_manager()
+            vm = await run_in_threadpool(get_voice_manager)
             audio_url, _ = await vm.generate_audio_file(response.answer, prefix="ask")
             result["audio_url"] = audio_url
         except Exception:
@@ -241,7 +259,7 @@ async def ask_question(payload: AskRequest):
 
 
 @app.get("/api/documents", summary="Danh sách tài liệu đã lập chỉ mục")
-async def list_documents():
+def list_documents():
     eng = get_engine()
     return eng.list_documents()
 
@@ -255,14 +273,9 @@ async def upload_document(
     article_clause: Optional[str] = Form(""),
     document_date: Optional[str] = Form(""),
 ):
-    eng = get_engine()
     if not file.filename:
         raise HTTPException(status_code=400, detail="Hãy chọn một tệp PDF, DOCX hoặc ảnh.")
     
-    content = await file.read()
-    if len(content) > DocumentRepository.max_bytes:
-        raise HTTPException(status_code=400, detail="Kích thước tệp vượt quá 25 MB.")
-
     use_ocr = str(ocr).strip().lower() in {"1", "true", "on", "yes"}
     metadata = {
         "order": order or "",
@@ -270,17 +283,23 @@ async def upload_document(
         "article_clause": article_clause or "",
         "document_date": document_date or "",
     }
-    try:
-        item = eng.add_document(file.filename, content, use_ocr=use_ocr, metadata=metadata)
-        return item
-    except DocumentError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Không thể đọc tệp: {exc}")
+    async with _document_write_lock:
+        content = await file.read(DocumentRepository.max_bytes + 1)
+        if len(content) > DocumentRepository.max_bytes:
+            raise HTTPException(status_code=400, detail="Kích thước tệp vượt quá 25 MB.")
+        try:
+            return await run_in_threadpool(
+                _call_engine, "add_document", file.filename, content,
+                use_ocr=use_ocr, metadata=metadata,
+            )
+        except DocumentError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Không thể đọc tệp: {exc}")
 
 
 @app.get("/api/documents/{item_id}/text", summary="Xem nội dung văn bản trích xuất")
-async def document_text(item_id: str):
+def document_text(item_id: str):
     eng = get_engine()
     try:
         return eng.document_text(item_id)
@@ -290,9 +309,8 @@ async def document_text(item_id: str):
 
 @app.delete("/api/documents/{item_id}", summary="Xóa tài liệu khỏi kho dữ liệu")
 async def remove_document(item_id: str):
-    eng = get_engine()
     try:
-        eng.remove_document(item_id)
+        await _mutate_documents("remove_document", item_id)
         return {"status": "deleted"}
     except DocumentError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
@@ -301,7 +319,7 @@ async def remove_document(item_id: str):
 @app.patch("/api/documents/{item_id}/date", summary="Sửa ngày áp dụng và cập nhật chỉ mục")
 async def update_document_date(item_id: str, payload: DocumentDateRequest):
     try:
-        return get_engine().update_document_date(item_id, payload.document_date)
+        return await _mutate_documents("update_document_date", item_id, payload.document_date)
     except DocumentNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except DocumentError as exc:
@@ -316,18 +334,17 @@ async def update_document_date(item_id: str, payload: DocumentDateRequest):
 
 @app.post("/api/documents/reindex", summary="Tái lập toàn bộ chỉ mục tìm kiếm")
 async def reindex_documents():
-    eng = get_engine()
-    return eng.rebuild_index()
+    return await _mutate_documents("rebuild_index")
 
 
 @app.get("/api/history", summary="Lấy lịch sử hội thoại theo phiên")
-async def get_history(session_id: str = Query("", description="Mã phiên hội thoại")):
+def get_history(session_id: str = Query("", description="Mã phiên hội thoại")):
     eng = get_engine()
     return eng.history(session_id)
 
 
 @app.get("/api/suggestions", summary="Lấy danh mục câu hỏi gợi ý")
-async def get_suggestions():
+def get_suggestions():
     eng = get_engine()
     return eng.suggestion_topics()
 
@@ -337,13 +354,14 @@ async def get_suggestions():
 async def tts_get(
     text: str = Query(..., description="Văn bản cần đọc"),
     voice: Optional[str] = Query(DEFAULT_VOICE, description="Giọng đọc"),
+    rate: Optional[str] = Query(DEFAULT_RATE, pattern=RATE_PATTERN, max_length=12, description="Tốc độ đọc"),
 ):
-    vm = get_voice_manager()
+    vm = await run_in_threadpool(get_voice_manager)
     cleaned = clean_text_for_tts(text)
     if not cleaned:
         raise HTTPException(status_code=400, detail="Văn bản rỗng.")
     try:
-        audio_bytes = await vm.synthesize(cleaned, voice=voice or DEFAULT_VOICE)
+        audio_bytes = await vm.synthesize(cleaned, voice=voice or DEFAULT_VOICE, rate=rate or DEFAULT_RATE)
         return StreamingResponse(
             io.BytesIO(audio_bytes),
             media_type="audio/mpeg",
@@ -355,12 +373,14 @@ async def tts_get(
 
 @app.post("/api/tts", summary="Tổng hợp giọng nói tiếng Việt (POST)")
 async def tts_post(payload: TTSRequest):
-    vm = get_voice_manager()
+    vm = await run_in_threadpool(get_voice_manager)
     cleaned = clean_text_for_tts(payload.text)
     if not cleaned:
         raise HTTPException(status_code=400, detail="Văn bản rỗng.")
     try:
-        audio_url, _ = await vm.generate_audio_file(cleaned, voice=payload.voice or DEFAULT_VOICE)
+        audio_url, _ = await vm.generate_audio_file(
+            cleaned, voice=payload.voice or DEFAULT_VOICE, rate=payload.rate or DEFAULT_RATE,
+        )
         return {"status": "ok", "audio_url": audio_url}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Lỗi tổng hợp giọng nói: {exc}")

@@ -8,3 +8,4 @@
 - [Embedding cache lifecycle](embedding-cache-lifecycle.md) — whole-collection generations protect vector row ordering; pruning must coordinate with concurrent users.
 - [Document date integrity](document-date-integrity.md) — reject impossible detected dates; do not guess an effective date or relax search validity checks.
 - [Local OCR privacy](local-ocr-privacy.md) — OCR stays local regardless of answer-provider settings; preserve native text and invalidate obsolete extracted-text caches.
+- [ASGI execution boundaries](asgi-execution-boundaries.md) — offload heavy work; gate document writes before reading upload bytes, without serializing unrelated readers.

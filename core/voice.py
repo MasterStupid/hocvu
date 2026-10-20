@@ -9,10 +9,27 @@ from typing import Optional
 
 from .models import SpeechResult
 from .settings import AUD
+from .index_storage import atomic_write
 
 
 DEFAULT_VOICE = "vi-VN-HoaiMyNeural"  # Nữ miền Bắc
 MALE_VOICE = "vi-VN-NamMinhNeural"    # Nam miền Bắc
+DEFAULT_RATE = "+0%"
+RATE_PATTERN = r"^[+-][0-9]+%$"
+
+
+def normalize_rate(rate: str | None = DEFAULT_RATE) -> str:
+    value = DEFAULT_RATE if rate is None else rate
+    if not isinstance(value, str) or len(value) > 12 or not re.fullmatch(RATE_PATTERN, value):
+        raise ValueError("Tốc độ đọc phải có dạng +10%, -10% hoặc +0%.")
+    return f"{int(value[:-1]):+d}%"
+
+
+def _cached_audio(path: Path) -> bool:
+    try:
+        return path.is_file() and path.stat().st_size > 0
+    except FileNotFoundError:
+        return False
 
 
 def clean_text_for_tts(text: str) -> str:
@@ -54,11 +71,12 @@ class VoiceManager:
         self,
         text: str,
         voice: str = DEFAULT_VOICE,
-        rate: str = "+0%",
+        rate: str = DEFAULT_RATE,
         pitch: str = "+0Hz",
     ) -> bytes:
         """Tổng hợp giọng nói tiếng Việt chất lượng cao bằng Microsoft Edge TTS."""
         cleaned = clean_text_for_tts(text)
+        rate = normalize_rate(rate)
         if not cleaned:
             return b""
         import edge_tts
@@ -80,17 +98,19 @@ class VoiceManager:
         text: str,
         voice: str = DEFAULT_VOICE,
         prefix: str = "reply",
+        rate: str = DEFAULT_RATE,
     ) -> tuple[str, Path]:
         """Tổng hợp và lưu file MP3 vào thư mục audio, trả về (url_path, file_path)."""
         cleaned = clean_text_for_tts(text)
+        rate = normalize_rate(rate)
         # Băm nội dung để tái sử dụng cache âm thanh nếu câu trả lời trùng nhau
-        hash_id = hashlib.md5(f"{voice}:{cleaned}".encode("utf-8")).hexdigest()[:12]
+        hash_id = hashlib.md5(f"{voice}:{rate}:{cleaned}".encode("utf-8")).hexdigest()[:12]
         filename = f"{prefix}_{hash_id}.mp3"
         filepath = self.audio_dir / filename
 
-        if not filepath.exists() or filepath.stat().st_size == 0:
-            audio_bytes = await self.synthesize(cleaned, voice=voice)
-            filepath.write_bytes(audio_bytes)
+        if not await asyncio.to_thread(_cached_audio, filepath):
+            audio_bytes = await self.synthesize(cleaned, voice=voice, rate=rate)
+            await asyncio.to_thread(atomic_write, filepath, audio_bytes)
 
         return f"/api/audio/{filename}", filepath
 
