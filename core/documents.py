@@ -8,6 +8,7 @@ import re
 import shutil
 import uuid
 import zipfile
+from contextlib import contextmanager
 from datetime import date, datetime, timezone
 from pathlib import Path
 from xml.etree import ElementTree
@@ -16,6 +17,10 @@ from .models import Article, Clause, Regulation
 
 
 class DocumentError(ValueError):
+    pass
+
+
+class DocumentNotFoundError(DocumentError):
     pass
 
 
@@ -120,7 +125,7 @@ class DocumentRepository:
             try:
                 document_date = date.fromisoformat(document_date).isoformat()
             except ValueError as exc:
-                raise DocumentError("Ngày áp dụng cần theo định dạng YYYY-MM-DD.") from exc
+                raise DocumentError("Ngày áp dụng phải là ngày hợp lệ theo định dạng YYYY-MM-DD.") from exc
         return {
             "order": order or None,
             "decision_number": str(raw.get("decision_number", "") or "").strip()[:100],
@@ -304,6 +309,34 @@ class DocumentRepository:
         if re.fullmatch(rf"{generic}(?:[\s\-.()]*\d+)*[\s\-.()]*", stem, re.IGNORECASE):
             return ""
         return stem[:120]
+
+    @contextmanager
+    def change_date(self, item_id: str, document_date: str):
+        """Persist a date-only edit; undo it if the caller's reindex fails."""
+        value = self._metadata({"document_date": document_date})["document_date"]
+        if not value:
+            raise DocumentError("Hãy nhập ngày áp dụng hợp lệ (YYYY-MM-DD).")
+        entries = self._read_manifest()
+        selected = next((item for item in entries if item["id"] == item_id), None)
+        if selected is None:
+            raise DocumentNotFoundError("Không tìm thấy tài liệu.")
+        had_date = "document_date" in selected
+        previous = selected.get("document_date")
+        selected["document_date"] = value
+        self._write_manifest(entries)
+        try:
+            yield dict(selected)
+        except Exception:
+            # Restore only this field, preserving any unrelated metadata edits.
+            current = self._read_manifest()
+            entry = next((item for item in current if item["id"] == item_id), None)
+            if entry is not None and entry.get("document_date") == value:
+                if had_date:
+                    entry["document_date"] = previous
+                else:
+                    entry.pop("document_date", None)
+                self._write_manifest(current)
+            raise
 
     def remove(self, item_id: str) -> None:
         entries = self._read_manifest()

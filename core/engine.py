@@ -242,6 +242,12 @@ class HocVuEngine:
         self.documents.remove(item_id)
         _, self.searcher = build_index(self.config, return_searcher=True)
 
+    def update_document_date(self, item_id: str, document_date: str) -> dict:
+        with self.documents.change_date(item_id, document_date) as item:
+            _, searcher = build_index(self.config, return_searcher=True)
+        self.searcher = searcher
+        return item
+
     def document_text(self, item_id: str) -> dict:
         result = self.documents.get_text(item_id)
         item = next((entry for entry in self.documents.list() if entry["id"] == item_id), None)

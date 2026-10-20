@@ -22,7 +22,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from core.engine import HocVuEngine
-from core.documents import DocumentError, DocumentRepository
+from core.documents import DocumentError, DocumentNotFoundError, DocumentRepository
 from core.settings import AUD, INDEX_JSON, SERVER_META, UI, ensure_dirs, load_config
 from core.voice import VoiceManager, clean_text_for_tts, DEFAULT_VOICE, MALE_VOICE
 from server.security import SlidingWindowLimiter, client_address, parse_trusted_proxies
@@ -114,6 +114,11 @@ class TTSRequest(BaseModel):
     text: str = Field(..., description="Văn bản cần đọc")
     voice: Optional[str] = Field(DEFAULT_VOICE, description="Tên giọng đọc (vi-VN-HoaiMyNeural hoặc vi-VN-NamMinhNeural)")
     rate: Optional[str] = Field("+0%", description="Tốc độ đọc, ví dụ: +0%, +10%, -10%")
+
+
+class DocumentDateRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+    document_date: str = Field(..., min_length=1, max_length=32, description="Ngày áp dụng mới, định dạng YYYY-MM-DD")
 
 
 # ── Khởi tạo Ứng dụng FastAPI ────────────────────────────────────────────────
@@ -291,6 +296,22 @@ async def remove_document(item_id: str):
         return {"status": "deleted"}
     except DocumentError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+
+
+@app.patch("/api/documents/{item_id}/date", summary="Sửa ngày áp dụng và cập nhật chỉ mục")
+async def update_document_date(item_id: str, payload: DocumentDateRequest):
+    try:
+        return get_engine().update_document_date(item_id, payload.document_date)
+    except DocumentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except DocumentError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Chưa thể cập nhật ngày và chỉ mục. Hãy thử lại; ngày áp dụng cũ được giữ nguyên.",
+        ) from exc
+
 
 
 @app.post("/api/documents/reindex", summary="Tái lập toàn bộ chỉ mục tìm kiếm")

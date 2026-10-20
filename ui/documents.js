@@ -11,6 +11,15 @@
     const response = await fetch(url, options);
     return HocVuAPI.readResponse(response, 'Không thể hoàn tất yêu cầu.');
   }
+  const dateEditor = HocVuDocumentDates.createDateEditor({
+    dialog: $('date-dialog'), form: $('date-form'), input: $('date-input'),
+    name: $('date-name'), status: $('date-status'), cancel: $('date-cancel'), save: $('date-save'),
+    request,
+    onSaved: async () => {
+      await load();
+      setStatus('Đã sửa ngày áp dụng và cập nhật chỉ mục tìm kiếm.', 'success');
+    },
+  });
   function updateSelected() { dom.selected.textContent = queue.length ? `${queue.length} tệp trong hàng đợi` : 'Chưa chọn tệp'; dom.upload.disabled = !queue.length; dom.removeQueued.disabled = !queue.some((item) => item.selected); }
   function renderQueue() {
     dom.queue.innerHTML = queue.length ? `<h3>Hàng đợi tải lên</h3>${queue.map((item) => `<article class="queue-item"><label><input data-queue-select="${item.id}" type="checkbox" ${item.selected ? 'checked' : ''}> Chọn</label><strong>${escapeHTML(item.file.name)}</strong><small>${formatSize(item.file.size)}</small><div class="queue-fields"><label>STT<input data-queue-field="order" data-queue-id="${item.id}" type="number" min="1" value="${escapeHTML(item.order)}"></label><label>Số quyết định<input data-queue-field="decision_number" data-queue-id="${item.id}" value="${escapeHTML(item.decision_number)}"></label><label>Điều / khoản<input data-queue-field="article_clause" data-queue-id="${item.id}" value="${escapeHTML(item.article_clause)}"></label><label>Ngày áp dụng<input data-queue-field="document_date" data-queue-id="${item.id}" type="date" value="${escapeHTML(item.document_date)}"></label><label class="queue-ocr"><input data-queue-field="ocr" data-queue-id="${item.id}" type="checkbox" ${item.ocr ? 'checked' : ''}> OCR</label></div></article>`).join('')}` : '';
@@ -23,10 +32,14 @@
   async function load() {
     const items = await request('/api/documents'), uploads = items.filter((item) => item.kind === 'uploaded');
     dom.count.textContent = `${uploads.length} tài liệu tải lên · ${items.length} nguồn đã lập chỉ mục`;
-    dom.table.innerHTML = items.map((item) => `<tr><td>${item.kind === 'uploaded' ? `<input data-library-select="${item.id}" type="checkbox" ${librarySelection.has(item.id) ? 'checked' : ''}>` : ''}</td><td><strong>${escapeHTML(item.title)}</strong><small>${escapeHTML(item.filename || item.rid)}${item.size ? ` · ${formatSize(item.size)}` : ' · Dữ liệu minh họa'} · ${item.chunk_count || 0} đoạn truy xuất${metadataLine(item) ? `<br>${escapeHTML(metadataLine(item))}` : ''}</small></td><td>${escapeHTML(item.format || 'DATA')}</td><td><span class="status-tag ${item.status === 'ready' ? 'ready' : 'demo'}">${item.kind === 'uploaded' ? (item.ocr ? 'Đã OCR & chuẩn hóa' : 'Đã chuẩn hóa') : 'Minh họa'}</span></td><td>${item.uploaded_at ? new Date(item.uploaded_at).toLocaleString('vi-VN') : escapeHTML(item.valid_from || '')}</td><td>${item.kind === 'uploaded' ? `<button class="delete-button" data-preview="${item.id}">Xem nội dung</button> <button class="delete-button" data-delete="${item.id}">Xóa</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="6">Chưa có tài liệu.</td></tr>';
+    dom.table.innerHTML = items.map((item) => `<tr><td>${item.kind === 'uploaded' ? `<input data-library-select="${item.id}" type="checkbox" ${librarySelection.has(item.id) ? 'checked' : ''}>` : ''}</td><td><strong>${escapeHTML(item.title)}</strong><small>${escapeHTML(item.filename || item.rid)}${item.size ? ` · ${formatSize(item.size)}` : ' · Dữ liệu minh họa'} · ${item.chunk_count || 0} đoạn truy xuất${metadataLine(item) ? `<br>${escapeHTML(metadataLine(item))}` : ''}</small></td><td>${escapeHTML(item.format || 'DATA')}</td><td><span class="status-tag ${item.status === 'ready' ? 'ready' : 'demo'}">${item.kind === 'uploaded' ? (item.ocr ? 'Đã OCR & chuẩn hóa' : 'Đã chuẩn hóa') : 'Minh họa'}</span></td><td>${item.uploaded_at ? new Date(item.uploaded_at).toLocaleString('vi-VN') : escapeHTML(item.valid_from || '')}</td><td>${item.kind === 'uploaded' ? `<button class="date-edit-button" data-edit-date="${item.id}" type="button">Sửa ngày áp dụng</button> <button class="delete-button" data-preview="${item.id}">Xem nội dung</button> <button class="delete-button" data-delete="${item.id}">Xóa</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="6">Chưa có tài liệu.</td></tr>';
     dom.table.querySelectorAll('[data-library-select]').forEach((input) => input.addEventListener('change', () => { input.checked ? librarySelection.add(input.dataset.librarySelect) : librarySelection.delete(input.dataset.librarySelect); dom.removeLibrary.disabled = !librarySelection.size; }));
     dom.table.querySelectorAll('[data-delete]').forEach((button) => button.addEventListener('click', () => deleteDocuments([button.dataset.delete])));
     dom.table.querySelectorAll('[data-preview]').forEach((button) => button.addEventListener('click', () => preview(button.dataset.preview)));
+    dom.table.querySelectorAll('[data-edit-date]').forEach((button) => button.addEventListener('click', () => {
+      const item = uploads.find((entry) => entry.id === button.dataset.editDate);
+      if (item) dateEditor.open(item);
+    }));
     dom.removeLibrary.disabled = !librarySelection.size;
   }
   async function deleteDocuments(ids) { if (!ids.length || !confirm(`Xóa ${ids.length} tài liệu đã chọn khỏi cơ sở tri thức?`)) return; try { for (const id of ids) await request(`/api/documents/${id}`, { method: 'DELETE' }); ids.forEach((id) => librarySelection.delete(id)); setStatus('Đã xóa tài liệu và cập nhật chỉ mục.', 'success'); await load(); } catch (error) { setStatus(error.message, 'error'); } }

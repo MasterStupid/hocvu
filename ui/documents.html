@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Quản lý tài liệu | HocVu AI</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=20261020-date-editor-1">
 </head>
 <body class="documents-page">
   <main class="documents-shell">
@@ -47,7 +47,22 @@
       <section class="text-preview" data-doc="preview" hidden><div><h3 data-doc="preview-title">Nội dung trích xuất</h3><button class="delete-button" data-doc="close-preview" type="button">Đóng</button></div><p data-doc="preview-meta"></p><pre data-doc="preview-text"></pre></section>
     </section>
   </main>
+  <dialog class="document-date-dialog" data-doc="date-dialog" aria-labelledby="date-dialog-title">
+    <form data-doc="date-form">
+      <h2 id="date-dialog-title">Sửa ngày áp dụng</h2>
+      <p data-doc="date-name"></p>
+      <label>Ngày áp dụng
+        <input data-doc="date-input" type="date" required min="0001-01-01" max="9999-12-31">
+      </label>
+      <p data-doc="date-status" class="upload-status" role="alert"></p>
+      <div class="document-date-actions">
+        <button data-doc="date-cancel" type="button" class="date-edit-button">Hủy</button>
+        <button data-doc="date-save" type="submit" class="upload-button">Lưu và cập nhật chỉ mục</button>
+      </div>
+    </form>
+  </dialog>
   <script src="api-errors.js?v=20261019-1"></script>
-  <script src="documents.js?v=20261019-api-errors-1"></script>
+  <script src="document-date-editor.js?v=20261020-1"></script>
+  <script src="documents.js?v=20261020-date-editor-1"></script>
 </body>
 </html>

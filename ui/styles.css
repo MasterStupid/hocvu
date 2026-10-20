@@ -108,6 +108,15 @@ button:focus-visible, a:focus-visible, textarea:focus-visible {
 .document-table-wrap th { font-size: .78rem; text-transform: uppercase; color: var(--text-secondary); }.document-table-wrap small { display: block; margin-top: .3rem; }
 .status-tag { display: inline-block; border-radius: 999px; padding: .2rem .55rem; font-size: .75rem; }.status-tag.ready { background: rgba(22,163,74,.12); color: var(--success); }.status-tag.demo { background: var(--accent-soft); color: var(--accent); }
 .delete-button { color: var(--danger); border: 1px solid currentColor; border-radius: var(--radius-sm); padding: .35rem .6rem; }
+.date-edit-button { color: var(--accent); border: 1px solid currentColor; border-radius: var(--radius-sm); padding: .35rem .6rem; }
+.document-date-dialog { width: min(30rem, calc(100% - 2rem)); box-sizing: border-box; border: 1px solid var(--line); border-radius: 1rem; padding: 1.5rem; color: var(--text-primary); background: var(--bg-primary, #fff); }
+.document-date-dialog::backdrop { background: rgba(15, 23, 42, .45); }
+.document-date-dialog h2 { margin-top: 0; }
+.document-date-dialog p { overflow-wrap: anywhere; }
+.document-date-dialog label { display: grid; gap: .4rem; }
+.document-date-dialog input { min-width: 0; width: 100%; box-sizing: border-box; padding: .65rem; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.document-date-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .65rem; margin-top: 1rem; }
+.document-date-dialog button:disabled { opacity: .6; cursor: wait; }
 .library-actions { display: flex; align-items: center; gap: .7rem; flex-wrap: wrap; }
 .upload-queue { margin-top: 1rem; display: grid; gap: .7rem; }
 .upload-queue h3 { margin: 0; font-size: .95rem; }
