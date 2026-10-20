@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from core.engine import HocVuEngine
-from core.session import validate_session_id
+from core.session import SessionClosedError, validate_session_id
 from core.documents import DocumentError, DocumentNotFoundError, DocumentRepository
 from core.settings import AUD, INDEX_JSON, SERVER_META, UI, ensure_dirs, load_config
 from core.voice import VoiceManager, clean_text_for_tts, DEFAULT_VOICE, DEFAULT_RATE, RATE_PATTERN, MALE_VOICE
@@ -156,6 +156,15 @@ app = FastAPI(
 request_limiter = SlidingWindowLimiter()
 
 
+@app.exception_handler(SessionClosedError)
+async def session_closed_handler(request: Request, exc: SessionClosedError):
+    return JSONResponse(
+        status_code=410,
+        content={"detail": str(exc), "code": "session_closed", "session_id": exc.session_id},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @app.middleware("http")
 async def rate_limit_and_auth_middleware(request: Request, call_next):
     path = request.url.path
@@ -255,6 +264,9 @@ async def ask_question(payload: AskRequest):
             result["audio_url"] = audio_url
         except Exception:
             pass
+        # Audio generation awaits network I/O after ask has saved its answer.
+        # Do not return that answer if DELETE completed in the meantime.
+        await run_in_threadpool(_call_engine, "ensure_session_open", session_id)
 
     return result
 
@@ -339,9 +351,19 @@ async def reindex_documents():
 
 
 @app.get("/api/history", summary="Lấy lịch sử hội thoại theo phiên")
-def get_history(session_id: str = Query("", description="Mã phiên hội thoại")):
+def get_history(response: Response, session_id: str = Query("", description="Mã phiên hội thoại")):
+    response.headers["Cache-Control"] = "no-store"
     eng = get_engine()
     return eng.history(session_id)
+
+
+@app.get("/api/history/status", summary="Kiểm tra hội thoại đã bị xóa hay chưa")
+def history_status(
+    response: Response,
+    session_id: str = Query(..., min_length=1, description="Mã chính xác của phiên"),
+):
+    response.headers["Cache-Control"] = "no-store"
+    return _call_engine("history_status", session_id)
 
 
 @app.get("/api/suggestions", summary="Lấy danh mục câu hỏi gợi ý")

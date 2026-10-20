@@ -3,12 +3,13 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+let nextSessionId = 0;
 
 function loadUI(options = {}) {
   const elements = new Map(), timers = new Map(), audios = [];
-  const calls = [], confirmations = [], storage = new Map(), downloads = [], blobs = [], revokedURLs = [];
+  const calls = [], confirmations = [], storage = options.storage || new Map(), downloads = [], blobs = [], revokedURLs = [];
+  const windowEvents = {}, documentEvents = {};
   let timerId = 0;
-  let sessionId = 0;
   const escape = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   class Element {
     constructor() {
@@ -66,7 +67,7 @@ function loadUI(options = {}) {
       }
       return null;
     },
-    addEventListener() {},
+    addEventListener(name, callback) { documentEvents[name] = callback; },
   };
   const synthesis = {
     spoken: [], cancels: 0,
@@ -90,13 +91,14 @@ function loadUI(options = {}) {
   }
   const sandbox = {
     document, localStorage: { getItem(key) { return storage.get(key) || null; }, setItem(key, value) { storage.set(key, value); } },
-    crypto: { randomUUID() { return `test-session-${++sessionId}`; } }, navigator: {}, console, Blob,
+    crypto: { randomUUID() { return `test-session-${++nextSessionId}`; } }, navigator: {}, console, Blob,
     URL: {
       createObjectURL(blob) { blobs.push(blob); return `blob:test-${blobs.length}`; },
       revokeObjectURL(url) { revokedURLs.push(url); },
     },
     window: {
       speechSynthesis: synthesis,
+      addEventListener(name, callback) { windowEvents[name] = callback; },
       confirm(message) { confirmations.push(message); return options.confirm ?? true; },
     }, speechSynthesis: synthesis,
     SpeechSynthesisUtterance: class { constructor(text) { this.text = text; } }, Audio,
@@ -117,13 +119,14 @@ function loadUI(options = {}) {
     globalThis.testUI = {
       renderAnswerCard, appendAnswer, restoreHistory, state, dom, appendTyping,
       speak, stopSpeech, stopLive, send, bind, startNewConversation,
-      deleteHistory, boot, updateComposer, exportConversation,
+       deleteHistory, boot, updateComposer, exportConversation, checkConversationStatus,
       setSpeechHook(callback) { speak = callback; }
     };
   })();`);
   vm.runInNewContext(instrumented, sandbox, { filename });
   const ui = sandbox.testUI;
-  Object.assign(ui, { speech: [], synthesis, audios, timers, calls, confirmations, storage, downloads, blobs, revokedURLs, document });
+  Object.assign(ui, { speech: [], synthesis, audios, timers, calls, confirmations, storage, downloads, blobs, revokedURLs, document, windowEvents, documentEvents });
+  ui.storageEvent = (key, newValue) => windowEvents.storage?.({ key, newValue, storageArea: sandbox.localStorage });
   ui.runTimers = () => {
     const pending = [...timers.entries()];
     for (const [id, timer] of pending) { timers.delete(id); timer.callback(); }

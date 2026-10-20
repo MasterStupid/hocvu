@@ -87,6 +87,7 @@ class HocVuEngine:
 
     def ask(self, question: str, session_id: str, ref_date: str | None = None, with_audio: bool = False, use_context: bool = True, use_ai: bool = False, record_session: bool = True) -> Response:
         started = time.perf_counter()
+        self.ensure_session_open(session_id)
         question = (question or "").strip()
         intent = self.classifier.classify(question)
         refused, reason, references, hits, confidence = False, "", [], [], 0.0
@@ -215,6 +216,9 @@ class HocVuEngine:
                 context_question=context_question, context_root=context_root,
                 response=response.to_dict(),
             )
+        # Also discard greetings/refusals and non-recorded replies if deletion
+        # completed during retrieval or generation.
+        self.ensure_session_open(session_id)
         return response
 
     def suggestion_topics(self) -> list[dict]:
@@ -280,3 +284,9 @@ class HocVuEngine:
 
     def delete_history(self, session_id: str) -> int:
         return self.session.delete_history(session_id)
+
+    def ensure_session_open(self, session_id: str):
+        self.session.ensure_open(session_id)
+
+    def history_status(self, session_id: str) -> dict:
+        return {"session_id": session_id, "closed": self.session.is_closed(session_id)}

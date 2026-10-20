@@ -480,7 +480,7 @@ test('history arriving after New and Delete cannot restore deleted content or so
   let finishHistory;
   const ui = loadUI({ request: async (url, options) => {
     if (options.method === 'DELETE') return { status: 'deleted' };
-    if (url.startsWith('/api/history')) return new Promise(resolve => { finishHistory = resolve; });
+    if (url.startsWith('/api/history?')) return new Promise(resolve => { finishHistory = resolve; });
     if (url === '/api/health') return { documents: 0 };
     return [];
   } });
@@ -495,4 +495,157 @@ test('history arriving after New and Delete cannot restore deleted content or so
   assert.equal(ui.state.transcript.length, 0);
   assert.equal(ui.dom.thread.children.length, 0);
   assert.doesNotMatch(ui.dom.evidence.innerHTML, /Nội dung căn cứ gốc/);
+});
+
+test('deletion notification clears only matching tabs and ignores late answer, error and audio', async () => {
+  for (const fail of [false, true]) {
+    const storage = new Map();
+    const deleting = loadUI({ storage }), other = loadUI({ storage, realSpeech: true });
+    let finish, reject;
+    const waiting = loadUI({ storage, request: () => new Promise((resolve, fail) => { finish = resolve; reject = fail; }) });
+    for (const ui of [deleting, other, waiting]) { ui.bind(); ui.restoreHistory([grounded()]); }
+    const old = deleting.state.sessionId;
+    assert.equal(other.state.sessionId, old);
+    assert.equal(waiting.state.sessionId, old);
+    other.state.ttsEnabled = true;
+    other.speak('Câu trả lời cũ', '/api/audio/old.mp3');
+    const audio = other.state.audio, lateError = audio.onerror;
+    const pending = waiting.send('Điều kiện bảo lưu?');
+    const unrelated = loadUI();
+    unrelated.state.sessionId = 'separate';
+    unrelated.bind(); unrelated.restoreHistory([grounded()]);
+    await deleting.deleteHistory();
+    const notice = storage.get('hv_deleted_session');
+    for (const ui of [other, waiting, unrelated]) ui.storageEvent('hv_deleted_session', notice);
+    assert.equal(JSON.parse(notice).sessionId, old);
+    for (const ui of [other, waiting]) {
+      assert.notEqual(ui.state.sessionId, old);
+      assert.equal(ui.state.transcript.length, 0);
+      assert.equal(ui.dom.thread.children.length, 0);
+      assert.equal(ui.state.isLoading, false);
+      assert.doesNotMatch(ui.dom.evidence.innerHTML, /Nội dung căn cứ gốc/);
+      assert.match(ui.dom.liveStatus.textContent, /đã bị xóa/);
+    }
+    assert.equal(unrelated.state.sessionId, 'separate');
+    assert.equal(unrelated.state.transcript.length, 2);
+    assert.equal(audio.pauses, 1);
+    lateError();
+    assert.equal(other.synthesis.spoken.length, 0);
+    if (fail) reject(new Error('Late failure'));
+    else finish(grounded());
+    await pending;
+    assert.equal(waiting.state.transcript.length, 0);
+    assert.equal(waiting.dom.thread.children.length, 0);
+    assert.equal(waiting.speech.length, 0);
+  }
+});
+
+test('deleted session response from an API client clears old view and never retries its question', async () => {
+  const ui = loadUI({ request: async (_url, options) => {
+    const sessionId = JSON.parse(options.body).session_id;
+    return new Response(JSON.stringify({
+      code: 'session_closed', session_id: sessionId, detail: 'Hội thoại đã bị xóa.',
+    }), { status: 410 });
+  } });
+  const old = ui.state.sessionId;
+  ui.restoreHistory([grounded()]);
+  await ui.send('Điều kiện bảo lưu?');
+  assert.notEqual(ui.state.sessionId, old);
+  assert.equal(ui.state.transcript.length, 0);
+  assert.equal(ui.dom.thread.children.length, 0);
+  assert.equal(ui.calls.length, 1, 'a deleted conversation must not be recreated by an automatic retry');
+  assert.equal(ui.state.isLoading, false);
+  assert.equal(ui.dom.deleteHistory.disabled, false);
+});
+
+test('returning to tab checks server for API deletion; failed checks and unrelated IDs preserve the view', async () => {
+  for (const result of ['closed', 'open', 'unrelated', 'network', 401]) {
+    const ui = loadUI({ request: async () => {
+      if (result === 'network') throw new Error('Offline');
+      if (result === 401) return new Response('{}', { status: 401 });
+      return { session_id: result === 'unrelated' ? 'other' : ui.state.sessionId, closed: result !== 'open' };
+    } });
+    ui.bind(); ui.restoreHistory([grounded()]);
+    const old = ui.state.sessionId;
+    await ui.windowEvents.focus();
+    assert.equal(ui.calls[0][0], `/api/history/status?session_id=${encodeURIComponent(old)}`);
+    assert.equal(ui.state.sessionId === old, result !== 'closed');
+    assert.equal(ui.state.transcript.length, result === 'closed' ? 0 : 2);
+    assert.equal(typeof ui.windowEvents.pageshow, 'function');
+    ui.document.visibilityState = 'hidden';
+    ui.documentEvents.visibilitychange();
+    assert.equal(ui.calls.length, 1);
+  }
+});
+
+test('late status and history checks never clear or restore a different conversation', async () => {
+  let finishStatus, finishHistory;
+  const ui = loadUI({ request: async url => {
+    if (url.startsWith('/api/history/status?')) return new Promise(resolve => { finishStatus = resolve; });
+    if (url.startsWith('/api/history?')) return new Promise(resolve => { finishHistory = resolve; });
+    if (url === '/api/health') return { documents: 0 };
+    return [];
+  } });
+  const old = ui.state.sessionId;
+  const pending = ui.boot();
+  ui.storageEvent('hv_deleted_session', JSON.stringify({ sessionId: old }));
+  const fresh = ui.state.sessionId;
+  finishHistory([grounded()]);
+  finishStatus({ session_id: old, closed: true });
+  await pending;
+  assert.equal(ui.state.sessionId, fresh);
+  assert.equal(ui.state.transcript.length, 0);
+  assert.equal(ui.dom.thread.children.length, 0);
+});
+
+test('startup with a closed persisted ID does not restore a delayed pre-delete history snapshot', async () => {
+  const ui = loadUI({ request: async url => {
+    if (url.startsWith('/api/history/status?')) return { session_id: ui.state.sessionId, closed: true };
+    if (url.startsWith('/api/history?')) return [grounded()];
+    if (url === '/api/health') return { documents: 0 };
+    return [];
+  } });
+  const old = ui.state.sessionId;
+  await ui.boot();
+  assert.notEqual(ui.state.sessionId, old);
+  assert.equal(ui.state.transcript.length, 0);
+  assert.equal(ui.state.isRestoring, false);
+  assert.equal(ui.dom.thread.children.length, 0);
+});
+
+test('New and unrelated or malformed storage changes never switch another tab', () => {
+  const ui = loadUI();
+  ui.bind(); ui.restoreHistory([grounded()]);
+  const old = ui.state.sessionId;
+  for (const [key, value] of [
+    ['hv_session_id', 'new-from-other-tab'],
+    ['hv_deleted_session', '{bad json'],
+    ['hv_deleted_session', 'null'],
+    ['hv_deleted_session', JSON.stringify({ sessionId: 1 })],
+    ['hv_deleted_session', JSON.stringify({ sessionId: 'unrelated' })],
+    ['hv_deleted_session', null],
+  ]) ui.storageEvent(key, value);
+  assert.equal(ui.state.sessionId, old);
+  assert.equal(ui.state.transcript.length, 2);
+  ui.startNewConversation();
+  assert.equal(ui.storage.has('hv_deleted_session'), false);
+});
+
+test('failed deletion publishes no notification; simultaneous delete results cannot reset a newer view', async () => {
+  const failed = loadUI({ request: async () => { throw new Error('Offline'); } });
+  await failed.deleteHistory();
+  assert.equal(failed.storage.has('hv_deleted_session'), false);
+  let finish;
+  const ui = loadUI({ request: () => new Promise(resolve => { finish = resolve; }) });
+  ui.bind(); ui.restoreHistory([grounded()]);
+  const old = ui.state.sessionId;
+  const pending = ui.deleteHistory();
+  ui.storageEvent('hv_deleted_session', JSON.stringify({ sessionId: old }));
+  const fresh = ui.state.sessionId;
+  finish({ status: 'deleted' });
+  await pending;
+  assert.equal(ui.state.sessionId, fresh);
+  assert.equal(ui.state.isDeleting, false);
+  assert.equal(ui.dom.deleteHistory.disabled, false);
+  assert.equal(ui.state.transcript.length, 0);
 });

@@ -296,6 +296,10 @@
       removeTyping(); appendAnswer(response);
     } catch (error) {
       if (viewVersion !== state.viewVersion) return;
+      if (error.status === 410 && error.code === 'session_closed' && error.sessionId === sessionId) {
+        forgetDeletedConversation(sessionId);
+        return;
+      }
       removeTyping(); appendError(error.message);
       if (state.liveEnabled) state.livePaused = false;
       scheduleListening();
@@ -365,7 +369,7 @@
   function resetConversation(sessionId) {
     stopLive();
     state.viewVersion++;
-    state.sessionId = sessionId; state.isLoading = false; state.isRestoring = false;
+    state.sessionId = sessionId; state.isLoading = false; state.isRestoring = false; state.isDeleting = false;
     state.turn = 0; state.transcript = [];
     localStorage.setItem('hv_session_id', state.sessionId);
     dom.thread.querySelectorAll('.message:not(.welcome-message)').forEach((item) => item.remove());
@@ -373,9 +377,34 @@
     dom.welcome.hidden = false; updateEvidence([]); setLiveStatus('Hội thoại mới đã sẵn sàng');
     dom.input.focus();
   }
+
+  function forgetDeletedConversation(sessionId) {
+    if (sessionId !== state.sessionId) return;
+    resetConversation(crypto.randomUUID());
+    setLiveStatus('Hội thoại này đã bị xóa. Hội thoại mới đã sẵn sàng.');
+  }
+
+  function announceDeletion(sessionId) {
+    // No questions, answers or credentials are shared; the nonce also makes a
+    // repeated deletion observable. Other tabs keep their own active session.
+    try {
+      localStorage.setItem('hv_deleted_session', JSON.stringify({ sessionId, nonce: crypto.randomUUID() }));
+    } catch (_) { /* Server tombstones and focus checks remain authoritative. */ }
+  }
+
+  async function checkConversationStatus() {
+    const sessionId = state.sessionId, viewVersion = state.viewVersion;
+    try {
+      const status = await api(`/api/history/status?session_id=${encodeURIComponent(sessionId)}`);
+      if (viewVersion === state.viewVersion && status.session_id === sessionId && status.closed === true) {
+        forgetDeletedConversation(sessionId);
+      }
+    } catch (_) { /* Keep the current view on connection/authentication failure. */ }
+  }
+
   async function deleteHistory() {
     if (state.isLoading || state.isDeleting || state.isRestoring) return;
-    const sessionId = state.sessionId;
+    const sessionId = state.sessionId, viewVersion = state.viewVersion;
     if (!window.confirm('Xóa vĩnh viễn toàn bộ lịch sử đã lưu của hội thoại hiện tại? Dữ liệu phiên này sẽ không thể khôi phục. Các hội thoại khác không bị xóa.')) return;
     // Allocate before deleting so success always has a fresh destination.
     const nextSessionId = crypto.randomUUID();
@@ -383,13 +412,16 @@
     setLiveStatus('Đang xóa lịch sử…', 'working');
     try {
       await api(`/api/history?session_id=${encodeURIComponent(sessionId)}`, { method: 'DELETE' });
+      announceDeletion(sessionId);
+      if (viewVersion !== state.viewVersion) return;
       resetConversation(nextSessionId);
       setLiveStatus('Đã xóa vĩnh viễn lịch sử. Hội thoại mới đã sẵn sàng.');
     } catch (error) {
+      if (viewVersion !== state.viewVersion) return;
       // Keep the ID, transcript and sources intact so a failed request is retryable.
       setLiveStatus(`Chưa thể xác nhận xóa lịch sử: ${error.message}`, 'error');
     } finally {
-      state.isDeleting = false; updateComposer();
+      if (viewVersion === state.viewVersion) { state.isDeleting = false; updateComposer(); }
     }
   }
   function exportAnswer(entry) {
@@ -464,6 +496,19 @@
     setLiveStatus(`Đã khôi phục ${turns.length} lượt gần nhất`);
   }
   function bind() {
+    window.addEventListener('storage', (event) => {
+      if (event.storageArea !== localStorage || event.key !== 'hv_deleted_session' || !event.newValue) return;
+      try {
+        const notice = JSON.parse(event.newValue);
+        if (typeof notice.sessionId === 'string') forgetDeletedConversation(notice.sessionId);
+      } catch (_) { /* Ignore malformed or unrelated storage events. */ }
+    });
+    // Catch deletion by an API client, or notifications missed while suspended.
+    window.addEventListener('focus', checkConversationStatus);
+    window.addEventListener('pageshow', checkConversationStatus);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') checkConversationStatus();
+    });
     dom.theme.addEventListener('click', () => { state.theme = state.theme === 'light' ? 'dark' : 'light'; document.documentElement.dataset.theme = state.theme; localStorage.setItem('hv_theme', state.theme); });
     dom.ai.addEventListener('click', () => { state.aiEnabled = !state.aiEnabled; localStorage.setItem('hv_ai_enabled', String(state.aiEnabled)); updateFeatureControls(); });
     dom.newConversation.addEventListener('click', startNewConversation);
@@ -499,13 +544,18 @@
     const viewVersion = state.viewVersion;
     state.isRestoring = true; updateComposer();
     try {
-      const [health, documents, history, topics] = await Promise.all([
-        api('/api/health'), api('/api/documents'), api(`/api/history?session_id=${encodeURIComponent(state.sessionId)}`), api('/api/suggestions'),
+      const sessionId = state.sessionId;
+      const [health, documents, history, topics, sessionStatus] = await Promise.all([
+        api('/api/health'), api('/api/documents'), api(`/api/history?session_id=${encodeURIComponent(sessionId)}`), api('/api/suggestions'),
+        api(`/api/history/status?session_id=${encodeURIComponent(sessionId)}`),
       ]);
       setStatus(true, `Trực tuyến · ${health.documents} văn bản`);
       dom.documents.innerHTML = documents.map((doc) => `<article class="doc-item"><div class="doc-title">${escapeHTML(doc.title)}</div><div class="doc-meta">${escapeHTML(doc.rid)} · Bản ${escapeHTML(doc.version)}</div></article>`).join('');
       renderSuggestionTopics(topics);
-      if (viewVersion === state.viewVersion) restoreHistory(history);
+      if (viewVersion === state.viewVersion) {
+        if (sessionStatus.closed === true) forgetDeletedConversation(sessionId);
+        else restoreHistory(history);
+      }
     } catch (_) { setStatus(false, 'Mất kết nối'); dom.documents.innerHTML = '<p class="error">Không thể tải cơ sở tri thức.</p>'; }
     finally {
       if (viewVersion === state.viewVersion) { state.isRestoring = false; updateComposer(); }

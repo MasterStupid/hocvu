@@ -96,6 +96,24 @@ existing authentication, origin checks and rate limit, and is idempotent for a
 session with no saved turns or an already-deleted session. It does not remove
 downloaded exports.
 
+Deleted session IDs are permanently closed (including IDs with no saved turns).
+An in-flight answer cannot recreate deleted turns: closing the ID and removing
+its turns are atomic with respect to saving answers, even across server
+processes sharing the SQLite database. A new or interrupted `POST /api/ask`
+using a closed ID receives HTTP **410** with `code: "session_closed"` and must
+use a fresh ID (or omit `session_id`); the server never silently reuses the old
+ID. Reading its history still returns `[]`, and repeated deletion is safe.
+`GET /api/history/status?session_id=...` returns `{session_id, closed}` under
+the existing access controls. Do not prune closed IDs independently of clients:
+they prevent delayed requests from resurrecting deleted data.
+
+Tabs on the same browser origin notify one another after successful deletion,
+clearing only the deleted conversation, stopping its voice playback and ignoring
+late answers/history. Starting **Mới** in one tab does not switch another tab.
+On startup or returning to a tab, the UI also checks server status to detect
+deletions by API clients or missed notifications. Failed checks leave the
+current view intact; the server still rejects writes to a closed ID.
+
 DOCX works with the Python standard library. Install the dependencies before the first run:
 
 ```powershell

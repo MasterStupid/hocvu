@@ -42,7 +42,13 @@
     } catch {
       throw new Error(response.ok ? 'Máy chủ trả về dữ liệu không hợp lệ.' : fallback);
     }
-    if (!response.ok) throw new Error(errorMessage(data, fallback));
+    if (!response.ok) {
+      const error = new Error(errorMessage(data, fallback));
+      error.status = response.status;
+      error.code = typeof data?.code === 'string' ? data.code : '';
+      error.sessionId = typeof data?.session_id === 'string' ? data.session_id : '';
+      throw error;
+    }
     return data;
   }
 

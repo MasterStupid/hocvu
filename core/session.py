@@ -17,6 +17,14 @@ def validate_session_id(session_id: str) -> str:
     return session_id
 
 
+class SessionClosedError(Exception):
+    """A deleted ID is a permanent tombstone, never a new conversation."""
+
+    def __init__(self, session_id: str):
+        self.session_id = session_id
+        super().__init__("Hội thoại này đã bị xóa. Hãy bắt đầu hội thoại mới với mã phiên mới.")
+
+
 class SessionStore:
     def __init__(self, db_path: Path):
         self.db_path = db_path
@@ -56,9 +64,32 @@ class SessionStore:
             for column, definition in additions.items():
                 if column not in columns:
                     cursor.execute(f"ALTER TABLE turns ADD COLUMN {column} {definition}")
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS closed_sessions (
+                    session_id TEXT PRIMARY KEY NOT NULL
+                ) WITHOUT ROWID
+            """)
             conn.commit()
         finally:
             conn.close()
+
+    @staticmethod
+    def _is_closed(conn, session_id: str) -> bool:
+        return conn.execute(
+            "SELECT 1 FROM closed_sessions WHERE session_id = ?", (session_id,),
+        ).fetchone() is not None
+
+    def is_closed(self, session_id: str) -> bool:
+        validate_session_id(session_id)
+        conn = sqlite3.connect(self.db_path)
+        try:
+            return self._is_closed(conn, session_id)
+        finally:
+            conn.close()
+
+    def ensure_open(self, session_id: str):
+        if self.is_closed(session_id):
+            raise SessionClosedError(session_id)
 
     def add_turn(
         self, session_id: str, question: str, answer: str, intent: str,
@@ -81,6 +112,11 @@ class SessionStore:
         ) if response is not None else (None, None, None, None, None)
         conn = sqlite3.connect(self.db_path)
         try:
+            # The tombstone check and insert share a writer transaction. This
+            # coordinates independent stores/processes, not just this engine.
+            conn.execute("BEGIN IMMEDIATE")
+            if self._is_closed(conn, session_id):
+                raise SessionClosedError(session_id)
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT INTO turns (
@@ -135,6 +171,11 @@ class SessionStore:
         try:
             # Equality and binding are intentional: no wildcard or all-session mode.
             with conn:
+                conn.execute("BEGIN IMMEDIATE")
+                conn.execute(
+                    "INSERT OR IGNORE INTO closed_sessions (session_id) VALUES (?)",
+                    (session_id,),
+                )
                 cursor = conn.execute("DELETE FROM turns WHERE session_id = ?", (session_id,))
             return cursor.rowcount
         finally:

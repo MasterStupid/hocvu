@@ -107,3 +107,15 @@ test('both pages load the shared parser before their API client', () => {
     assert.ok(source.includes('HocVuAPI.readResponse(response,'));
   }
 });
+
+test('closed-session errors preserve structured identity without replacing the readable message', async () => {
+  await assert.rejects(readResponse(response({
+    detail: 'Hội thoại đã bị xóa.', code: 'session_closed', session_id: 'legacy name',
+  }, 410), fallback), error => {
+    assert.equal(error.message, 'Hội thoại đã bị xóa.');
+    assert.equal(error.status, 410);
+    assert.equal(error.code, 'session_closed');
+    assert.equal(error.sessionId, 'legacy name');
+    return true;
+  });
+});

@@ -14,3 +14,15 @@ Deletion must accept every nonempty legacy session name, including Unicode, spac
 **Why:** API callers historically supplied arbitrary strings; imposing new character or length restrictions only on deletion strands histories that can still be created and read.
 
 **How to apply:** retain exact identifier matching and explicit validation at destructive boundaries; never add a missing-ID fallback or an all-session mode.
+
+Treat a deleted session ID as permanently closed, rather than a reusable empty
+conversation. Keep the closure marker even when the ID had no saved turns.
+
+**Why:** a delayed request can outlive deletion by an arbitrary amount of time.
+Reopening or expiring the marker would allow another tab/client to recreate
+deleted history. Permanent closure avoids relying on synchronized clocks or on
+every caller supplying a new generation token.
+
+**How to apply:** clients must use a fresh ID after deletion, never retry the old
+question automatically under a new ID. Any future retention, backup/restore or
+storage migration must preserve closure markers along with history.
