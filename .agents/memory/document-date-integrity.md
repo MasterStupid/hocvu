@@ -20,3 +20,9 @@ A calendar-valid date is not necessarily the correct effective date. Legacy reco
 **Why:** changing an effective date changes which historical questions the document may answer. The user explicitly requested selected, confirmed corrections rather than an automatic data migration.
 
 **How to apply:** keep legacy invalid-date recovery separate from ordinary effective-date editing. Audit the actual target environment before claiming any old documents have been recovered.
+
+Student-facing date explanations should use Vietnamese day/month/year (`DD/MM/YYYY`), while stored dates and retrieval comparisons remain ISO.
+
+**Why:** the user identified an otherwise correct effectivity answer as a real display bug because it exposed an ISO date to Vietnamese students.
+
+**How to apply:** format dates when composing explanatory text, including effectivity ranges and the lookup date. Do not rewrite source quotations or stored evidence snapshots merely to change display style.

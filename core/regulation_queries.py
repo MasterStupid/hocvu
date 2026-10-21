@@ -38,12 +38,12 @@ def answer_metadata(focus, searcher, ref_date):
     # several at the requested date. Report all matches, rather than guess.
     answers, references, hits = [], [], []
     for _, chunk in ordered:
-        validity = f"có hiệu lực từ {chunk.valid_from}"
+        validity = f"có hiệu lực từ {date.fromisoformat(chunk.valid_from):%d/%m/%Y}"
         if chunk.valid_until:
-            validity += f" đến hết {chunk.valid_until}"
+            validity += f" đến hết {date.fromisoformat(chunk.valid_until):%d/%m/%Y}"
         line = f"{chunk.reg_title} — {chunk.rid}, phiên bản {chunk.version}, {validity}."
         if focus.kind == "metadata_current":
-            line += f" Văn bản này có hiệu lực tại ngày tra cứu {ref_date}."
+            line += f" Văn bản này có hiệu lực tại ngày tra cứu {date.fromisoformat(ref_date):%d/%m/%Y}."
         answers.append(line)
         references.append(Reference(
             rid=chunk.rid, reg_title=chunk.reg_title, aid=chunk.aid,

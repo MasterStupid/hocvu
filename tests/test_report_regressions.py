@@ -50,15 +50,18 @@ class ReportRegressionTests(unittest.TestCase):
             with self.subTest(question=question):
                 response = self.ask(question)
                 self.assertFalse(response.refused)
-                self.assertIn("2026-09-01", response.answer)
+                self.assertIn("có hiệu lực từ 01/09/2026", response.answer)
+                self.assertNotIn("2026-09-01", response.answer)
                 self.assertIn("QD-DTDC-HPU-2026", response.answer)
                 self.assertEqual({ref.rid for ref in response.references}, {"QD-DTDC-HPU-2026"})
-                self.assertIn("2026-09-01", response.references[0].excerpt)
+                self.assertIn("có hiệu lực từ 01/09/2026", response.references[0].excerpt)
 
     def test_metadata_lookup_keeps_the_requested_date_and_unknown_subjects(self):
         old = self.ask("Quy định đào tạo đại cương hiện hành là bản nào?", ref_date="2024-10-20")
         self.assertFalse(old.refused)
         self.assertEqual({ref.rid for ref in old.references}, {"QD-DTDC-HPU-2024"})
+        self.assertIn("ngày tra cứu 20/10/2024", old.answer)
+        self.assertNotIn("2024-10-20", old.answer)
         for question in (
             "Quy định wifi đào tạo đại cương có hiệu lực từ khi nào?",
             "Quy định Quasar hiện hành là bản nào?",
@@ -73,13 +76,36 @@ class ReportRegressionTests(unittest.TestCase):
         question = "Quy định đào tạo đại cương có hiệu lực từ khi nào?"
         response = self.ask(question, searcher=self.with_chunks([chunk]))
         self.assertFalse(response.refused)
-        self.assertIn("2026-02-12", response.answer)
+        self.assertIn("12/02/2026", response.answer)
+        self.assertNotIn("2026-02-12", response.answer)
         self.assertIn("release-A", response.answer)
         for value in ("2027-01-01", "2026-02-30", ""):
             with self.subTest(valid_from=value):
                 response = self.ask(question, searcher=self.with_chunks([replace(chunk, valid_from=value)]))
                 self.assertTrue(response.refused)
                 self.assertFalse(response.references)
+
+    def test_metadata_date_display_preserves_iso_evidence_and_filtering(self):
+        base = next(chunk for chunk in self.chunks if chunk.rid == "QD-DTDC-HPU-2026")
+        chunk = replace(
+            base, valid_from="2024-02-29", valid_until="2024-09-01",
+            text="Văn bản có hiệu lực từ ngày 2024-02-29.",
+        )
+        searcher = self.with_chunks([chunk])
+        question = "Quy định đào tạo đại cương hiện hành là bản nào?"
+        response = self.ask(question, searcher=searcher, ref_date="2024-02-29")
+        self.assertFalse(response.refused)
+        self.assertIn("có hiệu lực từ 29/02/2024 đến hết 01/09/2024", response.answer)
+        self.assertIn("ngày tra cứu 29/02/2024", response.answer)
+        self.assertNotRegex(response.answer, r"\b\d{4}-\d{2}-\d{2}\b")
+        self.assertIn("Thông tin văn bản:", response.references[0].excerpt)
+        self.assertIn(chunk.text, response.references[0].excerpt)
+        self.assertEqual(chunk.valid_from, "2024-02-29")
+        self.assertEqual(chunk.valid_until, "2024-09-01")
+        self.assertFalse(self.ask(question, searcher=searcher, ref_date="2024-09-01").refused)
+        for ref_date in ("2024-02-28", "2024-09-02"):
+            with self.subTest(ref_date=ref_date):
+                self.assertTrue(self.ask(question, searcher=searcher, ref_date=ref_date).refused)
 
     def test_version_comparisons_keep_both_years_and_correct_credit_values(self):
         for question, values in (
