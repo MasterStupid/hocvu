@@ -7,7 +7,10 @@ from core.blob_storage import BlobStorage, safe_relative_path
 from core.persistent_db import StorageUnavailable
 from core.storage_backend import storage_backend, document_repository, session_store
 from core.storage_transfer import import_backup
-from persistence_helpers import MemoryObjects
+try:
+    from tests.persistence_helpers import MemoryObjects
+except ImportError:  # run via `unittest discover -s tests`
+    from persistence_helpers import MemoryObjects
 
 
 class StorageSafetyTests(unittest.TestCase):

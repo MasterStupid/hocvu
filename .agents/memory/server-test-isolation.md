@@ -9,6 +9,12 @@ Server integration tests using a real engine must explicitly disable semantic mo
 
 **How to apply:** pass temporary storage paths where supported and isolate remaining imported aliases, including directory-creation paths. Reset the lazy engine for each test and restore it afterward. Use a fail-fast model-constructor guard for tests that should stay offline; keep synthetic credentials independent of the hosting configuration.
 
+Always run the Python suite with `HV_STORAGE_BACKEND=local` (the workspace default is `replit`).
+
+**Why:** a discover run without it wrote fixture documents, sessions and closed-session rows into the real dev Postgres/App Storage and failed with duplicate-upload errors; cleanup had to go through the document delete API plus targeted SQL.
+
+**How to apply:** prefix every `python -m unittest ...` invocation, including single files.
+
 Run long subprocess-heavy regression suites as background shell tasks.
 
 **Why:** foreground runs in this environment have repeatedly exhausted the shell-call time budget, while the identical suite completed normally in a background task. A partial log ending at a subprocess test is not by itself evidence of a failed assertion or deadlock.

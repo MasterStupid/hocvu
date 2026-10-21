@@ -17,7 +17,10 @@ from core.postgres_session import PostgresSessionStore
 from core.session import SessionStore, SessionAccessError, SessionClosedError, LEGACY_API_OWNER
 from core.settings import AppConfig
 from core.storage_transfer import backup_local, backup_persistent, import_backup
-from persistence_helpers import MemoryObjects, PostgresCase, add_turn, RESPONSE
+try:
+    from tests.persistence_helpers import MemoryObjects, PostgresCase, add_turn, RESPONSE
+except ImportError:  # run via `unittest discover -s tests`
+    from persistence_helpers import MemoryObjects, PostgresCase, add_turn, RESPONSE
 
 
 TEXT = "## Điều 1. Hỗ trợ nghiên cứu\nSinh viên nghiên cứu được hỗ trợ 700000 đồng mỗi tháng."

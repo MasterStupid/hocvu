@@ -12,7 +12,7 @@ expertMode = true
 [userenv.shared]
 HV_BROWSER_AUTH = "1"
 HV_SEMANTIC = "0"
-HV_STORAGE_BUCKET_ID = "replit-objstore-fc616c94-1bfd-4e39-b357-0ac7d5530fca"
+HV_STORAGE_BUCKET_ID = "replit-objstore-2f2faf63-38dd-4101-891c-d535e9a9d451"
 HV_STORAGE_PREFIX = "hocvu/v1"
 HV_STORAGE_BACKEND = "replit"
 

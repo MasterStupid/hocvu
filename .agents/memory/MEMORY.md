@@ -13,9 +13,10 @@
 - [ASGI execution boundaries](asgi-execution-boundaries.md) — offload heavy work; gate document writes before reading upload bytes, without serializing unrelated readers.
 - [History evidence snapshots](history-evidence-snapshots.md) — restore evidence as assessed when answered; do not reconstruct missing legacy citations from today's corpus.
 - [Voice playback cancellation](voice-playback-cancellation.md) — stop every audio path and invalidate late callbacks, not just the browser speech synthesizer.
-- [Server test isolation](server-test-isolation.md) — isolate import-bound data paths and disable real models; run long subprocess-heavy suites in the background.
+- [Server test isolation](server-test-isolation.md) — always HV_STORAGE_BACKEND=local (else tests hit real dev storage); disable real models; run long suites in background.
 - [History lifecycle](history-lifecycle.md) — New is not consent to delete; keep permanent deletion explicit and support exact legacy session names.
 - [Conversation ownership](conversation-ownership.md) — shared login and legacy session IDs do not prove ownership; discovery and all chat operations need separate scoped authority.
 - [SQLite journal policy](sqlite-journal-policy.md) — WAL is explicitly requested; enable it outside migration transactions and use SQLite-aware live backups.
 - [Dependency audit floors](dependency-audit-floors.md) — the dependency scanner checks manifest minimums even when the installed environment already uses patched releases.
 - [UI preview verification](ui-preview-verification.md) — workflow fails without App Storage; preview UI via temp local-mode server; screenshot /index.html?x, not /.
+- [App Storage bucket binding](app-storage-bucket-binding.md) — startup StorageUnavailable = HV_STORAGE_BUCKET_ID pointing at a bucket the platform replaced.

@@ -39,6 +39,25 @@ EDGE_QUERIES = (
 )
 
 
+# Class-level helpers that the current Generator looks up on HybridSearcher.
+GENERATOR_HELPERS = (
+    "_chunk_features", "_raw_words", "_credit_quantity_topic", "_query_form",
+    "_is_non_specific", "_question_focus", "has_specific_evidence",
+)
+
+
+def backfill_generator_helpers(searcher_type):
+    """Let an older baseline searcher run under the current Generator.
+
+    Only helpers the baseline lacks are borrowed (bound to the current class);
+    anything the baseline defines itself is left untouched.
+    """
+    missing = [name for name in GENERATOR_HELPERS if not hasattr(searcher_type, name)]
+    for name in missing:
+        setattr(searcher_type, name, getattr(HybridSearcher, name))
+    return missing
+
+
 def snapshot(searcher, queries):
     # Generator imports its classmethod helpers locally from core.searcher.
     with patch("core.searcher.HybridSearcher", type(searcher)):
@@ -113,6 +132,9 @@ def main():
             parser.error("baseline source must be an importable Python file")
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
+        borrowed = backfill_generator_helpers(module.HybridSearcher)
+        if borrowed:
+            report["baseline_borrowed_helpers"] = borrowed
         baseline, report["before"] = measure(module.HybridSearcher, config, chunks, args.rounds, args.iterations)
     current, report["after"] = measure(HybridSearcher, config, chunks, args.rounds, args.iterations)
     if baseline is not None:

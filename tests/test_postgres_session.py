@@ -3,7 +3,10 @@ import threading
 
 from core.postgres_session import PostgresSessionStore
 from core.session import SessionAccessError, SessionClosedError, LEGACY_API_OWNER
-from persistence_helpers import PostgresCase, add_turn, RESPONSE
+try:
+    from tests.persistence_helpers import PostgresCase, add_turn, RESPONSE
+except ImportError:  # run via `unittest discover -s tests`
+    from persistence_helpers import PostgresCase, add_turn, RESPONSE
 
 
 class PostgresHistoryTests(PostgresCase):
