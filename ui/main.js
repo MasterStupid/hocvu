@@ -15,7 +15,7 @@
     ignoreRecognitionResults: false, listenAfter: 0, speechId: 0, audio: null, speechTimer: null,
     lastAssistantSpeech: '', echoGuardUntil: 0,
     isDeleting: false, isRestoring: false, viewVersion: 0,
-    conversations: [], listVersion: 0,
+    conversations: [], listVersion: 0, evidenceOwner: null, sourcesOpen: false, sidebarCollapsed: false,
   };
   localStorage.setItem('hv_session_id', state.sessionId);
 
@@ -29,10 +29,15 @@
     right: $('right-sidebar'), closeLeft: $('close-left'), closeRight: $('close-right'),
     overlay: $('overlay'), welcome: $('welcome'), liveStatus: $('live-status'),
     newConversation: $('new-conversation'), exportConversation: $('export-conversation'),
+    exportSettings: $('export-conversation-settings'),
     deleteHistory: $('delete-history'),
-    conversationSelect: $('conversation-select'), conversationRefresh: $('conversation-refresh'),
-    conversationStatus: $('conversation-status'),
+    conversationList: $('conversation-list'), conversationRefresh: $('conversation-refresh'),
+    conversationStatus: $('conversation-status'), conversationTitle: $('conversation-title'),
     refDate: $('ref-date'),
+    app: $('app'), sidebarCollapse: $('sidebar-collapse'), settingsBtn: $('settings-btn'),
+    settingsDialog: $('settings-dialog'), sourcesToggle: $('sources-toggle'), sourcesCount: $('sources-count'),
+    statusDotTop: $('status-dot-top'), statusTextTop: $('status-text-top'),
+    dbDocuments: $('db-documents'), dbRetrieval: $('db-retrieval'),
   };
   const escapeHTML = (value) => { const box = document.createElement('div'); box.textContent = value || ''; return box.innerHTML; };
   const scrollBottom = () => { dom.thread.scrollTop = dom.thread.scrollHeight; };
@@ -40,10 +45,51 @@
     const response = await fetch(url, { ...options, cache: 'no-store', headers: { 'Content-Type': 'application/json', 'X-HocVu-Owner': ownerKey, ...(options.headers || {}) } });
     return HocVuAPI.readResponse(response, 'Không thể kết nối máy chủ.');
   };
-  const setStatus = (online, message) => {
+  const setStatus = (online, message, short = message) => {
     dom.statusDot.className = `status-indicator ${online ? 'online' : 'offline'}`;
     dom.statusText.textContent = message;
+    dom.statusDotTop.className = dom.statusDot.className;
+    dom.statusTextTop.textContent = short;
   };
+  // Answer text is escaped first; only a small, fixed set of structures
+  // (lists, pipe tables and **bold**) is then recognised for presentation.
+  const inlineText = (text) => escapeHTML(text).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  const tableCells = (line) => line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((cell) => cell.trim());
+  const isTableDivider = (line = '') => /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/.test(line);
+  function richText(text, tail = '') {
+    const lines = String(text || '').split('\n'), blocks = [];
+    for (let index = 0; index < lines.length;) {
+      const line = lines[index];
+      if (!line.trim()) { index++; continue; }
+      if (line.includes('|') && isTableDivider(lines[index + 1])) {
+        const head = tableCells(line); const rows = [];
+        index += 2;
+        while (index < lines.length && lines[index].includes('|') && lines[index].trim()) rows.push(tableCells(lines[index++]));
+        blocks.push({ kind: 'table', html: `<div class="table-wrap"><table><thead><tr>${head.map((cell) => `<th>${inlineText(cell)}</th>`).join('')}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${inlineText(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` });
+        continue;
+      }
+      const item = line.match(/^\s*(?:([-•*+])|(\d+)[.)])\s+(.*)$/);
+      if (item) {
+        const ordered = Boolean(item[2]), start = ordered ? Number(item[2]) : 1, items = [];
+        while (index < lines.length) {
+          const next = lines[index].match(/^\s*(?:([-•*+])|(\d+)[.)])\s+(.*)$/);
+          if (!next || Boolean(next[2]) !== ordered) break;
+          items.push(next[3]); index++;
+        }
+        const tag = ordered ? 'ol' : 'ul';
+        blocks.push({ kind: 'list', html: `<${tag}${ordered && start !== 1 ? ` start="${start}"` : ''}>${items.map((entry) => `<li>${inlineText(entry)}</li>`).join('')}</${tag}>` });
+        continue;
+      }
+      const paragraph = [];
+      while (index < lines.length && lines[index].trim() && !/^\s*(?:[-•*+]|\d+[.)])\s+/.test(lines[index]) && !(lines[index].includes('|') && isTableDivider(lines[index + 1]))) paragraph.push(lines[index++]);
+      blocks.push({ kind: 'p', html: paragraph.map(inlineText).join('<br>') });
+    }
+    if (!blocks.length) blocks.push({ kind: 'p', html: '' });
+    const last = blocks.at(-1);
+    return blocks.map((block) => block.kind === 'p'
+      ? `<p>${block.html}${block === last && tail ? ` ${tail}` : ''}</p>`
+      : block.html).join('') + (last.kind !== 'p' && tail ? `<p class="cite-row">${tail}</p>` : '');
+  }
   const setLiveStatus = (message, kind = '') => {
     dom.liveStatus.textContent = message;
     dom.liveStatus.className = `live-status ${kind}`.trim();
@@ -54,9 +100,11 @@
     dom.newConversation.disabled = state.isDeleting;
     dom.deleteHistory.disabled = state.isLoading || state.isDeleting || state.isRestoring;
     dom.exportConversation.disabled = state.isDeleting;
+    dom.exportSettings.disabled = state.isDeleting;
     dom.mic.disabled = state.isDeleting || state.isRestoring;
     dom.live.disabled = !state.recognition || state.isDeleting || state.isRestoring;
-    dom.conversationSelect.disabled = state.isDeleting;
+    dom.conversationList.classList.toggle('is-busy', state.isDeleting);
+    dom.conversationList.setAttribute('aria-busy', String(state.isDeleting));
     dom.conversationRefresh.disabled = state.isDeleting;
   };
   const updateFeatureControls = () => {
@@ -73,33 +121,41 @@
   function appendUser(text, { restore = false } = {}) {
     dom.welcome.hidden = true;
     const item = document.createElement('article'); item.className = 'message user';
-    item.innerHTML = `<div class="bubble"><p>${escapeHTML(text)}</p></div>`; dom.thread.appendChild(item);
+    item.innerHTML = `<div class="bubble"><p>${escapeHTML(text).replace(/\n/g, '<br>')}</p></div>`; dom.thread.appendChild(item);
     remember('user', text); scrollBottom();
   }
+  const botAvatar = (label = '') => `<div class="avatar" aria-hidden="true">${label || '<svg><use href="#icon-cap"></use></svg>'}</div>`;
   function appendSystem(text) {
     const item = document.createElement('article'); item.className = 'message bot live-note';
-    item.innerHTML = `<div class="avatar">Live</div><div class="bubble"><p>${escapeHTML(text)}</p></div>`;
+    item.innerHTML = `${botAvatar('<svg><use href="#icon-radio"></use></svg>')}<div class="bubble"><p>${escapeHTML(text)}</p></div>`;
     dom.thread.appendChild(item); scrollBottom();
   }
   function appendTyping() {
     const item = document.createElement('article'); item.id = 'typing-indicator'; item.className = 'message bot typing';
-    item.innerHTML = '<div class="avatar">AI</div><div class="bubble"><div class="typing-indicator" role="status" aria-label="Đang trả lời"><i class="typing-dot" aria-hidden="true"></i><i class="typing-dot" aria-hidden="true"></i><i class="typing-dot" aria-hidden="true"></i></div></div>';
+    item.innerHTML = `${botAvatar()}<div class="bubble"><div class="typing-indicator" role="status" aria-label="Đang trả lời"><i class="typing-dot" aria-hidden="true"></i><i class="typing-dot" aria-hidden="true"></i><i class="typing-dot" aria-hidden="true"></i><span class="typing-label">Đang đối chiếu văn bản…</span></div></div>`;
     dom.thread.appendChild(item); scrollBottom();
   }
   const removeTyping = () => document.getElementById('typing-indicator')?.remove();
   const citeLabel = (ref) => `${ref.aid || 'Nguồn'}, ${ref.clause_ids?.length ? `Khoản ${ref.clause_ids.join(', ')}` : 'nội dung liên quan'}`;
-  const sourceCard = (ref, index, place) => `<article class="evidence-card source-card" id="${place}-src-${index + 1}" data-source-index="${index + 1}" tabindex="0"><div class="evidence-title">[${index + 1}] ${escapeHTML(citeLabel(ref))}</div><div class="evidence-meta">${escapeHTML(ref.reg_title)}</div><div class="source-heading">${escapeHTML(ref.art_heading)}</div><p class="evidence-excerpt">${escapeHTML(ref.excerpt)}</p></article>`;
-  function flashSource(index) {
-    document.querySelectorAll(`[data-source-index="${index}"]`).forEach((card) => { card.classList.add('flash'); setTimeout(() => card.classList.remove('flash'), 2000); });
-    document.querySelectorAll(`[data-citation="${index}"]`).forEach((chip) => chip.classList.add('active'));
-    setTimeout(() => document.querySelectorAll(`[data-citation="${index}"]`).forEach((chip) => chip.classList.remove('active')), 2000);
+  const sourceCard = (ref, index, place) => `<article class="evidence-card source-card" id="${place}-src-${index + 1}" data-source-index="${index + 1}" tabindex="0"><header class="evidence-top"><span class="source-number">${index + 1}</span><div class="evidence-heading"><div class="evidence-title">${escapeHTML(citeLabel(ref))}</div><div class="evidence-meta">${escapeHTML(ref.reg_title)}${ref.version ? ` · Bản ${escapeHTML(ref.version)}` : ''}</div></div></header>${ref.art_heading ? `<div class="source-heading">${escapeHTML(ref.art_heading)}</div>` : ''}<p class="evidence-excerpt">${escapeHTML(ref.excerpt)}</p></article>`;
+  // Citation numbers are per answer: only highlight the owning answer and
+  // the sources panel (which shows that same answer's sources).
+  function flashSource(index, owner = state.evidenceOwner) {
+    const scopes = [owner, dom.evidence].filter(Boolean);
+    const all = (selector) => scopes.flatMap((scope) => [...scope.querySelectorAll(selector)]);
+    all(`[data-source-index="${index}"]`).forEach((card) => { card.classList.add('flash'); setTimeout(() => card.classList.remove('flash'), 2000); });
+    const chips = owner ? [...owner.querySelectorAll(`[data-citation="${index}"]`)] : [];
+    chips.forEach((chip) => chip.classList.add('active'));
+    setTimeout(() => chips.forEach((chip) => chip.classList.remove('active')), 2000);
   }
-  function updateEvidence(refs = []) {
+  function updateEvidence(refs = [], owner = null) {
+    state.evidenceOwner = owner;
     dom.evidence.innerHTML = refs.length ? refs.map((ref, index) => sourceCard(ref, index, 'evidence')).join('') : '<div class="empty-state"><p>Các căn cứ được dùng để trả lời sẽ hiển thị tại đây.</p></div>';
     dom.evidence.querySelectorAll('[data-source-index]').forEach((card) => card.addEventListener('click', () => flashSource(card.dataset.sourceIndex)));
+    dom.sourcesCount.textContent = String(refs.length);
   }
   function renderSuggestionTopics(topics = []) {
-    dom.suggestions.innerHTML = topics.length ? topics.map((topic, index) => `<section class="topic-card"><button class="topic-toggle" type="button" data-topic="${index}" aria-expanded="false"><span>${escapeHTML(topic.topic)}</span><small>${topic.questions.length} câu hỏi</small></button><div class="topic-questions" data-topic-questions="${index}" hidden>${topic.questions.map((question) => `<button class="suggestion-chip" type="button">${escapeHTML(question)}</button>`).join('')}</div></section>`).join('') : '<span class="loading-pulse">Chưa có câu hỏi gợi ý.</span>';
+    dom.suggestions.innerHTML = topics.length ? `<p class="suggestions-label">Chủ đề tra cứu thường gặp</p><div class="topic-grid">${topics.map((topic, index) => `<section class="topic-card"><button class="topic-toggle" type="button" data-topic="${index}" aria-expanded="false"><span>${escapeHTML(topic.topic)}</span><small>${topic.questions.length} câu hỏi</small></button><div class="topic-questions" data-topic-questions="${index}" hidden>${topic.questions.map((question) => `<button class="suggestion-chip" type="button">${escapeHTML(question)}</button>`).join('')}</div></section>`).join('')}</div>` : '<span class="muted-line">Chưa có câu hỏi gợi ý.</span>';
   }
   function scheduleListening() {
     clearTimeout(state.listenTimer);
@@ -247,16 +303,23 @@
     if (restore && !hasSavedEvidence(response)) {
       return `<section class="history-message"><p>${escapeHTML(response.answer).replace(/\n/g, '<br>')}</p><p class="history-hint">Lượt đã lưu · Chi tiết căn cứ không có trong bản lưu này.</p></section>`;
     }
-    return `<section class="answer-card"><header class="answer-card-header"><div><span class="card-kicker">Phiếu kết quả tra cứu</span><h3>Kết luận</h3></div>${meter(card.grounding)}</header><div class="verdict-list">${segments.map((segment) => `<p>${escapeHTML(segment.text).replace(/\n/g, '<br>')} ${segment.cites.map((cite) => `<button class="citation-chip" type="button" data-citation="${cite}" aria-label="Xem nguồn ${cite}">[${cite}]</button>`).join('')}</p>`).join('')}</div>${card.notes?.length ? `<section class="card-notes"><h4>Lưu ý</h4>${card.notes.map((note) => `<p><span>${noteIcon(note.icon)}</span>${escapeHTML(note.text)}</p>`).join('')}</section>` : ''}<footer class="message-footer"><span class="intent-badge">${restore ? 'Lượt đã lưu' : 'Nguồn đã đối chiếu'}</span><button class="copy-btn" type="button" aria-label="Sao chép kèm nguồn">Sao chép kèm nguồn</button></footer></section>`;
+    const cites = (segment) => (segment.cites || []).map((cite) => `<button class="citation-chip" type="button" data-citation="${cite}" aria-label="Xem nguồn ${cite}">${cite}</button>`).join('');
+    const sources = refs.length ? `<details class="card-sources" data-hv-sources><summary><svg aria-hidden="true"><use href="#icon-book"></use></svg><span>Nguồn tham khảo</span><b>${refs.length}</b><svg class="chevron" aria-hidden="true"><use href="#icon-chevron-down"></use></svg></summary><div class="source-grid">${refs.map((ref, index) => sourceCard(ref, index, `answer-${cardId}`)).join('')}</div></details>` : '';
+    return `<section class="answer-card"><header class="answer-card-header"><div><span class="card-kicker">Phiếu kết quả tra cứu</span><h3>Kết luận</h3></div>${meter(card.grounding)}</header><div class="verdict-list">${segments.map((segment) => `<div class="verdict">${richText(segment.text, cites(segment))}</div>`).join('')}</div>${card.notes?.length ? `<section class="card-notes"><h4>Lưu ý</h4>${card.notes.map((note) => `<p><span>${noteIcon(note.icon)}</span>${escapeHTML(note.text)}</p>`).join('')}</section>` : ''}${sources}<footer class="message-footer"><span class="intent-badge">${restore ? 'Lượt đã lưu' : 'Nguồn đã đối chiếu'}</span><button class="copy-btn" type="button" aria-label="Sao chép kèm nguồn">Sao chép kèm nguồn</button></footer></section>`;
   }
   function appendAnswer(response, { restore = false } = {}) {
     state.turn++; const refs = response.references || [];
     const segments = response.card?.verdict_segments || [{ text: response.answer, cites: [] }];
     const item = document.createElement('article'); item.className = `message bot${response.refused ? ' refused' : ''}`;
     const plain = !response.refused && (response.intent === 'greeting' || (restore && !hasSavedEvidence(response)));
-    item.innerHTML = `<div class="avatar">AI</div><div class="bubble${plain ? '' : ' card-bubble'}">${renderAnswerCard(response, refs, restore, state.turn)}</div>`;
-    item.querySelectorAll('[data-citation]').forEach((button) => button.addEventListener('click', () => { updateEvidence(refs); const source = item.querySelector(`[data-source-index="${button.dataset.citation}"]`) || document.getElementById(`evidence-src-${button.dataset.citation}`); source?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); flashSource(button.dataset.citation); }));
-    item.querySelectorAll('[data-source-index]').forEach((card) => card.addEventListener('click', () => flashSource(card.dataset.sourceIndex)));
+    item.innerHTML = `${botAvatar()}<div class="bubble${plain ? '' : ' card-bubble'}">${renderAnswerCard(response, refs, restore, state.turn)}</div>`;
+    item.querySelectorAll('[data-citation]').forEach((button) => button.addEventListener('click', () => {
+      updateEvidence(refs, item);
+      const details = item.querySelector('[data-hv-sources]'); if (details) details.open = true;
+      const source = item.querySelector(`[data-source-index="${button.dataset.citation}"]`) || document.getElementById(`evidence-src-${button.dataset.citation}`);
+      source?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); flashSource(button.dataset.citation, item);
+    }));
+    item.querySelectorAll('[data-source-index]').forEach((card) => card.addEventListener('click', () => { updateEvidence(refs, item); flashSource(card.dataset.sourceIndex, item); }));
     item.querySelector('.copy-btn')?.addEventListener('click', () => copyAnswer(item.querySelector('.copy-btn'), cardMarkdown(segments, refs)));
     item.querySelectorAll('.follow-up-chip').forEach((button) => button.addEventListener('click', () => send(button.textContent)));
     dom.thread.appendChild(item);
@@ -266,7 +329,7 @@
       presentation: response.refused ? 'refusal' : response.intent === 'greeting' ? 'greeting'
         : restore && !hasSavedEvidence(response) ? 'legacy' : 'answer',
     });
-    updateEvidence(refs); scrollBottom(); if (!restore) speak(segments.map((segment) => segment.text).join('. '), response.audio_url);
+    updateEvidence(refs, item); scrollBottom(); if (!restore) speak(segments.map((segment) => segment.text).join('. '), response.audio_url);
   }
   function appendError(message) {
     const item = document.createElement('article'); item.className = 'message bot error';
@@ -383,20 +446,52 @@
     resetConversation(crypto.randomUUID());
   }
 
+  const historyGroup = (value) => {
+    if (!value) return 'Bản lưu cũ';
+    const date = new Date(value); if (Number.isNaN(date.getTime())) return 'Bản lưu cũ';
+    const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
+    const days = (startOfToday - new Date(date.getFullYear(), date.getMonth(), date.getDate())) / 86400000;
+    return days <= 0 ? 'Hôm nay' : days <= 1 ? 'Hôm qua' : days <= 7 ? '7 ngày qua' : 'Cũ hơn';
+  };
+  const historyTime = (value) => {
+    const date = value ? new Date(value) : null;
+    if (!date || Number.isNaN(date.getTime())) return 'Bản lưu cũ';
+    return historyGroup(value) === 'Hôm nay'
+      ? date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+      : date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  };
+  function openConversation(sessionId) {
+    closeMenus();
+    if (sessionId === state.sessionId && !state.isRestoring) return;
+    void selectConversation(sessionId);
+  }
   function renderConversations() {
-    dom.conversationSelect.innerHTML = '';
-    const currentSaved = state.conversations.some(item => item.session_id === state.sessionId);
-    const addOption = (id, title) => {
-      const option = document.createElement('option');
-      option.value = id; option.textContent = title;
-      dom.conversationSelect.appendChild(option);
+    // Built with textContent only: titles come from user questions.
+    dom.conversationList.innerHTML = '';
+    const current = state.conversations.find(item => item.session_id === state.sessionId);
+    const span = (className, text) => { const node = document.createElement('span'); node.className = className; node.textContent = text; return node; };
+    const addItem = (id, title, meta) => {
+      const button = document.createElement('button');
+      button.type = 'button'; button.dataset.sessionId = id; button.title = title;
+      button.className = `history-item${id === state.sessionId ? ' active' : ''}`;
+      if (id === state.sessionId) button.setAttribute('aria-current', 'page');
+      button.appendChild(span('history-title', title));
+      button.appendChild(span('history-meta', meta));
+      button.addEventListener('click', () => openConversation(id));
+      dom.conversationList.appendChild(button);
     };
-    if (!currentSaved) addOption(state.sessionId, 'Hội thoại hiện tại · chưa có lượt được lưu');
+    if (!current) addItem(state.sessionId, 'Phiên tra cứu hiện tại', 'Chưa có lượt được lưu');
+    let group = '';
     state.conversations.forEach(item => {
-      const date = item.updated_at ? new Date(item.updated_at).toLocaleString('vi-VN') : 'Bản lưu cũ';
-      addOption(item.session_id, `${item.title} · ${item.turn_count} lượt · ${date}`);
+      const label = historyGroup(item.updated_at);
+      if (label !== group) {
+        group = label;
+        const heading = document.createElement('p'); heading.className = 'history-group'; heading.textContent = label;
+        dom.conversationList.appendChild(heading);
+      }
+      addItem(item.session_id, item.title, `${item.turn_count} lượt · ${historyTime(item.updated_at)}`);
     });
-    dom.conversationSelect.value = state.sessionId;
+    dom.conversationTitle.textContent = current?.title || 'Phiên tra cứu mới';
   }
 
   async function refreshConversations() {
@@ -409,7 +504,7 @@
       state.conversations = conversations;
       renderConversations();
       dom.conversationStatus.textContent = conversations.length
-        ? `${conversations.length} hội thoại đã lưu. Chọn để xem; dùng “Xóa lịch sử” để xóa hội thoại đã chọn.`
+        ? `${conversations.length} hội thoại đã lưu. Xóa phiên đang mở trong Cài đặt.`
         : 'Chưa có hội thoại đã lưu trong trình duyệt này.';
     } catch (error) {
       if (version === state.listVersion) dom.conversationStatus.textContent = `Không thể tải danh sách: ${error.message} Nhấn Làm mới để thử lại.`;
@@ -598,16 +693,14 @@
     });
     dom.theme.addEventListener('click', () => { state.theme = state.theme === 'light' ? 'dark' : 'light'; document.documentElement.dataset.theme = state.theme; localStorage.setItem('hv_theme', state.theme); });
     dom.ai.addEventListener('click', () => { state.aiEnabled = !state.aiEnabled; localStorage.setItem('hv_ai_enabled', String(state.aiEnabled)); updateFeatureControls(); });
-    dom.newConversation.addEventListener('click', startNewConversation);
-    dom.conversationSelect.addEventListener('change', () => {
-      void selectConversation(dom.conversationSelect.value);
-    });
+    dom.newConversation.addEventListener('click', () => { closeMenus(); startNewConversation(); });
     dom.conversationRefresh.addEventListener('click', () => {
       void refreshConversations();
       if (state.isRestoring) void selectConversation(state.sessionId);
     });
     dom.deleteHistory.addEventListener('click', deleteHistory);
     dom.exportConversation.addEventListener('click', exportConversation);
+    dom.exportSettings.addEventListener('click', exportConversation);
     dom.live.addEventListener('click', () => {
       if (state.isDeleting || state.isRestoring) return;
       if (state.liveEnabled) { stopLive(); appendSystem('Đã dừng hội thoại Live.'); return; }
@@ -629,12 +722,36 @@
         event.preventDefault(); dom.input.focus();
       }
     });
-    const closeMenus = () => { dom.left.classList.remove('open'); dom.right.classList.remove('open'); dom.overlay.classList.remove('active'); };
-    dom.menu.addEventListener('click', () => { dom.left.classList.toggle('open'); dom.overlay.classList.toggle('active'); });
-    dom.closeLeft.addEventListener('click', closeMenus); dom.closeRight.addEventListener('click', closeMenus); dom.overlay.addEventListener('click', closeMenus);
+    dom.menu.addEventListener('click', () => { dom.left.classList.add('open'); dom.overlay.classList.add('active'); });
+    dom.closeLeft.addEventListener('click', closeMenus);
+    dom.overlay.addEventListener('click', () => { closeMenus(); setSourcesOpen(false); });
+    dom.closeRight.addEventListener('click', () => setSourcesOpen(false));
+    dom.sourcesToggle.addEventListener('click', () => setSourcesOpen(!state.sourcesOpen));
+    dom.sidebarCollapse.addEventListener('click', () => setSidebarCollapsed(!state.sidebarCollapsed));
+    // A collapsed rail expands again when its history or database area is used.
+    dom.left.addEventListener('click', (event) => {
+      if (state.sidebarCollapsed && event.target.closest?.('.history-section, .database-card summary')) setSidebarCollapsed(false);
+    });
+    dom.settingsBtn.addEventListener('click', () => { closeMenus(); dom.settingsDialog.showModal?.(); });
   }
+  function closeMenus() { dom.left.classList.remove('open'); dom.overlay.classList.remove('active'); }
+  function setSourcesOpen(open) {
+    state.sourcesOpen = open;
+    dom.app.classList.toggle('sources-open', open);
+    dom.sourcesToggle.setAttribute('aria-expanded', String(open));
+    dom.overlay.classList.toggle('sources-active', open);
+  }
+  function setSidebarCollapsed(collapsed) {
+    state.sidebarCollapsed = collapsed;
+    dom.app.classList.toggle('sidebar-collapsed', collapsed);
+    dom.sidebarCollapse.setAttribute('aria-label', collapsed ? 'Mở rộng thanh bên' : 'Thu gọn thanh bên');
+    dom.sidebarCollapse.title = collapsed ? 'Mở rộng thanh bên' : 'Thu gọn thanh bên';
+    try { localStorage.setItem('hv_sidebar_collapsed', String(collapsed)); } catch (_) { /* optional preference */ }
+  }
+  const retrievalLabel = (provider) => ({ bm25: 'BM25 (từ khóa)', semantic: 'Ngữ nghĩa', hybrid: 'Kết hợp' }[String(provider || '').toLowerCase()] || provider || '—');
   async function boot() {
     document.documentElement.dataset.theme = state.theme; updateFeatureControls(); bind(); setupVoice();
+    setSidebarCollapsed(localStorage.getItem('hv_sidebar_collapsed') === 'true');
     // Independent loads prevent a history permission/network error from
     // hiding documents, or a document error from discarding the conversation.
     const restoring = selectConversation(state.sessionId);
@@ -643,10 +760,12 @@
       const [health, documents, topics] = await Promise.all([
         api('/api/health'), api('/api/catalog'), api('/api/suggestions'),
       ]);
-      setStatus(true, `Trực tuyến · ${health.documents} văn bản`);
-      dom.documents.innerHTML = documents.map((doc) => `<article class="doc-item"><div class="doc-title">${escapeHTML(doc.title)}</div><div class="doc-meta">${escapeHTML(doc.rid)} · Bản ${escapeHTML(doc.version)}</div></article>`).join('');
+      setStatus(true, `Trực tuyến · ${health.documents} văn bản`, 'Trực tuyến');
+      dom.dbDocuments.textContent = String(health.documents ?? documents.length);
+      dom.dbRetrieval.textContent = retrievalLabel(health.retrieval);
+      dom.documents.innerHTML = documents.length ? documents.map((doc) => `<article class="doc-item"><svg aria-hidden="true"><use href="#icon-file"></use></svg><div><div class="doc-title">${escapeHTML(doc.title)}</div><div class="doc-meta">${escapeHTML(doc.rid)} · Bản ${escapeHTML(doc.version)}</div></div></article>`).join('') : '<p class="muted-line">Chưa có văn bản nào được lập chỉ mục.</p>';
       renderSuggestionTopics(topics);
-    } catch (_) { setStatus(false, 'Mất kết nối'); dom.documents.innerHTML = '<p class="error">Không thể tải cơ sở tri thức.</p>'; }
+    } catch (_) { setStatus(false, 'Mất kết nối', 'Mất kết nối'); dom.documents.innerHTML = '<p class="error">Không thể tải cơ sở tri thức.</p>'; }
     await Promise.all([restoring, listing]);
   }
   document.addEventListener('DOMContentLoaded', boot);

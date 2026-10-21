@@ -3,6 +3,10 @@ const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const { loadUI } = require('./helpers/ui-harness.cjs');
 
+const items = ui => ui.dom.conversationList.children.filter(child => child.dataset.sessionId);
+const label = item => item.children.map(child => child.textContent).join(' ');
+const activeId = ui => items(ui).find(item => item['aria-current'] === 'page')?.dataset.sessionId;
+
 const saved = id => ({
   session_id: id, title: `Câu hỏi ${id}`, turn_count: 1, updated_at: '2026-10-20T02:00:00Z',
 });
@@ -22,15 +26,15 @@ function routes(url) {
   return [];
 }
 
-test('picker loads only API-scoped rows and renders hostile titles as plain text', async () => {
+test('history list loads only API-scoped rows and renders hostile titles as plain text', async () => {
   const ui = loadUI({ request: async () => [saved('<script>bad</script>')] });
   await ui.refreshConversations();
-  const options = ui.dom.conversationSelect.children;
+  const options = items(ui);
   assert.equal(options.length, 2);
-  assert.equal(options[1].value, '<script>bad</script>');
-  assert.match(options[1].textContent, /<script>bad<\/script>/);
-  assert.doesNotMatch(options[1].innerHTML, /<script>/);
-  assert.match(options[1].textContent, /1 lượt/);
+  assert.equal(options[1].dataset.sessionId, '<script>bad</script>');
+  assert.match(label(options[1]), /<script>bad<\/script>/);
+  for (const child of options[1].children) assert.doesNotMatch(child.innerHTML, /<script>/);
+  assert.match(label(options[1]), /1 lượt/);
   assert.match(ui.dom.conversationStatus.textContent, /1 hội thoại đã lưu/);
   const key = ui.storage.get('hv_conversation_owner');
   assert.match(key, /^[a-f0-9]{64}$/);
@@ -54,16 +58,16 @@ test('switching restores selected messages, original evidence, no speech and per
   const reloaded = loadUI({ storage, request: async url => routes(url) });
   await reloaded.boot();
   assert.equal(reloaded.state.sessionId, 'second');
-  assert.equal(reloaded.dom.conversationSelect.value, 'second');
+  assert.equal(activeId(reloaded), 'second');
   assert.match(reloaded.dom.evidence.innerHTML, /Căn cứ gốc second/);
   assert.equal(reloaded.calls[0][1].headers['X-HocVu-Owner'], ui.calls[0][1].headers['X-HocVu-Owner']);
 });
 
-test('picker and refresh controls invoke actual selection and refresh behavior', async () => {
+test('history items and refresh controls invoke actual selection and refresh behavior', async () => {
   const ui = loadUI({ request: async url => routes(url) });
   ui.bind();
-  ui.dom.conversationSelect.value = 'first';
-  ui.dom.conversationSelect.events.change();
+  await ui.refreshConversations();
+  items(ui).find(item => item.dataset.sessionId === 'first').events.click();
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(ui.state.sessionId, 'first');
   assert.equal(ui.state.transcript.length, 2);
@@ -101,7 +105,7 @@ test('cancel or failed selected deletion keeps picker selection, messages and ev
     const evidence = ui.dom.evidence.innerHTML;
     await ui.deleteHistory();
     assert.equal(ui.state.sessionId, 'first');
-    assert.equal(ui.dom.conversationSelect.value, 'first');
+    assert.equal(activeId(ui), 'first');
     assert.equal(ui.state.conversations.length, 2);
     assert.equal(ui.state.transcript.length, 2);
     assert.equal(ui.dom.evidence.innerHTML, evidence);
@@ -143,7 +147,7 @@ test('list failures keep previous selection and allow refresh, without erasing s
   fail = true;
   await ui.refreshConversations();
   assert.equal(ui.state.conversations.length, 2);
-  assert.equal(ui.dom.conversationSelect.value, 'first');
+  assert.equal(activeId(ui), 'first');
   assert.match(ui.dom.conversationStatus.textContent, /Không thể tải danh sách/);
 });
 

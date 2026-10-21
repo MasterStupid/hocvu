@@ -327,11 +327,13 @@ test('empty exports download nothing; New only exports the currently displayed c
   assert.doesNotMatch(text, /Nguồn không còn hiển thị|lượt 2/);
 });
 
-test('delete button is present, mobile-visible, and bound to the real delete action', () => {
+test('delete button is present in settings on every screen size and bound to the real delete action', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'ui', 'index.html'), 'utf8');
-  assert.match(html, /class="utility-button delete-history-button"[^>]*data-hv="delete-history"/);
+  assert.match(html, /class="utility-button delete-history-button"[^>]*data-hv="delete-history"[^>]*type="button"/);
+  const dialog = html.slice(html.indexOf('data-hv="settings-dialog"'), html.indexOf('</dialog>'));
+  assert.match(dialog, /data-hv="delete-history"/);
   const css = fs.readFileSync(path.join(__dirname, '..', 'ui', 'styles.css'), 'utf8');
-  assert.match(css, /\.top-actions \.delete-history-button \{ display: inline-block;/);
+  assert.doesNotMatch(css, /\.delete-history-button\s*\{[^}]*display:\s*none/);
   const ui = loadUI();
   ui.bind();
   assert.equal(ui.dom.deleteHistory.events.click, ui.deleteHistory);

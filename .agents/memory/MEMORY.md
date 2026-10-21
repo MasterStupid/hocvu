@@ -18,3 +18,4 @@
 - [Conversation ownership](conversation-ownership.md) — shared login and legacy session IDs do not prove ownership; discovery and all chat operations need separate scoped authority.
 - [SQLite journal policy](sqlite-journal-policy.md) — WAL is explicitly requested; enable it outside migration transactions and use SQLite-aware live backups.
 - [Dependency audit floors](dependency-audit-floors.md) — the dependency scanner checks manifest minimums even when the installed environment already uses patched releases.
+- [UI preview verification](ui-preview-verification.md) — workflow fails without App Storage; preview UI via temp local-mode server; screenshot /index.html?x, not /.
