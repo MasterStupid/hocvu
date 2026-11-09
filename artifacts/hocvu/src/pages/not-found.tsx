@@ -1,23 +1,16 @@
-import { Card, CardContent } from '@/components/ui/card';
-import { AlertCircle } from 'lucide-react';
+import { Link } from 'wouter';
+import { Seal } from '@/components/brand';
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gray-50">
-      <Card className="w-full max-w-md mx-4">
-        <CardContent className="pt-6">
-          <div className="flex mb-4 gap-2">
-            <AlertCircle className="h-8 w-8 text-red-500" />
-            <h1 className="text-2xl font-bold text-gray-900">
-              404 Page Not Found
-            </h1>
-          </div>
-
-          <p className="mt-4 text-sm text-gray-600">
-            Did you forget to add the page to the router?
-          </p>
-        </CardContent>
-      </Card>
+    <div className="min-h-[70dvh] grid place-items-center px-6">
+      <div className="text-center max-w-md">
+        <Seal size={52} className="mx-auto opacity-80" />
+        <p className="kicker mt-6">Mã lỗi 404</p>
+        <h1 className="font-serif text-4xl mt-2">Không có điều khoản này</h1>
+        <p className="text-muted-foreground mt-3">Trang bạn tìm không tồn tại hoặc đã được chuyển đi.</p>
+        <Link href="/" className="btn btn-primary mt-6" data-testid="link-home">Về trang hỏi đáp</Link>
+      </div>
     </div>
   );
 }

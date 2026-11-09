@@ -17,6 +17,11 @@ def main() -> None:
     if os.environ.get("BASE_PATH", "/") != "/":
         raise RuntimeError("This imported application must be mounted at '/'.")
 
+    ui = APP.parent / "dist" / "public"
+    if not (ui / "index.html").is_file():
+        raise RuntimeError("React build is missing. Run pnpm --filter @workspace/hocvu run build.")
+    os.environ["HV_UI_DIR"] = str(ui)
+
     published = os.environ.get("REPLIT_DEPLOYMENT") == "1"
     os.environ.setdefault("HV_SEMANTIC", "0")
     os.environ.setdefault("HV_BROWSER_AUTH", "1")

@@ -1,7 +1,7 @@
 kind = "web"
 previewPath = "/"
 title = "HocVu AI"
-description = "HocVu AI gốc chạy bằng FastAPI trên Replit, giữ nguyên giao diện và API; không phụ thuộc Netlify."
+description = "Trợ lý quy chế đào tạo với giao diện React/TypeScript mới, hỏi đáp có nguồn, hội thoại và quản trị tài liệu; backend FastAPI trên Replit."
 version = "1.0.0"
 id = "artifacts/hocvu"
 router = "path"

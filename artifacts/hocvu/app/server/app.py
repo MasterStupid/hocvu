@@ -216,7 +216,8 @@ PUBLIC_CHAT_API = {
 }
 PUBLIC_CHAT_PAGES = {
     "/", "/index.html", "/main.js", "/theme.js", "/styles.css",
-    "/api-errors.js", "/favicon.ico",
+    "/api-errors.js", "/favicon.ico", "/favicon.svg",
+    "/library", "/documents", "/settings",
 }
 
 
@@ -226,6 +227,8 @@ def is_public_chat_request(request: Request) -> bool:
     return (
         (method, path) in PUBLIC_CHAT_API
         or (method == "GET" and path in PUBLIC_CHAT_PAGES)
+        # Compiled React assets contain no server credentials or private data.
+        or (method == "GET" and path.startswith("/assets/"))
         or (method == "GET" and path.startswith("/api/audio/"))
     )
 
@@ -665,13 +668,22 @@ async def get_audio_file(filename: str):
 
 # ── Phục vụ Giao diện Người dùng (Static Files) ──────────────────────────────
 @app.get("/", include_in_schema=False)
+@app.get("/library", include_in_schema=False)
+@app.get("/documents", include_in_schema=False)
+@app.get("/settings", include_in_schema=False)
 async def serve_index():
-    return FileResponse(UI / "index.html")
+    return FileResponse(UI / "index.html", headers={"Cache-Control": "no-store"})
 
 
 @app.get("/documents.html", include_in_schema=False)
 async def serve_docs_page():
-    return FileResponse(UI / "documents.html")
+    # Keep native Basic protection for old bookmarks. New React administration
+    # uses /documents and the same protected APIs, never the old static page.
+    page = UI / "documents.html"
+    return FileResponse(
+        page if page.is_file() else UI / "index.html",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 # Mount static assets (css, js, vendor)

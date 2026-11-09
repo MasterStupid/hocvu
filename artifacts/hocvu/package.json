@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "python run.py",
-    "build": "python -m compileall -q app/core app/server run.py",
+    "dev": "pnpm run build && python run.py",
+    "build": "vite build --config vite.config.ts && python -m compileall -q app/core app/server run.py",
     "serve": "python run.py",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

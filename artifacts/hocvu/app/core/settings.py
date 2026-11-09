@@ -47,7 +47,7 @@ IDX  = DATA / "index"
 AUD  = DATA / "audio"
 DOCS = DATA / "documents"
 MODELS = DATA / "models"
-UI   = ROOT / "ui"
+UI   = Path(os.environ.get("HV_UI_DIR", str(ROOT / "ui"))).expanduser().resolve()
 
 CORPUS_JSON = RAW / "corpus.json"
 CORPUS_MD   = RAW / "corpus.md"

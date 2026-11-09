@@ -1,8 +1,8 @@
 # HocVu AI trên Replit
 
-Mã ứng dụng Python/FastAPI gốc nằm trong `app/`; giao diện HTML/CSS/JS gốc được giữ nguyên.
-Không dùng Netlify hoặc viết lại ứng dụng sang React. Các tệp React của bộ khung không
-tham gia chạy ứng dụng.
+Backend Python/FastAPI gốc nằm trong `app/`; giao diện mới được viết bằng React/TypeScript
+ở `src/`. Giao diện HTML/CSS/JS cũ trong `app/ui/` được giữ để đối chiếu và kiểm thử,
+không còn là giao diện đang chạy. Không dùng Netlify.
 
 ## Chạy bản xem trước
 
@@ -10,6 +10,9 @@ Workflow được quản lý: **artifacts/hocvu: web**.
 Lệnh: `pnpm --filter @workspace/hocvu run dev`.
 Replit truyền `PORT`; máy chủ lắng nghe `0.0.0.0` và phục vụ cả trang `/` lẫn `/api/*`.
 Không chạy thêm máy chủ Express mẫu để phục vụ API HocVu.
+Workflow build React bằng Vite vào `dist/public/` rồi FastAPI phục vụ bản build đó.
+Sau khi chỉnh UI, restart workflow để build lại. Không có Vite proxy hoặc máy chủ frontend thứ hai.
+Các trang: `/` hỏi đáp, `/library` danh mục công khai, `/documents` quản trị, `/settings` cài đặt.
 
 Môi trường Python được quản lý ở thư mục gốc qua `pyproject.toml` và `uv.lock`.
 `HV_SEMANTIC=0` dùng BM25 có sẵn, không tải mô hình embeddings.
@@ -19,7 +22,9 @@ không để chúng kế thừa chế độ ESM của pnpm artifact cha.
 
 ## Quản trị và dữ liệu
 
-- Trang hỏi đáp công khai; `/documents.html` và API quản trị vẫn yêu cầu xác thực.
+- Trang hỏi đáp và shell React `/documents` công khai; dữ liệu/API quản trị vẫn yêu cầu xác thực.
+- Đăng nhập quản trị trong React dùng `X-HocVu-Token`, chỉ giữ mật khẩu trong bộ nhớ,
+  không lưu vào localStorage/sessionStorage. Bookmark cũ `/documents.html` vẫn có lớp HTTP Basic.
 - Đặt **HV_API_TOKEN** trong Replit Secrets để chọn mật khẩu quản trị.
   Tài khoản HTTP Basic hiện có là `hocvu`.
 - Chỉ ở môi trường xem trước, nếu chưa đặt `HV_API_TOKEN`, bộ chạy dùng
