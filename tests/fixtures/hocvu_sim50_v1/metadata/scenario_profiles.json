@@ -1,0 +1,127 @@
+{
+  "baseline40": {
+    "docs": [
+      "SIM-HV-001",
+      "SIM-HV-002",
+      "SIM-HV-003",
+      "SIM-HV-004",
+      "SIM-HV-005",
+      "SIM-HV-006",
+      "SIM-HV-007",
+      "SIM-HV-008",
+      "SIM-HV-009",
+      "SIM-HV-010",
+      "SIM-HV-011",
+      "SIM-HV-012",
+      "SIM-HV-013",
+      "SIM-HV-014",
+      "SIM-HV-015",
+      "SIM-HV-016",
+      "SIM-HV-017",
+      "SIM-HV-018",
+      "SIM-HV-019",
+      "SIM-HV-020",
+      "SIM-HV-021",
+      "SIM-HV-022",
+      "SIM-HV-023",
+      "SIM-HV-024",
+      "SIM-HV-025",
+      "SIM-HV-026",
+      "SIM-HV-027",
+      "SIM-HV-028",
+      "SIM-HV-029",
+      "SIM-HV-030",
+      "SIM-HV-031",
+      "SIM-HV-032",
+      "SIM-HV-033",
+      "SIM-HV-034",
+      "SIM-HV-035",
+      "SIM-HV-036",
+      "SIM-HV-037",
+      "SIM-HV-038",
+      "SIM-HV-039",
+      "SIM-HV-040"
+    ],
+    "purpose": "Kiểm thử dữ liệu bình thường, ở mốc 09/11/2026."
+  },
+  "temporal43": {
+    "docs": [
+      "SIM-HV-001",
+      "SIM-HV-002",
+      "SIM-HV-003",
+      "SIM-HV-004",
+      "SIM-HV-005",
+      "SIM-HV-006",
+      "SIM-HV-007",
+      "SIM-HV-008",
+      "SIM-HV-009",
+      "SIM-HV-010",
+      "SIM-HV-011",
+      "SIM-HV-012",
+      "SIM-HV-013",
+      "SIM-HV-014",
+      "SIM-HV-015",
+      "SIM-HV-016",
+      "SIM-HV-017",
+      "SIM-HV-018",
+      "SIM-HV-019",
+      "SIM-HV-020",
+      "SIM-HV-021",
+      "SIM-HV-022",
+      "SIM-HV-023",
+      "SIM-HV-024",
+      "SIM-HV-025",
+      "SIM-HV-026",
+      "SIM-HV-027",
+      "SIM-HV-028",
+      "SIM-HV-029",
+      "SIM-HV-030",
+      "SIM-HV-031",
+      "SIM-HV-032",
+      "SIM-HV-033",
+      "SIM-HV-034",
+      "SIM-HV-035",
+      "SIM-HV-036",
+      "SIM-HV-037",
+      "SIM-HV-038",
+      "SIM-HV-039",
+      "SIM-HV-040",
+      "SIM-HV-041",
+      "SIM-HV-042",
+      "SIM-HV-043"
+    ],
+    "purpose": "Thêm bản cũ/tương lai, chạy ref_date từng ca; chưa có filter tương lai thì ca này có thể thất bại."
+  },
+  "advanced_acceptance": {
+    "docs": [
+      "SIM-HV-044",
+      "SIM-HV-045",
+      "SIM-HV-046",
+      "SIM-HV-047",
+      "SIM-HV-048",
+      "SIM-HV-049",
+      "SIM-HV-050"
+    ],
+    "purpose": "Tiêu chí cho nâng cấp scope/approval/quarantine; KHÔNG nạp tất cả vào kho hỏi đáp đang phục vụ.",
+    "scope_pairs": [
+      [
+        "SIM-HV-028",
+        "SIM-HV-044"
+      ],
+      [
+        "SIM-HV-012",
+        "SIM-HV-045"
+      ],
+      [
+        "SIM-HV-026",
+        "SIM-HV-046"
+      ]
+    ],
+    "blocked_from_publication": [
+      "SIM-HV-047",
+      "SIM-HV-048",
+      "SIM-HV-049",
+      "SIM-HV-050"
+    ]
+  }
+}
