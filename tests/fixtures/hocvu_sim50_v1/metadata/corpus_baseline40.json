@@ -1,0 +1,2682 @@
+[
+  {
+    "rid": "SIM-HV-001",
+    "title": "[MÔ PHỎNG] Đăng ký khối lượng học tập — SIM-HV-001",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-001",
+    "valid_from": "2026-01-01",
+    "valid_until": "2026-12-31",
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-001 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Đăng ký khối lượng học tập. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Đăng ký khối lượng học tập",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Sinh viên diện thông thường đăng ký từ 12 đến 24 tín chỉ trong một học kỳ chính."
+          },
+          {
+            "cid": "2",
+            "content": "Sinh viên đang bị cảnh báo học vụ chỉ được đăng ký tối đa 16 tín chỉ; giới hạn 16 được ưu tiên hơn giới hạn thông thường."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Gửi kế hoạch học tập tới bộ phận đào tạo mô phỏng và lưu phiếu xác nhận; không tính học phần tự chọn chưa xác nhận vào khối lượng đã đăng ký."
+          },
+          {
+            "cid": "2",
+            "content": "Hoàn thành xác nhận chậm nhất 5 ngày làm việc trước ngày bắt đầu học kỳ."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: 2026-12-31. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-002",
+    "title": "[MÔ PHỎNG] Rút học phần — SIM-HV-002",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-002",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-002 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Rút học phần. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Rút học phần",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Sinh viên được rút học phần trong 14 ngày lịch đầu tiên tính từ ngày bắt đầu học kỳ, kể cả ngày đầu tiên."
+          },
+          {
+            "cid": "2",
+            "content": "Sau thời hạn 14 ngày, chỉ xem xét rút do điều trị nội trú có giấy xác nhận; việc chấp thuận không tự động phát sinh hoàn học phí."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Nộp đơn ghi mã lớp học phần và lý do; kết quả rút chỉ có hiệu lực sau xác nhận của bộ phận đào tạo mô phỏng."
+          },
+          {
+            "cid": "2",
+            "content": "Đơn ngoại lệ phải nộp trong 5 ngày làm việc từ ngày xuất viện."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-003",
+    "title": "[MÔ PHỎNG] Học phần tiên quyết — SIM-HV-003",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-003",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-003 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Học phần tiên quyết. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Học phần tiên quyết",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Chỉ đăng ký học phần B khi điểm tổng kết học phần tiên quyết A đạt từ 4,0 trên thang 10 trở lên."
+          },
+          {
+            "cid": "2",
+            "content": "Không dùng điểm đang chờ phúc khảo để coi là đã đạt tiên quyết; học phần song hành được ghi riêng không áp dụng quy tắc tiên quyết này."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Kiểm tra trạng thái điểm A trên bản ghi mô phỏng và gửi yêu cầu mở lớp B nếu thông tin đã cập nhật mà vẫn bị chặn."
+          },
+          {
+            "cid": "2",
+            "content": "Bộ phận đào tạo mô phỏng phản hồi yêu cầu trong 3 ngày làm việc."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-004",
+    "title": "[MÔ PHỎNG] Học lại và cải thiện điểm — SIM-HV-004",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-004",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-004 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Học lại và cải thiện điểm. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Học lại và cải thiện điểm",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Sinh viên được đăng ký cải thiện một học phần tối đa 2 lần sau lần học đầu tiên; điểm dùng tính tích lũy là điểm cao nhất của các lần hoàn tất."
+          },
+          {
+            "cid": "2",
+            "content": "Học phần có hành vi gian lận đã được kết luận không thuộc cơ chế chọn điểm cao nhất; phải xử lý theo quyết định kỷ luật mô phỏng riêng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Đăng ký lớp cải thiện và xác nhận đã hoàn tất lần học trước; các lần rút hợp lệ không tính là một lần cải thiện hoàn tất."
+          },
+          {
+            "cid": "2",
+            "content": "Xác nhận danh sách cải thiện trước buổi học đầu tiên 3 ngày làm việc."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-005",
+    "title": "[MÔ PHỎNG] Học bổng khuyến khích học tập — SIM-HV-005",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-005",
+    "valid_from": "2026-01-01",
+    "valid_until": "2026-12-31",
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-005 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Học bổng khuyến khích học tập. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Học bổng khuyến khích học tập",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Điều kiện xét học bổng gồm đồng thời GPA học kỳ từ 3,20 trên thang 4, điểm rèn luyện từ 80 trên thang 100 và ít nhất 15 tín chỉ được chấm điểm trong kỳ."
+          },
+          {
+            "cid": "2",
+            "content": "Đủ điều kiện chỉ được đưa vào danh sách xét, không bảo đảm được cấp; số suất được xếp theo quỹ mô phỏng và thứ tự GPA giảm dần."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Kiểm tra bảng điểm, điểm rèn luyện và số tín chỉ; nộp đề nghị đối soát nếu phát hiện dữ liệu sai."
+          },
+          {
+            "cid": "2",
+            "content": "Đề nghị đối soát gửi trong 7 ngày lịch từ ngày công bố danh sách dự kiến."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: 2026-12-31. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-006",
+    "title": "[MÔ PHỎNG] Cảnh báo học vụ — SIM-HV-006",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-006",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-006 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Cảnh báo học vụ. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Cảnh báo học vụ",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Sinh viên năm thứ nhất bị cảnh báo khi GPA học kỳ dưới 1,20; từ năm thứ hai bị cảnh báo khi GPA học kỳ dưới 1,40 trên thang 4."
+          },
+          {
+            "cid": "2",
+            "content": "Điểm đúng bằng ngưỡng không thuộc điều kiện 'dưới'; việc tạm dừng có phép cả học kỳ không tạo một lần cảnh báo mới."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Cố vấn mô phỏng thông báo và cùng sinh viên lập kế hoạch hỗ trợ học tập; không tự coi cảnh báo là quyết định thôi học."
+          },
+          {
+            "cid": "2",
+            "content": "Kế hoạch hỗ trợ nộp trong 10 ngày làm việc kể từ thông báo cảnh báo."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-007",
+    "title": "[MÔ PHỎNG] Bảo lưu kết quả học tập — SIM-HV-007",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-007",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-007 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Bảo lưu kết quả học tập. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Bảo lưu kết quả học tập",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Thời gian bảo lưu theo nhu cầu cá nhân tối đa 2 học kỳ chính liên tiếp."
+          },
+          {
+            "cid": "2",
+            "content": "Bảo lưu do nghĩa vụ hoặc điều trị dài hạn có hồ sơ được xem xét riêng, không tự áp giới hạn nhu cầu cá nhân."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Gửi đơn, kế hoạch quay lại và thông tin liên hệ; không mặc định ngừng đến lớp là đã được bảo lưu."
+          },
+          {
+            "cid": "2",
+            "content": "Nộp đơn ít nhất 10 ngày làm việc trước ngày dự kiến bắt đầu bảo lưu."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-008",
+    "title": "[MÔ PHỎNG] Trở lại học sau bảo lưu — SIM-HV-008",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-008",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-008 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Trở lại học sau bảo lưu. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Trở lại học sau bảo lưu",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Sinh viên nộp hồ sơ trở lại học ít nhất 15 ngày làm việc trước ngày bắt đầu học kỳ muốn quay lại."
+          },
+          {
+            "cid": "2",
+            "content": "Nếu chương trình đã đổi, phải có bảng đối chiếu học phần trước khi đăng ký; không tự công nhận toàn bộ môn mới là tương đương."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Nộp đơn trở lại, quyết định bảo lưu và bảng kết quả đã tích lũy; nhận kế hoạch học tập điều chỉnh từ bộ phận đào tạo mô phỏng."
+          },
+          {
+            "cid": "2",
+            "content": "Thông báo xử lý hồ sơ hợp lệ trong 5 ngày làm việc từ ngày tiếp nhận đủ thành phần."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-009",
+    "title": "[MÔ PHỎNG] Chuyển ngành nội bộ — SIM-HV-009",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-009",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-009 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Chuyển ngành nội bộ. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Chuyển ngành nội bộ",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Được đề nghị chuyển ngành sau ít nhất 2 học kỳ chính, GPA tích lũy từ 2,50 và còn trong thời gian đào tạo cho phép."
+          },
+          {
+            "cid": "2",
+            "content": "Không tiếp nhận đề nghị khi sinh viên đang trong thời hạn thi hành kỷ luật đình chỉ học; đủ điều kiện không bảo đảm ngành đích còn chỉ tiêu."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Nộp đơn kèm bảng điểm và kế hoạch học bù; ngành đích xem xét năng lực và chỉ tiêu."
+          },
+          {
+            "cid": "2",
+            "content": "Tiếp nhận hồ sơ trong 20 ngày lịch trước kỳ đăng ký học phần."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-010",
+    "title": "[MÔ PHỎNG] Học đồng thời chương trình thứ hai — SIM-HV-010",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-010",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-010 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Học đồng thời chương trình thứ hai. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Học đồng thời chương trình thứ hai",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Sinh viên được đề nghị học chương trình thứ hai khi đã tích lũy ít nhất 36 tín chỉ và GPA tích lũy từ 2,80."
+          },
+          {
+            "cid": "2",
+            "content": "Không tính tín chỉ đang học hoặc đang chờ điểm vào 36 tín chỉ đã tích lũy."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Nộp đơn và bảng kế hoạch tránh trùng lịch; bộ phận phụ trách hai chương trình cùng xác nhận."
+          },
+          {
+            "cid": "2",
+            "content": "Nộp trước ngày khóa đăng ký học phần 7 ngày làm việc."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-011",
+    "title": "[MÔ PHỎNG] Công nhận tín chỉ chuyển đổi — SIM-HV-011",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-011",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-011 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Công nhận tín chỉ chuyển đổi. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Công nhận tín chỉ chuyển đổi",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Một học phần được đề nghị công nhận khi nội dung tương đồng ít nhất 80% và khối lượng tín chỉ nguồn không thấp hơn học phần đích."
+          },
+          {
+            "cid": "2",
+            "content": "Tổng tín chỉ được công nhận theo cơ chế này không vượt quá 30% khối lượng chương trình; kết quả quá 5 năm cần thẩm định lại."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Nộp đề cương, bảng điểm nguồn và bảng đối chiếu; hội đồng mô phỏng xác nhận từng học phần."
+          },
+          {
+            "cid": "2",
+            "content": "Thông báo kết quả thẩm định trong 15 ngày làm việc từ ngày đủ hồ sơ."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-012",
+    "title": "[MÔ PHỎNG] Thực tập doanh nghiệp hệ cử nhân — SIM-HV-012",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-012",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-012 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Hệ cử nhân mô phỏng. Chủ đề: Thực tập doanh nghiệp hệ cử nhân. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Thực tập doanh nghiệp hệ cử nhân",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Sinh viên hệ cử nhân được đăng ký thực tập khi đã tích lũy ít nhất 100 tín chỉ và không nợ học phần chuyên ngành bắt buộc."
+          },
+          {
+            "cid": "2",
+            "content": "Sinh viên hệ kỹ sư không áp dụng ngưỡng của văn bản này; phải tra văn bản mô phỏng riêng đúng hệ."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Nộp đơn và xác nhận của đơn vị tiếp nhận; kế hoạch thực tập cần giảng viên hướng dẫn đồng ý."
+          },
+          {
+            "cid": "2",
+            "content": "Đăng ký trước ngày bắt đầu thực tập ít nhất 15 ngày làm việc."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-013",
+    "title": "[MÔ PHỎNG] Chấm điểm học phần thực tập — SIM-HV-013",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-013",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-013 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Chấm điểm học phần thực tập. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Chấm điểm học phần thực tập",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Điểm thực tập bằng 40% điểm báo cáo, 40% đánh giá đơn vị tiếp nhận và 20% điểm trình bày; mọi thành phần dùng thang 10."
+          },
+          {
+            "cid": "2",
+            "content": "Thiếu đánh giá đơn vị tiếp nhận thì trạng thái là chưa đủ điểm, không tự thay thành phần này bằng điểm báo cáo."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Nộp đủ báo cáo, phiếu đánh giá và biên bản trình bày; kết quả làm tròn một chữ số thập phân sau khi tính tổng."
+          },
+          {
+            "cid": "2",
+            "content": "Hoàn thiện hồ sơ điểm trong 7 ngày làm việc từ buổi trình bày."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-014",
+    "title": "[MÔ PHỎNG] Đăng ký khóa luận tốt nghiệp — SIM-HV-014",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-014",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-014 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Đăng ký khóa luận tốt nghiệp. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Đăng ký khóa luận tốt nghiệp",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Điều kiện đăng ký khóa luận là GPA tích lũy từ 2,70 và hoàn thành ít nhất 90% số tín chỉ của chương trình, không tính tín chỉ khóa luận."
+          },
+          {
+            "cid": "2",
+            "content": "Không tự quy đổi phần trăm thành số tín chỉ nếu chưa biết tổng khối lượng chương trình; sinh viên không đủ điều kiện được xem xét phương án học phần thay thế."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Nộp đề xuất đề tài, bảng điểm và chấp thuận người hướng dẫn; bộ môn mô phỏng duyệt phạm vi."
+          },
+          {
+            "cid": "2",
+            "content": "Đề xuất đề tài nộp trước ngày phân công hướng dẫn 10 ngày làm việc."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-015",
+    "title": "[MÔ PHỎNG] Gia hạn nộp khóa luận — SIM-HV-015",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-015",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-015 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Gia hạn nộp khóa luận. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Gia hạn nộp khóa luận",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Thời gian gia hạn nộp khóa luận theo diện thông thường tối đa 14 ngày lịch."
+          },
+          {
+            "cid": "2",
+            "content": "Chỉ có email xin gia hạn chưa được coi là chấp thuận; đề nghị nộp sau hạn gốc cần nêu lý do bất khả kháng và được xét riêng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Nộp đơn có ý kiến người hướng dẫn, lịch hoàn thành và xác nhận của bộ môn mô phỏng."
+          },
+          {
+            "cid": "2",
+            "content": "Đơn thông thường nộp ít nhất 3 ngày làm việc trước hạn nộp gốc."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-016",
+    "title": "[MÔ PHỎNG] Hồ sơ xét tốt nghiệp — SIM-HV-016",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-016",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-016 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Hồ sơ xét tốt nghiệp. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Hồ sơ xét tốt nghiệp",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Hồ sơ gồm đơn xét tốt nghiệp, bản đối chiếu tín chỉ và xác nhận hoàn thành nghĩa vụ thư viện; phải hoàn thành các chuẩn đầu ra được chương trình quy định."
+          },
+          {
+            "cid": "2",
+            "content": "Có đủ giấy tờ không thay thế yêu cầu đạt tín chỉ hoặc chuẩn đầu ra; văn bản này không tự đặt mức ngoại ngữ chung cho mọi ngành."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Nộp bộ hồ sơ qua đầu mối đào tạo mô phỏng; đối soát các mục thiếu trước khi khóa danh sách xét."
+          },
+          {
+            "cid": "2",
+            "content": "Bổ sung mục thiếu trong 5 ngày làm việc sau thông báo yêu cầu bổ sung."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-017",
+    "title": "[MÔ PHỎNG] Chuẩn ngoại ngữ ngành Kinh tế mô phỏng — SIM-HV-017",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-017",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-017 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Ngành Kinh tế mô phỏng, khóa 2026. Chủ đề: Chuẩn ngoại ngữ ngành Kinh tế mô phỏng. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Chuẩn ngoại ngữ ngành Kinh tế mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Đối với ngành Kinh tế mô phỏng khóa 2026, chứng chỉ kiểm thử LANG-SIM phải đạt từ 520 điểm và còn hạn tại ngày nộp hồ sơ."
+          },
+          {
+            "cid": "2",
+            "content": "LANG-SIM là thang điểm hư cấu, không tương đương TOEIC/IELTS và không dùng để kết luận giá trị chứng chỉ thật."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Nộp kết quả LANG-SIM cùng mã xác minh nội bộ giả lập; đơn vị ngoại ngữ mô phỏng đối soát."
+          },
+          {
+            "cid": "2",
+            "content": "Chứng chỉ kiểm thử có thời hạn 24 tháng tính từ ngày cấp."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-018",
+    "title": "[MÔ PHỎNG] Chuẩn kỹ năng số mô phỏng — SIM-HV-018",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-018",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-018 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Chuẩn kỹ năng số mô phỏng. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Chuẩn kỹ năng số mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Bài đánh giá DIGI-SIM gồm 3 mô-đun; phải đạt ít nhất 70/100 ở từng mô-đun để được công nhận hoàn thành."
+          },
+          {
+            "cid": "2",
+            "content": "Không lấy điểm trung bình ba mô-đun để bù một mô-đun dưới 70; DIGI-SIM không phải chứng chỉ thương mại có thật."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Đăng ký kiểm tra lại riêng mô-đun chưa đạt; giữ kết quả mô-đun đạt trong 12 tháng."
+          },
+          {
+            "cid": "2",
+            "content": "Đăng ký thi lại trước đợt đánh giá 5 ngày làm việc."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-019",
+    "title": "[MÔ PHỎNG] Vắng thi có lý do — SIM-HV-019",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-019",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-019 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Vắng thi có lý do. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Vắng thi có lý do",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Sinh viên được đề nghị xem xét vắng thi có lý do khi điều trị nội trú, có chứng từ xác nhận ngày trùng lịch thi."
+          },
+          {
+            "cid": "2",
+            "content": "Việc chấp thuận hoãn thi không đồng nghĩa miễn thi; không có chứng từ thì không tự áp dụng ngoại lệ điều trị."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Gửi đơn và giấy xác nhận tới bộ phận khảo thí mô phỏng; lịch thi bổ sung được thông báo sau duyệt."
+          },
+          {
+            "cid": "2",
+            "content": "Nộp trong 3 ngày làm việc từ ngày xuất viện."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-020",
+    "title": "[MÔ PHỎNG] Phúc khảo bài thi — SIM-HV-020",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-020",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-020 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Phúc khảo bài thi. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Phúc khảo bài thi",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Sinh viên được đề nghị phúc khảo bài thi viết trong 7 ngày làm việc kể từ ngày công bố điểm."
+          },
+          {
+            "cid": "2",
+            "content": "Bài thi vấn đáp không chấm lại từ bản ghi không tồn tại; khiếu nại thủ tục vấn đáp được tiếp nhận theo luồng riêng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Nộp đơn ghi mã học phần và bài thi; điểm sau phúc khảo hợp lệ thay điểm trước, có thể tăng hoặc giảm."
+          },
+          {
+            "cid": "2",
+            "content": "Thông báo kết quả trong 10 ngày làm việc sau khi hết hạn nhận đơn."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-021",
+    "title": "[MÔ PHỎNG] Đăng ký ký túc xá — SIM-HV-021",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-021",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-021 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Đăng ký ký túc xá. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Đăng ký ký túc xá",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Sinh viên đề nghị ở ký túc xá mô phỏng được đăng ký tối đa 1 chỗ ở và thời hạn hợp đồng mỗi lần là 10 tháng."
+          },
+          {
+            "cid": "2",
+            "content": "Nộp đơn không bảo đảm có chỗ; ưu tiên xét theo nhóm chính sách đã xác minh và số chỗ trống."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Nộp đơn và xác nhận tình trạng học tập; chỉ nhận phòng sau khi có thông báo phân chỗ."
+          },
+          {
+            "cid": "2",
+            "content": "Xác nhận nhận chỗ trong 5 ngày làm việc từ thông báo phân chỗ."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-022",
+    "title": "[MÔ PHỎNG] Hoàn học phí mô phỏng — SIM-HV-022",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-022",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-022 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Hoàn học phí mô phỏng. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Hoàn học phí mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Rút học phần được chấp thuận trước buổi học đầu tiên được hoàn 80% khoản học phí đã đóng cho học phần đó."
+          },
+          {
+            "cid": "2",
+            "content": "Sau buổi học đầu tiên không áp dụng mức hoàn 80% này; các trường hợp đặc biệt cần quyết định riêng, không suy ra từ việc rút môn hợp lệ."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Nộp phiếu rút đã duyệt và chứng từ thanh toán; không cung cấp thông tin tài khoản thật trong môi trường kiểm thử."
+          },
+          {
+            "cid": "2",
+            "content": "Đề nghị hoàn nộp trong 10 ngày làm việc kể từ quyết định rút."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-023",
+    "title": "[MÔ PHỎNG] Gia hạn đóng học phí — SIM-HV-023",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-023",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-023 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Gia hạn đóng học phí. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Gia hạn đóng học phí",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Mỗi học kỳ sinh viên được đề nghị gia hạn đóng học phí tối đa 1 lần, không quá 20 ngày lịch so với hạn gốc."
+          },
+          {
+            "cid": "2",
+            "content": "Gia hạn không phải miễn học phí; đề nghị chưa duyệt không tự làm thay đổi hạn thanh toán."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Nộp đơn và phương án thanh toán; đầu mối hỗ trợ sinh viên mô phỏng xác nhận kết quả."
+          },
+          {
+            "cid": "2",
+            "content": "Nộp trước hạn đóng gốc ít nhất 3 ngày làm việc."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-024",
+    "title": "[MÔ PHỎNG] Mượn tài liệu thư viện — SIM-HV-024",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-024",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-024 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Mượn tài liệu thư viện. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Mượn tài liệu thư viện",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Sinh viên được mượn tối đa 5 cuốn sách thông thường trong 14 ngày lịch."
+          },
+          {
+            "cid": "2",
+            "content": "Tài liệu tra cứu tại chỗ và bản duy nhất không thuộc diện mượn về; không dùng hạn 14 ngày để suy ra được mang tài liệu hạn chế ra ngoài."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Đăng ký mượn bằng mã bạn đọc giả lập; khi trả, nhận xác nhận hoàn tất từng cuốn."
+          },
+          {
+            "cid": "2",
+            "content": "Được gia hạn 1 lần thêm 7 ngày nếu chưa có người đặt trước."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-025",
+    "title": "[MÔ PHỎNG] Đặt phòng học nhóm — SIM-HV-025",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-025",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-025 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Đặt phòng học nhóm. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Đặt phòng học nhóm",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Một nhóm từ 3 đến 8 sinh viên được đặt phòng học nhóm tối đa 2 giờ mỗi lượt."
+          },
+          {
+            "cid": "2",
+            "content": "Một nhóm không được đặt hai phòng trùng thời gian; phòng không dành cho hoạt động thu phí thương mại."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Đăng ký mã nhóm giả lập và số thành viên; xác nhận sử dụng khi tới phòng."
+          },
+          {
+            "cid": "2",
+            "content": "Không xác nhận trong 15 phút đầu thì lượt đặt được hủy."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-026",
+    "title": "[MÔ PHỎNG] Phòng thí nghiệm cơ sở A — SIM-HV-026",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-026",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-026 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Cơ sở A mô phỏng. Chủ đề: Phòng thí nghiệm cơ sở A. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Phòng thí nghiệm cơ sở A",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Tại cơ sở A, chỉ sinh viên đã hoàn tất buổi hướng dẫn an toàn trong 12 tháng gần nhất được sử dụng phòng thí nghiệm."
+          },
+          {
+            "cid": "2",
+            "content": "Quy định này chỉ áp dụng cơ sở A; không suy ra thời hạn tập huấn của cơ sở B. Không làm việc một mình với thiết bị đang có điện áp thử nghiệm."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Đăng ký ca sử dụng và có người phụ trách xác nhận; báo ngay sự cố, không tự sửa thiết bị."
+          },
+          {
+            "cid": "2",
+            "content": "Nộp đăng ký ca ít nhất 2 ngày làm việc trước thời điểm sử dụng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-027",
+    "title": "[MÔ PHỎNG] Mượn thiết bị học tập — SIM-HV-027",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-027",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-027 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Mượn thiết bị học tập. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Mượn thiết bị học tập",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Mỗi sinh viên được mượn tối đa 1 máy tính mô phỏng trong 7 ngày lịch một lượt."
+          },
+          {
+            "cid": "2",
+            "content": "Chỉ cấp khi còn thiết bị; người mượn không được chuyển cho người khác hoặc đăng nhập tài khoản thật trên máy kiểm thử."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Ký biên bản hiện trạng giả lập khi nhận và trả; ghi rõ phụ kiện bàn giao."
+          },
+          {
+            "cid": "2",
+            "content": "Báo hỏng hoặc mất phụ kiện trong 1 ngày làm việc từ khi phát hiện."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-028",
+    "title": "[MÔ PHỎNG] Quy đổi điểm rèn luyện — SIM-HV-028",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-028",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-028 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Khóa 2026 mô phỏng; không áp dụng khóa 2027. Chủ đề: Quy đổi điểm rèn luyện. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Quy đổi điểm rèn luyện",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Điểm rèn luyện từ 90 đến 100 xếp Xuất sắc; từ 80 đến dưới 90 xếp Tốt; từ 65 đến dưới 80 xếp Khá; từ 50 đến dưới 65 xếp Trung bình; dưới 50 xếp Chưa đạt."
+          },
+          {
+            "cid": "2",
+            "content": "Điểm hợp lệ phải nằm trong khoảng 0 đến 100; điểm ngoài khoảng cần đối soát, không tự gán xếp loại."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Sinh viên xem bảng tiêu chí và minh chứng; gửi đối soát nếu hoạt động đã xác nhận bị thiếu."
+          },
+          {
+            "cid": "2",
+            "content": "Đề nghị đối soát trong 5 ngày làm việc từ công bố dự kiến."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-029",
+    "title": "[MÔ PHỎNG] Công nhận hoạt động tình nguyện — SIM-HV-029",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-029",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-029 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Công nhận hoạt động tình nguyện. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Công nhận hoạt động tình nguyện",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Một buổi tình nguyện hợp lệ có ít nhất 3 giờ hoạt động và xác nhận của đơn vị tổ chức mô phỏng."
+          },
+          {
+            "cid": "2",
+            "content": "Không tính thời gian di chuyển vào 3 giờ hoạt động; một buổi không được kê trùng ở hai danh mục minh chứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Nộp mã hoạt động, thời gian tham gia và xác nhận; không dùng tên hoặc thông tin người tham gia thật."
+          },
+          {
+            "cid": "2",
+            "content": "Kê khai minh chứng trong 10 ngày lịch từ ngày hoạt động kết thúc."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-030",
+    "title": "[MÔ PHỎNG] Kinh phí câu lạc bộ học thuật — SIM-HV-030",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-030",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-030 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Kinh phí câu lạc bộ học thuật. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Kinh phí câu lạc bộ học thuật",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Một đề xuất hoạt động câu lạc bộ được xét hỗ trợ tối đa 3.000.000 đồng mô phỏng mỗi hoạt động."
+          },
+          {
+            "cid": "2",
+            "content": "Mức tối đa không phải cam kết cấp đủ; không thanh toán tiền thật từ dữ liệu kiểm thử."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Nộp kế hoạch, dự toán và người phụ trách giả lập; quyết toán theo khoản đã được chấp thuận."
+          },
+          {
+            "cid": "2",
+            "content": "Đề xuất nộp ít nhất 10 ngày làm việc trước hoạt động."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-031",
+    "title": "[MÔ PHỎNG] Tiếp nhận kiến nghị học vụ — SIM-HV-031",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-031",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-031 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Tiếp nhận kiến nghị học vụ. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Tiếp nhận kiến nghị học vụ",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Kiến nghị học vụ được xác nhận tiếp nhận trong 2 ngày làm việc và thông báo hướng xử lý trong 7 ngày làm việc từ ngày đủ thông tin."
+          },
+          {
+            "cid": "2",
+            "content": "Thời gian xác nhận tiếp nhận không phải thời gian giải quyết cuối cùng; vụ việc cần xác minh được thông báo lý do kéo dài."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Nộp nội dung, mã vụ việc giả lập và kết quả mong muốn; không đưa hồ sơ cá nhân thật vào bộ thử nghiệm."
+          },
+          {
+            "cid": "2",
+            "content": "Nếu cần bổ sung, người gửi có 5 ngày làm việc từ thông báo yêu cầu."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-032",
+    "title": "[MÔ PHỎNG] Bảo vệ dữ liệu người học — SIM-HV-032",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-032",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-032 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Bảo vệ dữ liệu người học. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Bảo vệ dữ liệu người học",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Chỉ xử lý dữ liệu tối thiểu theo mục đích đã thông báo; người dùng có thể đề nghị xóa lịch sử kiểm thử của chính mình."
+          },
+          {
+            "cid": "2",
+            "content": "Quyền xem tài liệu không mặc nhiên cho quyền đọc hội thoại người khác; mọi tài khoản và định danh trong bộ này đều hư cấu."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Gửi yêu cầu xóa bằng phiên sở hữu hợp lệ; xác minh quyền trước khi xử lý và ghi nhận kết quả."
+          },
+          {
+            "cid": "2",
+            "content": "Phản hồi yêu cầu trong 5 ngày làm việc; việc hết hạn backup được mô tả riêng, không hứa xóa tức thì khỏi mọi bản sao."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-033",
+    "title": "[MÔ PHỎNG] Tài khoản học tập giả lập — SIM-HV-033",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-033",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-033 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Tài khoản học tập giả lập. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Tài khoản học tập giả lập",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Tài khoản bị tạm khóa sau 5 lần đăng nhập sai liên tiếp trong 10 phút; thời gian khóa tự động là 15 phút."
+          },
+          {
+            "cid": "2",
+            "content": "Nhân viên hỗ trợ không yêu cầu gửi mật khẩu qua chat; dữ liệu này không chứa tài khoản hay mật khẩu sử dụng thật."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Dùng luồng khôi phục danh tính đã xác minh; không cấp lại mật khẩu chỉ dựa vào tên hiển thị."
+          },
+          {
+            "cid": "2",
+            "content": "Yêu cầu hỗ trợ được xác nhận trong 1 ngày làm việc."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-034",
+    "title": "[MÔ PHỎNG] Thi trực tuyến mô phỏng — SIM-HV-034",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-034",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-034 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Thi trực tuyến mô phỏng. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Thi trực tuyến mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Sinh viên cần kiểm tra kết nối và thiết bị trước ca thi; khi mất kết nối liên tục trên 5 phút phải báo sự cố."
+          },
+          {
+            "cid": "2",
+            "content": "Báo sự cố không tự động được cộng giờ hoặc miễn thi; quyết định xử lý dựa trên log và biên bản."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Ghi mã ca thi giả lập, thời điểm bắt đầu và thời lượng sự cố; gửi qua kênh hỗ trợ mô phỏng đã công bố."
+          },
+          {
+            "cid": "2",
+            "content": "Thông báo sự cố trong 15 phút kể từ lúc kết nối được khôi phục."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-035",
+    "title": "[MÔ PHỎNG] Liêm chính học thuật — SIM-HV-035",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-035",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-035 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Liêm chính học thuật. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Liêm chính học thuật",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Bài nộp có tỷ lệ tương đồng trên 25% được đưa vào rà soát; tỷ lệ này không tự nó là kết luận đạo văn."
+          },
+          {
+            "cid": "2",
+            "content": "Trích dẫn đúng, danh mục tham khảo và thuật ngữ bắt buộc cần được xem xét riêng; không xử phạt chỉ bằng một chỉ số phần mềm."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Hội đồng mô phỏng đối chiếu nguồn và cho người học giải trình trước khi kết luận."
+          },
+          {
+            "cid": "2",
+            "content": "Người học nộp giải trình trong 5 ngày làm việc từ thông báo rà soát."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-036",
+    "title": "[MÔ PHỎNG] Cố vấn học tập — SIM-HV-036",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-036",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-036 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Cố vấn học tập. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Cố vấn học tập",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Mỗi lớp có ít nhất 1 buổi tư vấn học tập tập thể trong một học kỳ chính."
+          },
+          {
+            "cid": "2",
+            "content": "Tư vấn tập thể không thay thế hỗ trợ cá nhân khi sinh viên có khó khăn; cố vấn không tự sửa điểm đã công bố."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Đăng ký nội dung cần trao đổi, không công khai chi tiết riêng tư trong buổi chung."
+          },
+          {
+            "cid": "2",
+            "content": "Cố vấn xác nhận lịch hẹn cá nhân trong 3 ngày làm việc từ yêu cầu."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-037",
+    "title": "[MÔ PHỎNG] Hỗ trợ tiếp cận học tập — SIM-HV-037",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-037",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-037 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Hỗ trợ tiếp cận học tập. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Hỗ trợ tiếp cận học tập",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Người học có nhu cầu tiếp cận được đề nghị định dạng tài liệu thay thế hoặc điều chỉnh cách tổ chức đánh giá phù hợp."
+          },
+          {
+            "cid": "2",
+            "content": "Điều chỉnh không tự làm giảm chuẩn đầu ra; chỉ thu thông tin cần thiết, không yêu cầu công khai tình trạng cá nhân cho cả lớp."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Gửi nhu cầu hỗ trợ tới đầu mối hỗ trợ mô phỏng và thống nhất phương án với bộ phận chuyên môn."
+          },
+          {
+            "cid": "2",
+            "content": "Gửi đề nghị trước đợt đánh giá 10 ngày làm việc nếu có thể dự kiến trước."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-038",
+    "title": "[MÔ PHỎNG] Học kỳ trao đổi mô phỏng — SIM-HV-038",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-038",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-038 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Học kỳ trao đổi mô phỏng. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Học kỳ trao đổi mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Được đề nghị trao đổi khi GPA tích lũy từ 3,00 và đã hoàn thành ít nhất 2 học kỳ chính."
+          },
+          {
+            "cid": "2",
+            "content": "Được chấp thuận trao đổi không tự công nhận mọi tín chỉ ở nơi đến; cần kế hoạch đối chiếu trước."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Nộp đơn, bảng điểm và kế hoạch học phần; chỉ sử dụng cơ sở đối tác hư cấu trong kiểm thử."
+          },
+          {
+            "cid": "2",
+            "content": "Nộp hồ sơ trước kỳ trao đổi ít nhất 60 ngày lịch."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-039",
+    "title": "[MÔ PHỎNG] Thi lại do chưa đạt — SIM-HV-039",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-039",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-039 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Thi lại do chưa đạt. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Thi lại do chưa đạt",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Sinh viên có điểm tổng kết học phần dưới 4,0 trên thang 10 được đăng ký phương án học lại; thi lại riêng chỉ thực hiện nếu đề cương cho phép."
+          },
+          {
+            "cid": "2",
+            "content": "Không phải học phần nào cũng có ca thi lại riêng; không dùng một quy định chung để tạo lịch thi không được công bố."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Kiểm tra đề cương và đăng ký phương án hợp lệ; bộ phận khảo thí mô phỏng thông báo lịch nếu có."
+          },
+          {
+            "cid": "2",
+            "content": "Đăng ký trong 7 ngày làm việc từ thông báo đợt tiếp nhận."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "rid": "SIM-HV-040",
+    "title": "[MÔ PHỎNG] Cấp bảng điểm mô phỏng — SIM-HV-040",
+    "category": "Dữ liệu kiểm thử mô phỏng",
+    "version": "SIM-HV-040",
+    "valid_from": "2026-01-01",
+    "valid_until": null,
+    "issuer": "Cơ sở Giáo dục Mô phỏng SIM-HV (không có thật)",
+    "articles": [
+      {
+        "aid": "Điều 1",
+        "heading": "Mục đích, phạm vi và tính chất mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "DỮ LIỆU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ ÁP DỤNG. SIM-HV-040 chỉ phục vụ kiểm thử HocVu AI. Cơ quan và mọi số liệu đều hư cấu; không dùng cho quyết định học vụ hoặc giao dịch thật."
+          },
+          {
+            "cid": "2",
+            "content": "Phạm vi: Sinh viên mô phỏng thuộc phạm vi nêu trong nội dung. Chủ đề: Cấp bảng điểm mô phỏng. Không mở rộng quy tắc sang đối tượng hoặc cơ sở khác khi chưa có văn bản tương ứng."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 2",
+        "heading": "Cấp bảng điểm mô phỏng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Bảng điểm kiểm thử được cấp trong 3 ngày làm việc từ khi nhận đủ yêu cầu hợp lệ."
+          },
+          {
+            "cid": "2",
+            "content": "Bảng điểm chưa chốt ghi rõ dữ liệu tạm; tài liệu mô phỏng không có con dấu hay chữ ký thật và không dùng chứng minh thành tích."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 3",
+        "heading": "Trình tự và thời hạn xử lý",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Gửi yêu cầu bằng mã người học hư cấu và chọn bản tạm hoặc bản đã chốt; kiểm tra lại trước nhận."
+          },
+          {
+            "cid": "2",
+            "content": "Phản hồi lỗi nội dung trong 5 ngày làm việc từ ngày nhận."
+          }
+        ]
+      },
+      {
+        "aid": "Điều 4",
+        "heading": "Hiệu lực mô phỏng và giới hạn sử dụng",
+        "clauses": [
+          {
+            "cid": "1",
+            "content": "Trạng thái: Đã công bố trong mô phỏng. Ngày bắt đầu: 2026-01-01. Ngày cuối cùng còn hiệu lực: chưa ấn định. Ngày kết thúc, nếu có, được tính bao gồm ngày đó; từ ngày tiếp theo không áp dụng cho câu hỏi hiện tại."
+          },
+          {
+            "cid": "2",
+            "content": "Cán bộ và người học đều là vai giả lập, không có danh bạ liên hệ thật. Văn bản không quy định số điện thoại, email cá nhân hoặc mật khẩu; khi thiếu thông tin, phải thông báo chưa đủ căn cứ, không tự bịa."
+          }
+        ]
+      }
+    ]
+  }
+]
