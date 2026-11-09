@@ -1,45 +1,50 @@
-# [Project name]
+# HocVu AI
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Ứng dụng tra cứu quy chế đào tạo, nhập nguyên ứng dụng FastAPI và giao diện HTML/CSS/JS hiện có.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- Workflow **artifacts/hocvu: web** chạy `pnpm --filter @workspace/hocvu run dev`.
+- Máy chủ Python duy nhất phục vụ giao diện `/` và API `/api/*`, dùng `PORT` do artifact cung cấp.
+- `pnpm --filter @workspace/hocvu run build` kiểm tra biên dịch Python.
+- Kiểm thử gốc: `cd artifacts/hocvu/app && python -m unittest discover -s tests`.
+- Máy chủ Express mẫu được chuyển sang `/__template-api`; không dùng nó cho API HocVu.
 
 ## Stack
 
-- pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- Python 3.13, FastAPI/Uvicorn, giao diện tĩnh gốc.
+- BM25 mặc định (`HV_SEMANTIC=0`), không yêu cầu LLM để chạy tra cứu.
+- Python dependencies ở `pyproject.toml` và `uv.lock` trong workspace.
+- pnpm workspace chỉ cung cấp lệnh khởi chạy và quản lý artifact.
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/hocvu/app/`: mã nguồn ứng dụng gốc, các bài kiểm thử và tài liệu.
+- `artifacts/hocvu/run.py`: bộ chạy tích hợp môi trường Replit.
+- `artifacts/hocvu/README.md`: hướng dẫn chạy, quản trị và điều kiện publish.
+- `artifacts/hocvu/app/docs/persistent-storage.md`: thiết kế lưu trữ bền vững hiện có.
+- Không thay thế giao diện này bằng mã React mẫu trong artifact.
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Giữ nguyên ứng dụng và cơ chế phân quyền cũ trong lần nhập này.
+- Bản xem trước dùng SQLite/tệp local ở `.local/hocvu-data/`, không phải dữ liệu production.
+- Chưa chuyển kho dữ liệu cũ hoặc tự nhập bộ tài liệu mô phỏng vào kho hỏi đáp.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
-
-## User preferences
-
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Tra cứu quy chế, câu hỏi gợi ý, hội thoại theo trình duyệt, trích dẫn và giọng nói.
+- Quản trị tài liệu được bảo vệ bằng token hoặc HTTP Basic.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Không bỏ xác thực để kiểm thử trang quản trị.
+- Đặt `HV_API_TOKEN` riêng trong Secrets nếu cần đăng nhập bằng tài khoản `hocvu`.
+- Bản xem trước dùng `SESSION_SECRET` hiện có để bảo vệ API khi chưa có token riêng.
+  Không đọc/hiển thị giá trị secret hoặc đưa chúng vào mã nguồn.
+- Publish cần token riêng, PostgreSQL và bucket App Storage của dự án này;
+  ứng dụng từ chối dùng backend local khi publish. Không dùng ID bucket từ dự án cũ.
 
 ## Pointers
 
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- Metadata artifact phải được cập nhật qua công cụ kiểm tra schema, không sửa trực tiếp TOML thật.

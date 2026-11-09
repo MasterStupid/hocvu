@@ -1,4 +1,4 @@
-modules = ["nodejs-24"]
+modules = ["nodejs-24", "python-base-3.13"]
 
 [deployment]
 router = "application"
@@ -18,3 +18,14 @@ expertMode = true
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 20000
+
+[nix]
+channel = "stable-25_05"
+packages = ["freetype", "gumbo", "harfbuzz", "jbig2dec", "lcms2", "libimagequant", "libjpeg", "libjpeg_turbo", "libtiff", "libwebp", "libxcrypt", "mupdf", "openjpeg", "postgresql", "swig", "tcl", "tesseract", "tk", "xcbuild", "zlib"]
+
+[userenv]
+
+[userenv.development]
+HV_BROWSER_AUTH = "1"
+HV_SEMANTIC = "0"
+HV_STORAGE_BACKEND = "local"

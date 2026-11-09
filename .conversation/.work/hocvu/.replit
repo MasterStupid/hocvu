@@ -1,0 +1,56 @@
+modules = ["python-3.12", "nodejs-20", "web", "postgresql-16"]
+
+[nix]
+channel = "stable-25_05"
+packages = ["freetype", "gumbo", "harfbuzz", "jbig2dec", "lcms2", "libimagequant", "libjpeg", "libjpeg_turbo", "libtiff", "libwebp", "libxcrypt", "mupdf", "openjpeg", "postgresql", "swig", "tcl", "tesseract", "tk", "xcbuild", "zlib"]
+
+[agent]
+expertMode = true
+
+[userenv]
+
+[userenv.shared]
+HV_BROWSER_AUTH = "1"
+HV_SEMANTIC = "0"
+HV_STORAGE_BUCKET_ID = "replit-objstore-2f2faf63-38dd-4101-891c-d535e9a9d451"
+HV_STORAGE_PREFIX = "hocvu/v1"
+HV_STORAGE_BACKEND = "replit"
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start application"
+
+[[workflows.workflow]]
+name = "Start application"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python manage.py serve --host 0.0.0.0 --port 5000"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 180000
+
+[objectStorage]
+defaultBucketID = "replit-objstore-2f2faf63-38dd-4101-891c-d535e9a9d451"
+
+[deployment]
+deploymentTarget = "vm"
+run = ["python", "manage.py", "serve", "--host", "0.0.0.0", "--port", "5000"]

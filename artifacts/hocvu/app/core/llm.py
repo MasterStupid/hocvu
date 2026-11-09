@@ -1,0 +1,159 @@
+"""Optional grounded LLM response layer.
+
+The LLM never searches the web or invents regulations. It receives only the
+retrieved excerpts, and the extractive answer remains the safe fallback.
+"""
+from __future__ import annotations
+
+import json
+import time
+import urllib.error
+import urllib.request
+from urllib.parse import quote, urlsplit, urlunsplit
+
+from .models import Reference
+from .settings import clean_api_key
+
+
+class LLMError(RuntimeError):
+    pass
+
+
+class GroundedLLM:
+    def __init__(self, config):
+        self.config = config
+
+    @property
+    def configured(self) -> bool:
+        return (
+            self.config.llm_backend == "openai" and bool(clean_api_key(self.config.openai_key))
+        ) or (
+            self.config.llm_backend == "gemini" and bool(clean_api_key(self.config.gemini_key))
+        )
+
+    def rewrite(
+        self,
+        question: str,
+        extractive_answer: str,
+        references: list[Reference],
+        hits: list | None = None,
+    ) -> str:
+        if not self.configured:
+            raise LLMError("Chế độ AI chưa được cấu hình API key.")
+
+        if hits:
+            evidence = "\n\n".join(
+                f"[Nguồn {index + 1}: {hit.chunk.reg_title} - {hit.chunk.art_heading}]\n{hit.chunk.text}"
+                for index, hit in enumerate(hits[:3])
+            )
+        else:
+            evidence = "\n\n".join(
+                f"[Nguồn {index + 1}: {reference.reg_title} - {reference.art_heading}]\n{reference.excerpt}"
+                for index, reference in enumerate(references)
+            )
+
+        instructions = (
+            "Bạn là HocVu AI, trợ lý học vụ thông minh và chính xác. Nhiệm vụ tối thượng của bạn là "
+            "ƯU TIÊN TUYỆT ĐỐI CÂU TRẢ LỜI TRỰC TIẾP, ĐÚNG TRỌNG TÂM cho người học:\n"
+            "1. TRẢ LỜI THẲNG VÀO TRỌNG TÂM NGAY CÂU ĐẦU TIÊN: Không chào hỏi rườm rà, không giải thích lan man, "
+            "không lặp lại các thông tin ngoài lề không được hỏi.\n"
+            "2. HỎI ĐƯỜNG LINK / LIÊN KẾT: Cung cấp chính xác địa chỉ URL ngay lập tức (giữ nguyên từng ký tự của link).\n"
+            "3. HỎI HẠN CHÓT / THỜI GIAN: Nêu rõ ngày giờ, mốc thời gian cụ thể ngay lập tức.\n"
+            "4. HỎI CÁN BỘ / NGƯỜI LIÊN HỆ / SỐ ĐIỆN THOẠI: Nêu rõ họ tên, đơn vị và số điện thoại liên hệ ngay lập tức.\n"
+            "5. HỎI ĐIỀU KIỆN / THỦ TỤC / QUY CHẾ: Tóm tắt ngắn gọn, gạch đầu dòng rõ ràng từng ý chính.\n"
+            "6. CĂN CỨ VÀ TRUNG THỰC: Chỉ dùng thông tin có trong BẰNG CHỨNG. Tuyệt đối không tự suy diễn hoặc bịa đặt. "
+            "Nếu bằng chứng không có thông tin được hỏi, hãy thông báo ngắn gọn rằng tài liệu chưa có thông tin này."
+        )
+        prompt = (
+            f"Câu hỏi người học: {question}\n\n"
+            f"BẢN TRÍCH XUẤT AN TOÀN:\n{extractive_answer}\n\n"
+            f"BẰNG CHỨNG:\n{evidence}\n\n"
+            "Hãy trả lời trực tiếp và súc tích nhất theo các nguyên tắc trên."
+        )
+        if self.config.llm_backend == "openai":
+            payload = {
+                "model": self.config.openai_model,
+                "instructions": instructions,
+                "input": prompt,
+                "max_output_tokens": 450,
+                "store": False,
+            }
+            endpoint = self._responses_endpoint(self.config.openai_url)
+            headers = {
+                "Authorization": f"Bearer {self.config.openai_key}",
+                "Content-Type": "application/json",
+            }
+            extract = self._output_text
+        elif self.config.llm_backend == "gemini":
+            payload = {
+                "systemInstruction": {"parts": [{"text": instructions}]},
+                "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+                "generationConfig": {"maxOutputTokens": 450, "temperature": 0.2},
+            }
+            endpoint = self._gemini_endpoint(self.config.gemini_url, self.config.gemini_model)
+            headers = {
+                "x-goog-api-key": self.config.gemini_key,
+                "Content-Type": "application/json",
+            }
+            extract = self._gemini_output_text
+        else:
+            raise LLMError("Chế độ AI chưa hỗ trợ nhà cung cấp đã chọn.")
+        request = urllib.request.Request(endpoint, data=json.dumps(payload).encode("utf-8"), method="POST", headers=headers)
+        for attempt in range(2):
+            try:
+                with urllib.request.urlopen(request, timeout=35) as response:
+                    body = json.loads(response.read().decode("utf-8"))
+                break
+            except urllib.error.HTTPError as exc:
+                if exc.code in {429, 500, 502, 503, 504} and attempt == 0:
+                    time.sleep(0.4)
+                    continue
+                raise LLMError("Không thể gọi mô hình AI lúc này; đã dùng câu trả lời từ tài liệu.") from exc
+            except (urllib.error.URLError, TimeoutError) as exc:
+                raise LLMError("Không thể gọi mô hình AI lúc này; đã dùng câu trả lời từ tài liệu.") from exc
+        text = extract(body)
+        if not text:
+            raise LLMError("Mô hình AI không trả về nội dung hợp lệ; đã dùng câu trả lời từ tài liệu.")
+        return text.strip()
+
+    @staticmethod
+    def _responses_endpoint(base_url: str) -> str:
+        """Append `/responses` without breaking a proxy URL query string."""
+        parts = urlsplit(base_url)
+        path = parts.path.rstrip("/")
+        if not path.endswith("/responses"):
+            path = f"{path}/responses"
+        return urlunsplit((parts.scheme, parts.netloc, path, parts.query, parts.fragment))
+
+    @staticmethod
+    def _gemini_endpoint(base_url: str, model: str) -> str:
+        """Build the REST `generateContent` endpoint from a Gemini base URL."""
+        parts = urlsplit(base_url)
+        path = parts.path.rstrip("/")
+        if not path.endswith(":generateContent"):
+            path = f"{path}/models/{quote(model, safe='-._')}:generateContent"
+        return urlunsplit((parts.scheme, parts.netloc, path, parts.query, parts.fragment))
+
+    @staticmethod
+    def _output_text(body: dict) -> str:
+        direct = body.get("output_text")
+        if isinstance(direct, str) and direct.strip():
+            return direct
+        parts = []
+        for item in body.get("output", []):
+            for content in item.get("content", []):
+                if content.get("type") == "output_text" and isinstance(content.get("text"), str):
+                    parts.append(content["text"])
+        return "\n".join(parts)
+
+    @staticmethod
+    def _gemini_output_text(body: dict) -> str:
+        parts: list[str] = []
+        for candidate in body.get("candidates", []):
+            content = candidate.get("content", {})
+            for part in content.get("parts", []):
+                if isinstance(part.get("text"), str):
+                    parts.append(part["text"])
+            if parts:
+                break
+        return "\n".join(parts)

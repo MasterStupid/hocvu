@@ -1,0 +1,23 @@
+kind = "web"
+previewPath = "/"
+title = "HocVu AI"
+description = "HocVu AI gốc chạy bằng FastAPI trên Replit, giữ nguyên giao diện và API; không phụ thuộc Netlify."
+version = "1.0.0"
+id = "artifacts/hocvu"
+router = "path"
+
+[[services]]
+name = "web"
+paths = ["/", "/api"]
+localPort = 21953
+
+[services.development]
+run = "pnpm --filter @workspace/hocvu run dev"
+
+[services.production]
+build = ["pnpm", "--filter", "@workspace/hocvu", "run", "build"]
+run = ["python", "artifacts/hocvu/run.py"]
+
+[services.env]
+PORT = "21953"
+BASE_PATH = "/"
