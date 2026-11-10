@@ -57,3 +57,4 @@ Thumbs.db
 __pycache__/
 *.py[cod]
 /generated-artifacts/
+artifacts/hocvu/app/generated-artifacts/
