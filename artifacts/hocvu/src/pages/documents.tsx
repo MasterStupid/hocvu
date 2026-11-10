@@ -152,7 +152,7 @@ function Admin({ token }: { token: string }) {
       <div className="mt-6 space-y-3">
         <StorageIndicator state={storage} />
         {status && <NoticeBar tone={status.tone} onClose={busy ? undefined : () => setStatus(null)}
-          action={backup && status.tone !== 'error' && status.tone !== 'info' ? (
+          action={backup && status.tone !== 'info' ? (
             <button type="button" className="btn btn-outline btn-sm" onClick={downloadBackup} disabled={downloading} data-testid="button-download-backup">
               {downloading ? <Loader2 className="animate-spin" /> : <Download />} Tải về máy
             </button>) : undefined}>{status.text}</NoticeBar>}
