@@ -24,7 +24,10 @@ class BlobStorage:
             raise StorageUnavailable("HV_STORAGE_PREFIX không hợp lệ.")
         if client is None:
             from replit.object_storage import Client
-            client = Client(bucket_id=os.environ.get("HV_STORAGE_BUCKET_ID") or None)
+            bucket = os.environ.get("HV_STORAGE_BUCKET_ID") or os.environ.get("DEFAULT_OBJECT_STORAGE_BUCKET_ID")
+            if not bucket:
+                raise StorageUnavailable("Chưa cấu hình bucket App Storage của dự án. Không lưu thay thế trên ổ đĩa.")
+            client = Client(bucket_id=bucket)
         self.client = client
 
     def check(self):

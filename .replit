@@ -1,4 +1,4 @@
-modules = ["nodejs-24", "python-base-3.13"]
+modules = ["nodejs-24", "python-base-3.13", "postgresql-16"]
 
 [deployment]
 router = "application"
@@ -48,4 +48,10 @@ packages = ["freetype", "gumbo", "harfbuzz", "jbig2dec", "lcms2", "libimagequant
 [userenv.development]
 HV_BROWSER_AUTH = "1"
 HV_SEMANTIC = "0"
-HV_STORAGE_BACKEND = "local"
+HV_STORAGE_BACKEND = "replit"
+
+[userenv.shared]
+HV_STORAGE_PREFIX = "hocvu/v1"
+
+[userenv.production]
+HV_STORAGE_BACKEND = "replit"

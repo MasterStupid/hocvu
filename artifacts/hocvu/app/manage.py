@@ -53,6 +53,8 @@ def main():
     migrate_parser.add_argument("--apply", action="store_true")
     migrate_parser.add_argument("--confirm", action="store_true")
     subparsers.add_parser("init-storage-schema", help="Apply PostgreSQL schema in development only; never use in production")
+    empty_parser = subparsers.add_parser("init-empty-storage", help="Initialize an empty development store without importing local data")
+    empty_parser.add_argument("--confirm", action="store_true")
 
     subparsers.add_parser("audit-document-dates", help="Read-only audit of invalid stored document dates")
     repair_parser = subparsers.add_parser("repair-document-dates", help="Offline recovery of selected invalid document dates")
@@ -76,7 +78,7 @@ def main():
     
     args = parser.parse_args()
     config = load_config()
-    if args.command in {"backup-storage", "migrate-storage", "init-storage-schema"}:
+    if args.command in {"backup-storage", "migrate-storage", "init-storage-schema", "init-empty-storage"}:
         from core.persistent_db import StorageUnavailable, connect_database
         from core.storage_backend import document_repository, storage_backend
         from core.storage_transfer import backup_local, backup_persistent, import_backup
@@ -87,6 +89,9 @@ def main():
                 with connect_database() as connection:
                     connection.execute((Path(__file__).parent / "migrations" / "001_persistent_storage.sql").read_text())
                 result = {"schema": "ready", "environment": "development"}
+            elif args.command == "init-empty-storage":
+                from core.persistent_documents import DocumentState
+                result = DocumentState().initialize_empty(confirmed=args.confirm)
             elif args.command == "backup-storage":
                 repository = document_repository(DOCS)
                 result = backup_persistent(repository) if storage_backend() == "replit" else backup_local(DATA)

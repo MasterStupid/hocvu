@@ -53,8 +53,9 @@ không thay thế kiểm thử API FastAPI hoặc kiểm thử trình duyệt tr
 - Chỉ ở môi trường xem trước, nếu chưa đặt `HV_API_TOKEN`, bộ chạy dùng
   `SESSION_SECRET` đang có để giữ API được bảo vệ. Không ghi hoặc hiển thị giá trị này;
   hãy đặt `HV_API_TOKEN` riêng nếu muốn đăng nhập quản trị.
-- Bản xem trước dùng `HV_STORAGE_BACKEND=local` và dữ liệu ở
-  `.local/hocvu-data/` của workspace. Không đưa dữ liệu chạy thử vào Git.
+- Bản xem trước dùng `HV_STORAGE_BACKEND=replit`: PostgreSQL lưu metadata/lịch sử,
+  App Storage của chính dự án lưu tệp; `.local/hocvu-data/` chỉ là cache.
+  Dữ liệu local cũ vẫn giữ nguyên, không tự nhập vào kho bền vững.
 - Chưa chuyển dữ liệu từ hệ thống cũ và chưa tự nạp bộ 50 tài liệu mô phỏng.
   Kho mẫu có sẵn của ứng dụng vẫn là dữ liệu minh họa, không phải quy định chính thức.
 

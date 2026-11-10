@@ -33,7 +33,7 @@
 - Giữ backend và phân quyền API khi thay toàn bộ giao diện bằng React theo yêu cầu người dùng.
 - Trang quản trị React `/documents` chỉ là shell công khai; dữ liệu quản trị vẫn bắt buộc token.
 - Giữ khóa định danh hội thoại cũ để không làm mất khả năng truy cập lịch sử sau khi đổi giao diện.
-- Bản xem trước dùng SQLite/tệp local ở `.local/hocvu-data/`, không phải dữ liệu production.
+- Bản xem trước dùng PostgreSQL + App Storage của chính dự án (`HV_STORAGE_BACKEND=replit`); `.local/hocvu-data/` chỉ là cache có thể dựng lại. Dữ liệu local cũ không tự chuyển.
 - Chưa chuyển kho dữ liệu cũ hoặc tự nhập bộ tài liệu mô phỏng vào kho hỏi đáp.
 
 ## Product

@@ -7,6 +7,7 @@ from core.blob_storage import BlobStorage, safe_relative_path
 from core.persistent_db import StorageUnavailable
 from core.storage_backend import storage_backend, document_repository, session_store
 from core.storage_transfer import import_backup
+from core.persistent_documents import DocumentState
 try:
     from tests.persistence_helpers import MemoryObjects
 except ImportError:  # run via `unittest discover -s tests`
@@ -14,6 +15,28 @@ except ImportError:  # run via `unittest discover -s tests`
 
 
 class StorageSafetyTests(unittest.TestCase):
+    def test_merge_setup_leaves_new_schema_available_for_operator_choice(self):
+        script = (Path(__file__).resolve().parents[4] / "scripts" / "post-merge.sh").read_text()
+        self.assertIn("python manage.py init-storage-schema", script)
+        self.assertNotIn("init-empty-storage", script)
+        self.assertNotIn("migrate-storage", script)
+
+    def test_empty_setup_requires_confirmation_and_never_runs_in_production(self):
+        with self.assertRaises(StorageUnavailable):
+            DocumentState().initialize_empty()
+        with patch.dict("os.environ", {"REPLIT_DEPLOYMENT": "1"}):
+            with self.assertRaises(StorageUnavailable):
+                DocumentState().initialize_empty(confirmed=True)
+
+    def test_project_bucket_is_explicit_not_sdk_legacy_default(self):
+        with patch.dict("os.environ", {"HV_STORAGE_BUCKET_ID": "", "DEFAULT_OBJECT_STORAGE_BUCKET_ID": "current-project"}):
+            with patch("replit.object_storage.Client") as client:
+                BlobStorage()
+                client.assert_called_once_with(bucket_id="current-project")
+        with patch.dict("os.environ", {"HV_STORAGE_BUCKET_ID": "", "DEFAULT_OBJECT_STORAGE_BUCKET_ID": ""}):
+            with self.assertRaises(StorageUnavailable):
+                BlobStorage()
+
     def test_published_local_mode_fails_instead_of_losing_data(self):
         with patch.dict("os.environ", {"REPLIT_DEPLOYMENT": "1", "HV_STORAGE_BACKEND": "local"}):
             with self.assertRaisesRegex(RuntimeError, "HV_STORAGE_BACKEND=replit"):

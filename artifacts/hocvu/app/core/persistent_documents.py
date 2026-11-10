@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 import hashlib
+import os
 from pathlib import Path
 import tempfile
 
@@ -14,12 +15,27 @@ from .persistent_db import StorageUnavailable, connect_database
 
 
 class DocumentState:
+    def initialize_empty(self, *, confirmed=False, blobs=None):
+        """Explicit dev-only setup, never an import or overwrite of existing data."""
+        if os.environ.get("REPLIT_DEPLOYMENT") == "1":
+            raise StorageUnavailable("Chỉ khởi tạo kho trong development, không trong bản publish.")
+        if not confirmed:
+            raise StorageUnavailable("Khởi tạo kho trống cần --confirm; không chuyển dữ liệu local.")
+        (blobs or BlobStorage()).check()
+        with self.writer(), connect_database() as connection:
+            result = connection.execute("""
+                INSERT INTO hv_document_state (id, revision, manifest, objects)
+                VALUES (1, 1, '[]'::jsonb, '{}'::jsonb)
+                ON CONFLICT (id) DO NOTHING
+            """)
+            return {"initialized": bool(result.rowcount), "environment": "development"}
+
     def snapshot(self, *, initialized=True):
         with connect_database() as connection:
             row = connection.execute("SELECT revision, manifest, objects FROM hv_document_state WHERE id = 1").fetchone()
         if row is None:
             if initialized:
-                raise StorageUnavailable("Chưa chuyển dữ liệu. Chạy migrate-storage trước khi bật HV_STORAGE_BACKEND=replit.")
+                raise StorageUnavailable("Chưa khởi tạo kho. Chạy init-empty-storage --confirm cho kho mới hoặc migrate-storage khi chủ động chuyển dữ liệu.")
             return 0, [], {}
         return row
 

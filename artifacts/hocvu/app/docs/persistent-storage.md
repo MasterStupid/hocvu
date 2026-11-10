@@ -17,8 +17,9 @@ publish làm nguồn dữ liệu chính. Nếu PostgreSQL/App Storage không ho�
 
 ## Thiết lập và chuyển dữ liệu lần đầu
 
-1. Trong Replit, mở **App Storage**, chọn **Create new bucket**, đặt tên rồi
-   **Create bucket**. Xem **Bucket ID** trong Settings của bucket.
+1. Dùng App Storage của **chính dự án hiện tại**. Luồng thiết lập Replit tạo
+   bucket và `DEFAULT_OBJECT_STORAGE_BUCKET_ID`; backend truyền rõ ID này vào
+   SDK, không dựa vào cấu hình mặc định `.replit` cũ. Không chép ID từ dự án khác.
 2. Đặt biến **không bí mật** `HV_STORAGE_BUCKET_ID` bằng ID đó, hoặc để trống
    nếu đã có bucket mặc định của dự án. `HV_STORAGE_PREFIX=hocvu/v1` phân vùng
    đối tượng của ứng dụng; không đổi prefix sau khi chuyển dữ liệu.
@@ -32,7 +33,28 @@ publish làm nguồn dữ liệu chính. Nếu PostgreSQL/App Storage không ho�
    Nguồn schema nằm trong `migrations/001_persistent_storage.sql`. Khi publish,
    Replit áp dụng chênh lệch schema development → production. Ứng dụng không
    chạy DDL khi khởi động và không có script tự sửa schema production.
-4. Tạo bản sao lưu khi vẫn ở chế độ local:
+   Sau bước schema, **chọn đúng một nhánh**: bước 4 cho kho mới, hoặc bước
+   5–8 nếu chủ động nhập dữ liệu cũ. Không chạy bước 4 trước khi nhập backup:
+   danh mục đã khởi tạo cũng được coi là đích có dữ liệu và sẽ bị từ chối nhập.
+
+4. **Kho mới, không nhập dữ liệu cũ:** chạy từ `artifacts/hocvu/app`:
+
+   ```sh
+   python manage.py init-empty-storage --confirm
+   ```
+
+   Lệnh chỉ chạy trong development, kiểm tra App Storage và khởi tạo danh mục
+   trống nếu chưa có. Chạy lại không ghi đè dữ liệu. Không đọc/nhập dữ liệu
+   SQLite hay tài liệu local; chỉ dùng nhánh chuyển dữ liệu dưới đây khi người
+   quản trị chủ động yêu cầu. Mọi lệnh `manage.py` trên trang này chạy từ
+   `artifacts/hocvu/app`.
+
+   Tạo `HV_API_TOKEN` riêng qua **Tools → Secrets**, không gửi qua chat, không
+   dùng lại `SESSION_SECRET`. Đặt `HV_STORAGE_BACKEND=replit` cho development
+   và production; `HV_STORAGE_PREFIX=hocvu/v1` dùng chung trong cùng dự án.
+   Sau đó restart workflow **artifacts/hocvu: web**.
+
+5. **Chỉ khi chủ động chuyển dữ liệu cũ:** tạo bản sao lưu khi vẫn ở chế độ local:
 
    ```sh
    HV_STORAGE_BACKEND=local python manage.py backup-storage
@@ -42,14 +64,14 @@ publish làm nguồn dữ liệu chính. Nếu PostgreSQL/App Storage không ho�
    Chứa tài liệu, văn bản trích xuất, lịch sử, quyền sở hữu, dấu đã xóa và bản
    SQLite nhất quán lấy bằng backup API, không chỉ chép `sessions.db`.
    Không chứa `.env`, API token, model tải về hoặc cache embedding.
-5. **Dừng workflow máy chủ** trước khi chuyển để không bỏ sót lượt hỏi hay
+6. **Dừng workflow máy chủ** trước khi chuyển để không bỏ sót lượt hỏi hay
    thao tác tài liệu phát sinh. Kiểm tra trước bằng:
 
    ```sh
    HV_STORAGE_BACKEND=local python manage.py migrate-storage --backup generated-artifacts/backups/TEN-BAN-SAO-LUU.zip
    ```
 
-6. Áp dụng sau khi xác nhận nguồn:
+7. Áp dụng sau khi xác nhận nguồn:
 
    ```sh
    HV_STORAGE_BACKEND=local python manage.py migrate-storage \
@@ -62,7 +84,7 @@ publish làm nguồn dữ liệu chính. Nếu PostgreSQL/App Storage không ho�
    không nhập trùng, không phục hồi hội thoại đã bị xóa sau lần nhập đầu.
    Nếu lỗi giữa chừng, bản local và bản sao lưu vẫn được giữ; đối tượng chưa
    được tham chiếu có thể còn trên App Storage nhưng không xuất hiện trong kho.
-7. Đặt `HV_STORAGE_BACKEND=replit` và khởi động lại workflow. Kiểm tra trang
+8. Đặt `HV_STORAGE_BACKEND=replit` và khởi động lại workflow. Kiểm tra trang
    quản lý báo **Lưu bền vững: App Storage + PostgreSQL**. Hỏi đáp vẫn công khai;
    API quản trị và bản sao lưu vẫn cần mật khẩu.
 
@@ -88,6 +110,10 @@ trên bản chạy khác, phải sao lưu từ đúng nguồn đó trước khi 
   Các process khác có thể nhận bản sửa đổi kho mới và dựng lại chỉ mục ở lần
   đọc tiếp theo; giới hạn tần suất vẫn là theo process.
 - Không tự publish bằng script. Người quản trị kiểm tra rồi chọn Publish.
+- Sau khi merge, `scripts/post-merge.sh` chỉ áp dụng schema Python trong
+  development, không chạy push schema Drizzle trống của API mẫu. Script này
+  không khởi tạo danh mục, không nhập dữ liệu local và không sửa production.
+  Người quản trị tự chọn khởi tạo kho trống hoặc nhập backup vào đích mới.
 
 ## Sao lưu và khôi phục
 
@@ -126,3 +152,16 @@ Kiểm thử PostgreSQL dùng schema ngẫu nhiên riêng, không sửa dữ li�
 HV_STORAGE_BACKEND=local HV_TEST_POSTGRES=1 HV_SEMANTIC=0 \
   python -m unittest discover -s tests -v
 ```
+
+Kiểm chứng thêm với **App Storage thật của dự án**, hai process Python riêng
+và xóa toàn bộ cache giữa hai lần chạy:
+
+```sh
+HV_STORAGE_BACKEND=local HV_TEST_POSTGRES=1 HV_TEST_APP_STORAGE=1 HV_SEMANTIC=0 \
+  python -m unittest tests.test_live_persistent_storage -v
+```
+
+Bài kiểm tra dùng schema ngẫu nhiên và prefix `hocvu-checks/` riêng, tạo tài
+liệu DOCX thật, kiểm tra byte gốc, văn bản, chỉ mục, lịch sử có căn cứ, owner,
+dấu đã xóa và ZIP sao lưu trên App Storage. Dữ liệu kiểm tra được dọn sau khi
+chạy; không chuyển dữ liệu hiện hữu vào kho thật.

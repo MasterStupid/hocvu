@@ -27,6 +27,18 @@ TEXT = "## Điều 1. Hỗ trợ nghiên cứu\nSinh viên nghiên cứu đượ
 
 
 class PersistentStorageTests(PostgresCase):
+    def test_explicit_empty_setup_does_not_import_local_or_overwrite_remote(self):
+        result = self.state.initialize_empty(confirmed=True, blobs=self.blobs)
+        self.assertTrue(result["initialized"])
+        self.assertEqual(self.state.snapshot(), (1, [], {}))
+        with self.cloud_repo().adding_many([{
+            "filename": "new.pdf", "content": b"%PDF-1.7 new",
+        }]):
+            pass
+        before = self.state.snapshot()
+        self.assertFalse(self.state.initialize_empty(confirmed=True, blobs=self.blobs)["initialized"])
+        self.assertEqual(self.state.snapshot(), before)
+
     def setUp(self):
         super().setUp()
         self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
@@ -87,6 +99,9 @@ class PersistentStorageTests(PostgresCase):
         self.assertEqual(Path(latest["path"]).stat().st_mode & 0o777, 0o600)
 
     def test_migration_is_atomic_idempotent_and_preserves_legacy_unknowns(self):
+        # A freshly applied schema has no document state: import is an
+        # independent alternative to explicitly initializing a new empty store.
+        self.assertEqual(self.state.snapshot(initialized=False), (0, [], {}))
         dry = import_backup(self.backup["path"], blobs=self.blobs, state=self.state)
         self.assertFalse(dry["applied"])
         self.assertEqual(self.state.snapshot(initialized=False), (0, [], {}))
