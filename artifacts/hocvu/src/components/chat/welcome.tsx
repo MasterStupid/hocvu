@@ -4,6 +4,7 @@ import { AudioLines, BookMarked, ChevronRight, Mic, MicOff, ScanSearch, Volume2 
 import { useSuggestions } from '@/hooks/use-public';
 import { describeError } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { UniversityLogo } from '@/components/brand';
 
 const FLOW = [
   { icon: Mic, title: 'Nói', tech: 'Speech-to-Text', body: 'Trình duyệt chuyển lời nói tiếng Việt thành văn bản. Bạn sửa bản ghi trước khi gửi.' },
@@ -20,6 +21,13 @@ export function Welcome({ onAsk, disabled, onVoice, micSupported }: Props) {
   const [open, setOpen] = useState<number | null>(0);
   return (
     <motion.section initial={{ opacity: 0, y: reduce ? 0 : 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }} className="py-4 sm:py-8">
+      <div className="mb-5 flex items-center gap-3 border-b border-border pb-5">
+        <UniversityLogo size={56} />
+        <div className="min-w-0">
+          <p className="text-xs sm:text-sm font-bold tracking-[.07em] text-primary leading-relaxed">TRƯỜNG ĐẠI HỌC HẢI PHÒNG</p>
+          <p className="mt-1 text-[.72rem] sm:text-xs text-muted-foreground">HocVu AI · Trợ lý tư vấn quy chế đào tạo</p>
+        </div>
+      </div>
       <div className="voice-stage relative overflow-hidden rounded-2xl px-6 sm:px-10 py-10 sm:py-12 text-sidebar-accent-foreground">
         <div className="relative grid gap-8 sm:grid-cols-[1fr_auto] items-center">
           <div>

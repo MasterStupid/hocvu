@@ -1,4 +1,10 @@
 import { cn } from '@/lib/utils';
+import universityLogo from './university-logo.png';
+
+export function UniversityLogo({ className, size = 44 }: { className?: string; size?: number }) {
+  return <img src={universityLogo} alt="Logo Trường Đại học Hải Phòng" width={size} height={size}
+    className={cn('shrink-0 rounded-full bg-white object-contain p-0.5', className)} />;
+}
 
 /** Square cinnabar seal, the mark stamped on official Vietnamese documents. */
 export function Seal({ className, size = 36 }: { className?: string; size?: number }) {
@@ -14,10 +20,12 @@ export function Seal({ className, size = 36 }: { className?: string; size?: numb
 export function Wordmark({ invert = false }: { invert?: boolean }) {
   return (
     <span className="flex items-center gap-2.5">
-      <Seal size={34} />
-      <span className="leading-none">
+      <UniversityLogo size={40} />
+      <span className="leading-none min-w-0">
         <span className={cn('block font-serif text-[1.35rem] font-semibold tracking-tight', invert && 'text-sidebar-accent-foreground')}>HocVu</span>
-        <span className={cn('kicker block mt-1 !text-[.6rem]', invert && '!text-sidebar-foreground/60')}>Trợ lý giọng nói quy chế</span>
+        <span className={cn('block mt-1 text-[9px] font-semibold leading-[1.4] tracking-[.06em]', invert && 'text-sidebar-foreground/75')}>
+          TRƯỜNG ĐẠI HỌC<br />HẢI PHÒNG
+        </span>
       </span>
     </span>
   );

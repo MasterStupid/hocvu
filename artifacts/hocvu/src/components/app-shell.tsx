@@ -89,7 +89,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <header className="md:hidden sticky top-0 z-30 flex items-center justify-between px-4 h-14 bg-sidebar text-sidebar-foreground border-b border-sidebar-border">
         <Link href="/" className="rounded-md" data-testid="link-brand-mobile"><Wordmark invert /></Link>
         <div className="flex items-center gap-3">
-          <HealthBadge compact />
+          <div className="hidden sm:block"><HealthBadge compact /></div>
           <button type="button" className="btn btn-icon text-sidebar-foreground hover:bg-sidebar-accent" onClick={() => setOpen(true)} aria-label="Mở menu điều hướng" aria-expanded={open} data-testid="button-open-nav">
             <Menu />
           </button>
