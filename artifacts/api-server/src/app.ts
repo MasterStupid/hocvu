@@ -29,6 +29,8 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use("/api", router);
+// This template service owns /__template-api; /api belongs to HocVu.
+// Keep its router aligned with the production startup probe.
+app.use("/__template-api", router);
 
 export default app;

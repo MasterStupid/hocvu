@@ -70,3 +70,6 @@ HV_STORAGE_PREFIX = "hocvu/v1"
 
 [userenv.production]
 HV_STORAGE_BACKEND = "replit"
+
+[objectStorage]
+defaultBucketID = "replit-objstore-5ab5d012-9124-4510-824f-72d165a9d80c"
