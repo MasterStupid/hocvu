@@ -1,76 +1,55 @@
-# HocVu AI on Replit
+# HocVu AI
 
-## Run
+Ứng dụng tra cứu quy chế đào tạo với giao diện React/TypeScript và backend FastAPI hiện có.
 
-Use the **Start application** workflow (the Run button). It runs:
+## Run & Operate
 
-```sh
-python manage.py serve --host 0.0.0.0 --port 5000
-```
+- Workflow **artifacts/hocvu: web** chạy `pnpm --filter @workspace/hocvu run dev`.
+- Máy chủ Python duy nhất phục vụ giao diện `/` và API `/api/*`, dùng `PORT` do artifact cung cấp.
+- `pnpm --filter @workspace/hocvu run build` build React bằng Vite và kiểm tra biên dịch Python.
+- Workflow build frontend trước khi khởi chạy FastAPI; sau khi sửa UI cần restart workflow để cập nhật bản xem trước.
+- `pnpm --filter @workspace/hocvu run typecheck` kiểm tra frontend TypeScript.
+- Kiểm thử gốc: `cd artifacts/hocvu/app && python -m unittest discover -s tests`.
+- Máy chủ Express mẫu được chuyển sang `/__template-api`; không dùng nó cho API HocVu.
 
-The existing FastAPI/Uvicorn server serves both the API and the static `ui/`
-pages. No frontend build or separate service is needed.
+## Stack
 
-## Access and configuration
+- React/TypeScript, Vite, React Query, backend Python 3.13/FastAPI/Uvicorn.
+- BM25 mặc định (`HV_SEMANTIC=0`), không yêu cầu LLM để chạy tra cứu.
+- Python dependencies ở `pyproject.toml` và `uv.lock` trong workspace.
+- pnpm workspace chỉ cung cấp lệnh khởi chạy và quản lý artifact.
 
-- `HV_API_TOKEN` must be set in Replit Secrets before starting. Never put its
-  value in source code or browser JavaScript.
-- The Q&A page, its assets, suggestions and public regulation catalog require no
-  password. Chat history remains scoped to each browser's `X-HocVu-Owner` key.
-- `HV_BROWSER_AUTH=1` enables native browser sign-in for document management.
-  Sign in with username `hocvu` and the password stored as `HV_API_TOKEN`.
-  API clients can still send the `X-HocVu-Token` header. All `/api/documents`
-  routes (including reads, upload, delete, date edits and reindex) stay protected.
-  `/api/catalog` only exposes public title, regulation ID and version metadata.
-  Browser-authenticated POST/DELETE requests must include a matching `Origin`;
-  cross-site mutations are rejected and cross-origin CORS access is disabled.
-- The UI and API share one origin. Leave `HV_TRUSTED_ORIGINS` empty for the
-  normal single-server setup; keep the existing cross-site protection enabled.
-  If the document management login prompt cannot appear in preview, open that
-  page in a new tab. The Q&A page never requires that sign-in.
-- `HV_SEMANTIC=0` uses the existing BM25 search without downloading embedding
-  weights. Semantic retrieval is optional, not required to run.
-- API documentation and the OpenAPI schema are disabled by default. Set
-  `HV_API_DOCS=1` and restart only when you need `/docs`, `/redoc`, and
-  `/openapi.json` for development. Keep it off on a published service.
-- Questions sent to `/api/ask` are limited to 4000 characters; longer input
-  receives HTTP 422 before retrieval is invoked.
-- Optional Gemini/OpenAI rewriting remains off by default and requires its
-  provider credentials and settings as documented in README.md.
-- Tesseract is installed with Vietnamese language data for local OCR.
+## Where things live
 
-## Data and verification
+- `artifacts/hocvu/src/`: giao diện React, API client và quản lý trạng thái.
+- `artifacts/hocvu/app/`: backend ứng dụng gốc, kiểm thử và giao diện cũ giữ để đối chiếu.
+- `artifacts/hocvu/run.py`: bộ chạy tích hợp môi trường Replit.
+- `artifacts/hocvu/README.md`: hướng dẫn chạy, quản trị và điều kiện publish.
+- `artifacts/hocvu/app/docs/persistent-storage.md`: thiết kế lưu trữ bền vững hiện có.
+- `dist/public/` là giao diện đang được FastAPI phục vụ; không phục vụ mã nguồn hoặc secret.
 
-The first startup generates the bundled **demonstration** regulations and index.
-They are not official university regulations. Upload reviewed documents on
-`/documents.html` before relying on the answers.
+## Architecture decisions
 
-Storage has two explicit modes:
-- `HV_STORAGE_BACKEND=local`: offline development, local documents + SQLite/WAL.
-- `HV_STORAGE_BACKEND=replit`: private App Storage files + PostgreSQL metadata
-  and history. `data/` is a disposable document/index cache, not the source of truth.
-  Published apps refuse local mode; storage failures never fall back to SQLite.
+- Giữ backend và phân quyền API khi thay toàn bộ giao diện bằng React theo yêu cầu người dùng.
+- Trang quản trị React `/documents` chỉ là shell công khai; dữ liệu quản trị vẫn bắt buộc token.
+- Giữ khóa định danh hội thoại cũ để không làm mất khả năng truy cập lịch sử sau khi đổi giao diện.
+- Bản xem trước dùng PostgreSQL + App Storage của chính dự án (`HV_STORAGE_BACKEND=replit`); `.local/hocvu-data/` chỉ là cache có thể dựng lại. Dữ liệu local cũ không tự chuyển.
+- Chưa chuyển kho dữ liệu cũ hoặc tự nhập bộ tài liệu mô phỏng vào kho hỏi đáp.
 
-See `docs/persistent-storage.md` for setup, backup/import, and first-publish checks.
-Create/select an App Storage bucket and set the non-secret `HV_STORAGE_BUCKET_ID`
-if it is not the default bucket. Development and production share immutable
-objects, but each database has its own manifest and history. Never delete blobs
-just because one environment no longer references them.
+## Product
 
-Schema source: `migrations/001_persistent_storage.sql`. Apply it in development
-only (`python manage.py init-storage-schema`); Publish manages the production
-schema diff. No startup DDL or production migration hooks.
+- Tra cứu quy chế, câu hỏi gợi ý, hội thoại theo trình duyệt, trích dẫn và giọng nói.
+- Quản trị tài liệu được bảo vệ bằng token hoặc HTTP Basic.
 
-Backups contain private chat history. Keep them private, ignored by Git and
-excluded from publish; document-management administrators can explicitly create
-and download them. SQLite backups use SQLite's backup API (including WAL).
-Import is explicit, confirmed, idempotent, and rejects a nonempty destination.
-Never auto-import a stale local cache or assign legacy unowned sessions to a browser.
+## Gotchas
 
-```sh
-HV_STORAGE_BACKEND=local python -m unittest discover -s tests -v
-python manage.py evaluate
-```
+- Không bỏ xác thực để kiểm thử trang quản trị.
+- Đặt `HV_API_TOKEN` riêng trong Secrets nếu cần đăng nhập bằng tài khoản `hocvu`.
+- Bản xem trước dùng `SESSION_SECRET` hiện có để bảo vệ API khi chưa có token riêng.
+  Không đọc/hiển thị giá trị secret hoặc đưa chúng vào mã nguồn.
+- Publish cần token riêng, PostgreSQL và bucket App Storage của dự án này;
+  ứng dụng từ chối dùng backend local khi publish. Không dùng ID bucket từ dự án cũ.
 
-Browser speech recognition requires microphone permission and a supported
-browser (Chrome or Edge). Edge TTS requires access to Microsoft's service.
+## Pointers
+
+- Metadata artifact phải được cập nhật qua công cụ kiểm tra schema, không sửa trực tiếp TOML thật.

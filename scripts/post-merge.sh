@@ -1,19 +1,13 @@
-#!/bin/bash
-# Runs automatically after a task merge on Replit. Must be idempotent and
-# non-interactive.
+#!/usr/bin/env bash
 set -euo pipefail
 
-# Install any Python dependencies added by the merged work.
-# The hook may run without Replit's pip config, so pass its settings explicitly:
-# packages live in the workspace user site (.pythonlibs), not the Nix store.
-export PYTHONUSERBASE="${PYTHONUSERBASE:-$PWD/.pythonlibs}"
-python -m pip install --quiet --disable-pip-version-check \
-  --user --break-system-packages -r requirements.txt
+# Install the monorepo dependencies after a Replit merge.
+pnpm install --frozen-lockfile
 
-# Rebuild the search index so merged retrieval/document changes take effect.
-# Uploaded documents are kept; only the derived index is regenerated.
-# Schema application is development-only. Publish owns the production diff.
-if [[ -n "${DATABASE_URL:-}" && "${REPLIT_DEPLOYMENT:-0}" != "1" ]]; then
+# HocVu owns its Python schema. Do not push the empty template Drizzle schema:
+# it would propose deleting HocVu's tables. Production DDL belongs to Publish.
+# Create only the development schema; leave store initialization/import explicit.
+(
+  cd artifacts/hocvu/app
   python manage.py init-storage-schema
-fi
-HV_SEMANTIC="${HV_SEMANTIC:-0}" python manage.py ingest
+)

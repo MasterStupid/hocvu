@@ -1,20 +1,12 @@
-modules = ["python-3.12", "nodejs-20", "web", "postgresql-16"]
+modules = ["nodejs-24", "python-base-3.13", "postgresql-16"]
 
-[nix]
-channel = "stable-25_05"
-packages = ["freetype", "gumbo", "harfbuzz", "jbig2dec", "lcms2", "libimagequant", "libjpeg", "libjpeg_turbo", "libtiff", "libwebp", "libxcrypt", "mupdf", "openjpeg", "postgresql", "swig", "tcl", "tesseract", "tk", "xcbuild", "zlib"]
+[deployment]
+router = "application"
+deploymentTarget = "autoscale"
 
-[agent]
-expertMode = true
-
-[userenv]
-
-[userenv.shared]
-HV_BROWSER_AUTH = "1"
-HV_SEMANTIC = "0"
-HV_STORAGE_BUCKET_ID = "replit-objstore-2f2faf63-38dd-4101-891c-d535e9a9d451"
-HV_STORAGE_PREFIX = "hocvu/v1"
-HV_STORAGE_BACKEND = "replit"
+[deployment.postBuild]
+args = ["pnpm", "store", "prune"]
+env = { "CI" = "true" }
 
 [workflows]
 runButton = "Project"
@@ -26,31 +18,55 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Start application"
+args = "hocvu-admin-frontend"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "hocvu-admin-browser"
 
 [[workflows.workflow]]
-name = "Start application"
+name = "hocvu-admin-frontend"
 author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python manage.py serve --host 0.0.0.0 --port 5000"
-waitForPort = 5000
+args = "pnpm --filter @workspace/hocvu test && pnpm --filter @workspace/hocvu typecheck"
 
 [workflows.workflow.metadata]
-outputType = "webview"
+isValidation = true
 
-[[ports]]
-localPort = 5000
-externalPort = 80
+[[workflows.workflow]]
+name = "hocvu-admin-browser"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter @workspace/hocvu test:browser"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[agent]
+stack = "PNPM_WORKSPACE"
+expertMode = true
 
 [postMerge]
 path = "scripts/post-merge.sh"
-timeoutMs = 180000
+timeoutMs = 20000
 
-[objectStorage]
-defaultBucketID = "replit-objstore-2f2faf63-38dd-4101-891c-d535e9a9d451"
+[nix]
+channel = "stable-25_05"
+packages = ["freetype", "gumbo", "harfbuzz", "jbig2dec", "lcms2", "libimagequant", "libjpeg", "libjpeg_turbo", "libtiff", "libwebp", "libxcrypt", "mupdf", "openjpeg", "postgresql", "swig", "tcl", "tesseract", "tk", "xcbuild", "zlib"]
 
-[deployment]
-deploymentTarget = "vm"
-run = ["python", "manage.py", "serve", "--host", "0.0.0.0", "--port", "5000"]
+[userenv]
+
+[userenv.development]
+HV_BROWSER_AUTH = "1"
+HV_SEMANTIC = "0"
+HV_STORAGE_BACKEND = "replit"
+
+[userenv.shared]
+HV_STORAGE_PREFIX = "hocvu/v1"
+
+[userenv.production]
+HV_STORAGE_BACKEND = "replit"

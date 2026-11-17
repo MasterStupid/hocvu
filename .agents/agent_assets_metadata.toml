@@ -1,0 +1,77 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "-ekzBGHs-XtmlVZKrs5J6"
+uri = "file://.local/conversation-workspace/files/HocVu_AI_Bao_cao_tot_nghiep_v3.docx"
+type = "word_document"
+title = "HocVu AI – Báo cáo tốt nghiệp (bản sửa v3)"
+description = "Bản v3: mục lục và đánh số đề mục thống nhất, danh mục hình/bảng có số trang, Bảng 4.11 đã kiểm chứng lại, bố cục bảng và ngắt trang đã chỉnh; giữ nguyên 129 chỗ {{...}} để điền số liệu khảo sát và đo đạc."
+logical_id = "d7bead69-90f0-4642-bcb0-68882ba68352"
+content_hash = "sha256:0475de9607511ba12962bff1a752121b795d3f285000b7783abb476b103e1e39"
+size = 1155764
+mtime_ms = 1793154046578
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/conversation:8d5431b5-186b-4890-9aa9-3b869c9ff2f0/d7bead69-90f0-4642-bcb0-68882ba68352/85a56e20-2a14-4d14-821a-52a940de8bc1"
+storage_version_token = "1793154058946478"
+content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+source_uri = "file://HocVu_AI_Bao_cao_tot_nghiep_v3.docx"
+
+[[outputs]]
+id = "QY6Iry5K5Qo72lUAGF-66"
+uri = "file://.local/conversation-workspace/files/HocVu_AI_Ke_hoach_nang_cap_toan_dien_v1.docx"
+type = "word_document"
+title = "HocVu AI — Kế hoạch nâng cấp toàn diện"
+description = "Bản kế hoạch cho nhóm nhỏ triển khai thử: kiến trúc đích, 6 chương trình nâng cấp, lộ trình, 22 nhóm việc, tiêu chí nghiệm thu, nguồn lực và rủi ro. Định dạng Word để chỉnh sửa."
+logical_id = "7e79da89-cb09-4ec3-b5ba-995242026e2c"
+content_hash = "sha256:ea6e9dbf29df761f3d33cfe40f5a342afb6565e399346bfdc3b8a0fac8abc993"
+size = 54466
+mtime_ms = 1794231041534
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/conversation:8d5431b5-186b-4890-9aa9-3b869c9ff2f0/7e79da89-cb09-4ec3-b5ba-995242026e2c/df7ee4e0-ac21-4375-9f46-39e56a89ac87"
+storage_version_token = "1794231059429376"
+content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+source_uri = "file://HocVu_AI_Ke_hoach_nang_cap_toan_dien_v1.docx"
+
+[[outputs]]
+id = "U8KPQpGSKMpW3YFFVmzHy"
+uri = "file://.local/conversation-workspace/files/HocVu_AI_Ke_hoach_nang_cap_toan_dien_v1.pdf"
+type = "pdf"
+title = "HocVu AI — Bản kế hoạch PDF"
+description = "Bản đọc nhanh 10 trang, cùng nội dung với tệp Word; phân biệt hiện trạng đã kiểm tra với mục tiêu đề xuất và số liệu chưa đo."
+logical_id = "6633de7b-c9e0-4f35-81a3-483fb54735ba"
+content_hash = "sha256:4d8d07c505a36fdfffdbdc92db5faf3935016c5fad40cdf9c9f87970ad834742"
+size = 216620
+mtime_ms = 1794231046370
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/conversation:8d5431b5-186b-4890-9aa9-3b869c9ff2f0/6633de7b-c9e0-4f35-81a3-483fb54735ba/91070a2c-7638-4cbe-a3a6-c9a5a898df2d"
+storage_version_token = "1794231062379338"
+content_type = "application/pdf"
+source_uri = "file://HocVu_AI_Ke_hoach_nang_cap_toan_dien_v1.pdf"
+
+[[outputs]]
+id = "41FbRrfGHNA3AgjDIGbSl"
+uri = "file://.local/conversation-workspace/files/HocVu_AI_50_van_ban_mo_phong_kiem_thu_v1.zip"
+type = "unspecified"
+title = "HocVu AI — 50 văn bản mô phỏng kiểm thử"
+description = "Gói ZIP gồm 50 DOCX có nhãn mô phỏng, 200 ca kiểm thử kèm đáp án định hướng, manifest CSV/JSON, dữ liệu cấu trúc và hướng dẫn nhập an toàn. Không phải quy chế thật; chưa nạp vào hệ thống hay đưa lên GitHub."
+logical_id = "d4239099-2f41-419d-bf47-40cb2b9c3ffa"
+content_hash = "sha256:9df919b26ceda77631feb20686b695aa22efa484907f5b20e951816c05d3c00d"
+size = 1947399
+mtime_ms = 1794232016050
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/conversation:8d5431b5-186b-4890-9aa9-3b869c9ff2f0/d4239099-2f41-419d-bf47-40cb2b9c3ffa/bc18044c-53a7-4aea-9738-2050b4c89cd8"
+storage_version_token = "1794232056534224"
+content_type = "application/octet-stream"
+source_uri = "file://HocVu_AI_50_van_ban_mo_phong_kiem_thu_v1.zip"
+
+[[outputs]]
+id = "WCvzBPTQX0520FYdjP7UC"
+uri = "file://.local/conversation-workspace/files/HocVu_AI_Danh_muc_50_van_ban_mo_phong.docx"
+type = "word_document"
+title = "Danh mục 50 văn bản và tình huống kiểm thử"
+description = "Bản Word liệt kê từng văn bản, trạng thái, phạm vi, ngày hiệu lực mô phỏng và tình huống kiểm thử nổi bật; đọc trước khi chọn tài liệu để nhập thử."
+logical_id = "39f4a9f3-07a9-414e-a079-54c51c28d8dd"
+content_hash = "sha256:a0d24c2d14db8b5a2798c469ec4682324b810090abee42fb1160a001fe2aedb1"
+size = 40890
+mtime_ms = 1794232015798
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/conversation:8d5431b5-186b-4890-9aa9-3b869c9ff2f0/39f4a9f3-07a9-414e-a079-54c51c28d8dd/fc4b3ed0-1dd5-4041-bdad-05e95bfd8b1b"
+storage_version_token = "1794232059452352"
+content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+source_uri = "file://HocVu_AI_Danh_muc_50_van_ban_mo_phong.docx"

@@ -1,3 +1,7 @@
+- [Nền tảng chạy HocVu](hocvu-hosting.md) — Người dùng ngừng dùng Netlify, muốn chạy HocVu trực tiếp trên Replit.
+- [JavaScript nhập từ dự án cũ](imported-js-module-scope.md) — CommonJS cần phạm vi riêng khi được nhập vào workspace ESM.
+- [Ranh giới lưu trữ HocVu](hocvu-storage-boundaries.md) — Dùng bucket của chính dự án; không tự nhập dữ liệu cũ hoặc chạy DDL production.
+- [Cô lập kiểm thử quản trị](admin-browser-isolation.md) — Kiểm tra hành vi trình duyệt bằng dữ liệu tổng hợp, không dùng kho thật để thử mutation.
 - [Hosting and access decision](hosting-and-access-decision.md) — Replit-only hosting; public chat, password only for document management; persist via App Storage + Postgres.
 - [API origin protection](api-origin-protection.md) — preserve same-origin checks and disabled cross-origin CORS when simplifying single-server hosting.
 - [Vietnamese evidence matching](vietnamese-evidence-matching.md) — diacritic-aware evidence checks, abbreviations as phrases; heading down-weighting breaks terse clauses.

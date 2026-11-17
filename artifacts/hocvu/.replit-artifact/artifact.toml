@@ -1,0 +1,23 @@
+kind = "web"
+previewPath = "/"
+title = "HocVu AI"
+description = "Trợ lý quy chế đào tạo với giao diện React/TypeScript mới, hỏi đáp có nguồn, hội thoại và quản trị tài liệu; backend FastAPI trên Replit."
+version = "1.0.0"
+id = "artifacts/hocvu"
+router = "path"
+
+[[services]]
+name = "web"
+paths = ["/", "/api"]
+localPort = 21953
+
+[services.development]
+run = "pnpm --filter @workspace/hocvu run dev"
+
+[services.production]
+build = ["pnpm", "--filter", "@workspace/hocvu", "run", "build"]
+run = ["python", "artifacts/hocvu/run.py"]
+
+[services.env]
+PORT = "21953"
+BASE_PATH = "/"
