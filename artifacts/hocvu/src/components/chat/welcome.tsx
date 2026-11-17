@@ -20,7 +20,7 @@ export function Welcome({ onAsk, disabled, onVoice, micSupported }: Props) {
   const reduce = useReducedMotion();
   const [open, setOpen] = useState<number | null>(0);
   return (
-    <motion.section initial={{ opacity: 0, y: reduce ? 0 : 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }} className="py-4 sm:py-8">
+    <motion.section initial={{ opacity: 0, y: reduce ? 0 : 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }} className="py-1 sm:py-8">
       <div className="mb-5 flex items-center gap-3 border-b border-border pb-5">
         <UniversityLogo size={56} />
         <div className="min-w-0">
@@ -28,27 +28,32 @@ export function Welcome({ onAsk, disabled, onVoice, micSupported }: Props) {
           <p className="mt-1 text-[.72rem] sm:text-xs text-muted-foreground">HocVu AI · Trợ lý tư vấn quy chế đào tạo</p>
         </div>
       </div>
-      <div className="voice-stage relative overflow-hidden rounded-2xl px-6 sm:px-10 py-10 sm:py-12 text-sidebar-accent-foreground">
+      <div className="voice-stage relative overflow-hidden rounded-2xl px-5 sm:px-10 py-6 sm:py-12 text-sidebar-accent-foreground">
         <div className="relative grid gap-8 sm:grid-cols-[1fr_auto] items-center">
           <div>
             <span className="kicker !text-sidebar-foreground/70">Trợ lý giọng nói · Quy chế đào tạo</span>
             <h2 className="font-serif text-4xl sm:text-[3.2rem] leading-[1.04] font-medium mt-3">
               Nói câu hỏi.<br /><em className="italic font-normal text-[hsl(var(--sidebar-primary))]">Nghe điều khoản.</em>
             </h2>
-            <p className="mt-4 max-w-md text-sidebar-foreground/80 text-[.95rem]">
+            <p className="mt-4 max-w-md text-sidebar-foreground/80 text-[.95rem] hidden sm:block">
               Hỏi như đang hỏi phòng Đào tạo. HocVu tìm các điều khoản liên quan trong văn bản quy chế, trả lời kèm nguồn và đọc to cho bạn nghe. Khi văn bản không đủ rõ, HocVu nói thẳng là chưa có căn cứ.
             </p>
+            <p className="mt-3 text-sm text-sidebar-foreground/80 sm:hidden">
+              Hỏi bằng giọng nói hoặc nhập chữ. Nhận câu trả lời kèm điều khoản để đối chiếu.
+            </p>
           </div>
-          <div className="flex flex-col items-center gap-3 justify-self-center">
+          <div className="flex sm:flex-col items-center gap-5 sm:gap-3 justify-self-center py-2 sm:py-0">
             <button type="button" onClick={onVoice} disabled={disabled || !micSupported}
               aria-label={micSupported ? 'Bắt đầu nói câu hỏi' : 'Trình duyệt chưa hỗ trợ nhận dạng giọng nói'}
               className="mic-orb" data-testid="button-voice-cta">
               {micSupported ? <Mic className="w-9 h-9" aria-hidden="true" /> : <MicOff className="w-9 h-9" aria-hidden="true" />}
             </button>
-            <span className="text-sm font-medium">{micSupported ? 'Bấm để nói' : 'Micro chưa hỗ trợ'}</span>
-            <span className="text-[.72rem] text-sidebar-foreground/60 max-w-[13rem] text-center">
+            <div className="sm:text-center max-w-[13rem]">
+            <p className="text-sm font-medium">{micSupported ? 'Bấm để nói' : 'Micro chưa hỗ trợ'}</p>
+            <p className="mt-1 text-[.72rem] text-sidebar-foreground/60">
               {micSupported ? 'Nhận dạng chạy qua dịch vụ của trình duyệt, cần cấp quyền micro.' : 'Hãy thử Chrome hoặc Edge, hoặc gõ câu hỏi bên dưới.'}
-            </span>
+            </p>
+            </div>
           </div>
         </div>
       </div>

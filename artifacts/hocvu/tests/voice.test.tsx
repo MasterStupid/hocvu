@@ -233,8 +233,16 @@ describe('Voice composer integration', () => {
     const view = render(<Harness voiceRequest={0} />);
     view.rerender(<Harness voiceRequest={1} />);
     expect(Recognition.instances).toHaveLength(1);
+    expect(screen.getByTestId('input-question')).not.toHaveFocus();
     view.unmount();
     render(<Harness voiceRequest={1} />);
     expect(Recognition.instances).toHaveLength(1);
+  });
+
+  it('shows the question limit on small screens too', () => {
+    render(<Harness />);
+    fireEvent.change(screen.getByTestId('input-question'), { target: { value: 'a'.repeat(3999) } });
+    expect(screen.getByText('3999/4000')).toHaveAttribute('role', 'status');
+    expect(screen.getByText('3999/4000')).not.toHaveClass('hidden');
   });
 });

@@ -324,6 +324,9 @@
   .mic-orb:active:not(:disabled) { transform: scale(.97); }
   .mic-orb:disabled { opacity: .5; cursor: not-allowed; }
   .mic-orb:disabled::after { display: none; }
+  @media (max-width: 639px) {
+    .mic-orb { width: 4rem; height: 4rem; flex-shrink: 0; }
+  }
   .mic-orb:focus-visible { outline: 3px solid hsl(var(--sidebar-foreground)); outline-offset: 26px; }
 
   .scroll-thin { scrollbar-width: thin; scrollbar-color: hsl(var(--border)) transparent; }

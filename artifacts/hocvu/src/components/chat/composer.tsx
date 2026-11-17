@@ -73,7 +73,8 @@ export function Composer({ value, onChange, onSubmit, canSend, blockedReason, re
   useEffect(() => {
     if (voiceRequest === seenRequest.current) return;
     seenRequest.current = voiceRequest;
-    area.current?.focus();
+    // Do not open a mobile keyboard while the student is trying to speak.
+    area.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
     if (phase === 'idle') toggleRef.current();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceRequest]);
@@ -130,7 +131,8 @@ export function Composer({ value, onChange, onSubmit, canSend, blockedReason, re
           <Sparkles className="w-3.5 h-3.5" aria-hidden="true" /> AI diễn đạt {useAi ? 'bật' : 'tắt'}
         </button>
         <span className="flex-1" />
-        <span className="hidden sm:inline text-[.7rem] text-muted-foreground font-mono mr-1">{value.length > 3500 ? `${value.length}/${MAX}` : 'Enter gửi · Shift+Enter xuống dòng'}</span>
+        <span className={cn('text-[.7rem] text-muted-foreground font-mono mr-1', value.length <= 3500 && 'hidden sm:inline')}
+          role={value.length > 3500 ? 'status' : undefined}>{value.length > 3500 ? `${value.length}/${MAX}` : 'Enter gửi · Shift+Enter xuống dòng'}</span>
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
         <button type="button" onClick={toggleMic} disabled={!dict.supported || (!active && !canSend)}
           aria-label={micLabel} aria-pressed={active} title={!dict.supported ? 'Trình duyệt chưa hỗ trợ nhận dạng giọng nói (thử Chrome hoặc Edge)' : micLabel}

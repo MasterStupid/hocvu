@@ -5,6 +5,7 @@ import { RichText } from '@/components/chat/rich-text';
 import { answerMarkdown, citeLabel, type Answer } from '@/hooks/use-chat';
 import type { Grounding } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { refusalLabel } from '@/lib/format';
 
 const NOTE_ICON = { calendar: CalendarClock, document: FileText, scope: ScanSearch, replace: Repeat2 } as const;
 
@@ -96,8 +97,12 @@ export function AnswerCard({ answer, index, turnKey, onFollowUp, followUpDisable
         <span className="kicker text-ochre">Không đủ căn cứ</span>
         <h3 className="font-serif text-xl mt-1">Chưa tìm thấy quy định phù hợp</h3>
         <div className="mt-2 text-[.95rem]"><RichText text={answer.text} /></div>
-        {answer.refusalReason && <p className="text-xs text-muted-foreground mt-2">Lý do: {answer.refusalReason}</p>}
-        <p className="text-sm text-muted-foreground mt-3">HocVu không đoán khi nguồn chưa rõ. Bạn có thể thử một câu hỏi có căn cứ:</p>
+        {answer.refusalReason && <p className="text-xs text-muted-foreground mt-2">Lý do: {refusalLabel(answer.refusalReason)}</p>}
+        <p className="text-sm text-muted-foreground mt-3">
+          HocVu không đoán khi nguồn chưa rõ. {answer.card.suggestions?.length
+            ? 'Bạn có thể thử một câu hỏi có căn cứ:'
+            : 'Hãy bổ sung tên văn bản, điều khoản hoặc nội dung cụ thể cần tra cứu.'}
+        </p>
         {!!answer.card.suggestions?.length && (
           <div className="flex flex-wrap gap-2 mt-2.5">
             {answer.card.suggestions.map((q, i) => (

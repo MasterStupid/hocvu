@@ -1,6 +1,16 @@
 export const formatSize = (bytes: number) =>
   bytes < 1024 * 1024 ? `${Math.max(1, Math.ceil(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1).replace('.', ',')} MB`;
 
+/** Keep internal refusal codes out of student-facing answers. */
+export function refusalLabel(reason?: string): string {
+  const labels: Record<string, string> = {
+    'Insufficient grounded context': 'Nguồn hiện có chưa đủ rõ để kết luận cho câu hỏi này.',
+    'Empty question': 'Bạn chưa nhập nội dung câu hỏi.',
+    'Unsafe request': 'Câu hỏi không phù hợp với phạm vi tư vấn quy chế đào tạo.',
+  };
+  return reason ? labels[reason] || 'Chưa thể xác minh câu trả lời từ nguồn quy chế hiện có.' : '';
+}
+
 export const todayISO = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

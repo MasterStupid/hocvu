@@ -197,7 +197,8 @@ export default function ChatPage() {
           </div>
         </div>
 
-        <div className="sticky bottom-0 z-10 px-4 sm:px-8 pb-4 pt-2 bg-gradient-to-t from-background via-background to-background/0">
+        <div className={cn('bottom-0 z-10 px-4 sm:px-8 pb-4 pt-2 bg-gradient-to-t from-background via-background to-background/0',
+          chat.turns.length > 0 ? 'sticky' : 'relative sm:sticky')}>
           <div className="max-w-3xl mx-auto">
             {speaker.phase !== 'idle' && (
               <div className="voice-bar mb-2 flex items-center gap-3 rounded-full border border-seal/30 bg-paper px-3 py-1.5 text-xs shadow-sm" role="status" data-testid="status-playback">
