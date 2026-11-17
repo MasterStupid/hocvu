@@ -25,6 +25,16 @@ function GroundingMeter({ g }: { g?: Grounding }) {
   );
 }
 
+function ModeLabel({ answer }: { answer: Answer }) {
+  const llm = answer.providers?.llm;
+  let text: string; let tone = '';
+  if (llm === 'on') text = 'AI diễn đạt lại từ nguồn đã truy xuất';
+  else if (llm === 'fallback') { text = 'AI không khả dụng · dùng câu trả lời trích xuất'; tone = 'text-ochre'; }
+  else if (llm === 'off') text = 'Trả lời trích xuất · không dùng AI';
+  else text = answer.restored ? 'Lượt đã lưu · không rõ chế độ diễn đạt' : 'Chế độ diễn đạt không xác định';
+  return <span className={cn('ml-auto pr-2 kicker', tone)} data-testid="text-answer-mode">{text}</span>;
+}
+
 interface Props {
   answer: Answer;
   index: number;
@@ -160,7 +170,7 @@ export function AnswerCard({ answer, index, turnKey, onFollowUp, followUpDisable
 
       <footer className="flex flex-wrap items-center gap-1 px-3 py-2 border-t border-border">
         {copyBtn}{listen}
-        <span className="ml-auto pr-2 kicker">{answer.restored ? 'Lượt đã lưu' : answer.providers?.llm && answer.providers.llm !== 'none' ? 'AI diễn đạt theo nguồn' : 'Nguồn đã đối chiếu'}</span>
+        <ModeLabel answer={answer} />
       </footer>
     </div>
   );

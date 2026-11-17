@@ -1,5 +1,5 @@
 import { useEffect, useRef, type FormEvent, type KeyboardEvent } from 'react';
-import { ArrowUp, CalendarDays, Mic, MicOff, Sparkles, X } from 'lucide-react';
+import { ArrowUp, CalendarDays, Mic, MicOff, Sparkles, Square, X } from 'lucide-react';
 import { useDictation } from '@/hooks/use-voice';
 import { cn } from '@/lib/utils';
 
@@ -13,11 +13,33 @@ interface Props {
   onRefDate: (v: string) => void;
   useAi: boolean;
   onUseAi: (v: boolean) => void;
+  onVoiceStart?: () => void;
+  /** Increment to request starting dictation (e.g. welcome CTA). */
+  voiceRequest?: number;
 }
 
-export function Composer({ value, onChange, onSubmit, canSend, blockedReason, refDate, onRefDate, useAi, onUseAi }: Props) {
+type MicPhase = 'idle' | 'starting' | 'listening' | 'stopping';
+const MAX = 4000;
+const PHASE_TEXT: Record<MicPhase, string> = {
+  idle: '', starting: 'Đang mở micro…', listening: 'Đang nghe — nói câu hỏi của bạn', stopping: 'Đang chốt bản ghi…',
+};
+
+export function Composer({ value, onChange, onSubmit, canSend, blockedReason, refDate, onRefDate, useAi, onUseAi, onVoiceStart, voiceRequest = 0 }: Props) {
   const area = useRef<HTMLTextAreaElement>(null);
-  const dict = useDictation((text) => onChange(text));
+  const base = useRef('');
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const dict = useDictation((text) => {
+    const prefix = base.current.trim();
+    onChangeRef.current(((prefix ? `${prefix} ` : '') + text).slice(0, MAX));
+  });
+  const phase: MicPhase = dict.phase;
+  const active = phase !== 'idle';
+
+  // Abort dictation when sending gets blocked (restore, delete, in-flight).
+  const abortRef = useRef(dict.abort);
+  abortRef.current = dict.abort;
+  useEffect(() => { if (!canSend) abortRef.current(); }, [canSend]);
 
   useEffect(() => {
     const el = area.current; if (!el) return;
@@ -25,7 +47,6 @@ export function Composer({ value, onChange, onSubmit, canSend, blockedReason, re
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
   }, [value]);
 
-  // "/" focuses the composer from anywhere (legacy shortcut).
   useEffect(() => {
     const fn = (e: globalThis.KeyboardEvent) => {
       const t = e.target as HTMLElement;
@@ -37,18 +58,48 @@ export function Composer({ value, onChange, onSubmit, canSend, blockedReason, re
     return () => document.removeEventListener('keydown', fn);
   }, []);
 
+  const toggleMic = () => {
+    if (!dict.supported) return;
+    if (active) { dict.stop(); return; }
+    if (!canSend) return;
+    base.current = value;
+    onVoiceStart?.();
+    dict.start();
+  };
+
+  const toggleRef = useRef(toggleMic);
+  toggleRef.current = toggleMic;
+  const seenRequest = useRef(voiceRequest);
+  useEffect(() => {
+    if (voiceRequest === seenRequest.current) return;
+    seenRequest.current = voiceRequest;
+    area.current?.focus();
+    if (phase === 'idle') toggleRef.current();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceRequest]);
+
   const submit = (e?: FormEvent) => {
     e?.preventDefault();
     if (!canSend || !value.trim()) return;
-    if (dict.listening) dict.abort();
+    if (active) dict.abort();
     onSubmit();
   };
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); }
   };
 
+  const micLabel = !dict.supported ? 'Trình duyệt chưa hỗ trợ nhập giọng nói'
+    : active ? 'Dừng nghe' : 'Bắt đầu nói câu hỏi';
+
   return (
-    <form onSubmit={submit} className="paper shadow-md focus-within:border-seal/60 transition-colors">
+    <form onSubmit={submit} className={cn('composer paper shadow-md transition-colors', active && 'is-listening')}>
+      {active && (
+        <div className="flex items-center gap-3 px-4 pt-3" role="status" aria-live="polite" data-testid="status-dictation">
+          <span className="wave" aria-hidden="true" data-phase={phase}><i /><i /><i /><i /><i /></span>
+          <span className="text-xs font-medium text-seal flex-1">{PHASE_TEXT[phase]}</span>
+          <span className="kicker hidden sm:inline">Bản ghi có thể sửa trước khi gửi</span>
+        </div>
+      )}
       {(dict.error || blockedReason) && (
         <div className="flex items-center gap-2 px-4 pt-2.5 text-xs text-muted-foreground" role="status">
           <span className="w-1.5 h-1.5 rounded-full bg-ochre" aria-hidden="true" />
@@ -56,11 +107,11 @@ export function Composer({ value, onChange, onSubmit, canSend, blockedReason, re
           {dict.error && <button type="button" onClick={dict.clearError} aria-label="Ẩn thông báo" className="p-0.5"><X className="w-3.5 h-3.5" /></button>}
         </div>
       )}
-      <label htmlFor="composer" className="sr-only">Câu hỏi về quy chế</label>
+      <label htmlFor="composer" className="sr-only">Câu hỏi về quy chế (gõ hoặc nói)</label>
       <textarea
-        id="composer" ref={area} rows={1} value={value} maxLength={4000}
-        onChange={(e) => onChange(e.target.value)} onKeyDown={onKey}
-        placeholder={dict.listening ? 'Đang nghe… hãy nói câu hỏi của bạn' : 'Ví dụ: Điều kiện để được xét học bổng khuyến khích học tập?'}
+        id="composer" ref={area} rows={1} value={value} maxLength={MAX}
+        onChange={(e) => { dict.abort(); onChange(e.target.value); }} onKeyDown={onKey}
+        placeholder={active ? 'Lời bạn nói sẽ hiện ở đây…' : 'Hỏi bằng lời hoặc gõ: Điều kiện xét học bổng khuyến khích học tập?'}
         className="block w-full resize-none bg-transparent px-4 pt-3.5 pb-2 text-[.98rem] leading-relaxed outline-none placeholder:text-muted-foreground/70"
         data-testid="input-question"
       />
@@ -79,16 +130,18 @@ export function Composer({ value, onChange, onSubmit, canSend, blockedReason, re
           <Sparkles className="w-3.5 h-3.5" aria-hidden="true" /> AI diễn đạt {useAi ? 'bật' : 'tắt'}
         </button>
         <span className="flex-1" />
-        <span className="hidden sm:inline text-[.7rem] text-muted-foreground font-mono mr-1">{value.length > 3500 ? `${value.length}/4000` : 'Enter gửi · Shift+Enter xuống dòng'}</span>
-        <button type="button" onClick={dict.supported ? dict.start : undefined} disabled={!dict.supported}
-          aria-label={!dict.supported ? 'Trình duyệt chưa hỗ trợ nhập giọng nói' : dict.listening ? 'Dừng ghi âm' : 'Nhập bằng giọng nói'}
-          title={!dict.supported ? 'Trình duyệt chưa hỗ trợ nhận dạng giọng nói (thử Chrome hoặc Edge)' : undefined}
-          className={cn('btn btn-icon rounded-full', dict.listening ? 'btn-seal pulse-ring' : 'btn-ghost')} data-testid="button-mic">
-          {dict.supported ? <Mic /> : <MicOff />}
+        <span className="hidden sm:inline text-[.7rem] text-muted-foreground font-mono mr-1">{value.length > 3500 ? `${value.length}/${MAX}` : 'Enter gửi · Shift+Enter xuống dòng'}</span>
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
+        <button type="button" onClick={toggleMic} disabled={!dict.supported || (!active && !canSend)}
+          aria-label={micLabel} aria-pressed={active} title={!dict.supported ? 'Trình duyệt chưa hỗ trợ nhận dạng giọng nói (thử Chrome hoặc Edge)' : micLabel}
+          className={cn('btn rounded-full gap-1.5', active ? 'btn-seal pulse-ring px-3' : 'btn-outline btn-icon sm:w-auto sm:px-3')} data-testid="button-mic">
+          {!dict.supported ? <MicOff /> : active ? <Square /> : <Mic />}
+          <span className={cn('text-xs', !active && 'hidden sm:inline')}>{!dict.supported ? 'Không hỗ trợ' : active ? 'Dừng' : 'Nói'}</span>
         </button>
         <button type="submit" disabled={!canSend || !value.trim()} aria-label="Gửi câu hỏi" className="btn btn-primary btn-icon rounded-full" data-testid="button-send">
           <ArrowUp />
         </button>
+        </div>
       </div>
     </form>
   );

@@ -33,11 +33,14 @@
 - Giữ backend và phân quyền API khi thay toàn bộ giao diện bằng React theo yêu cầu người dùng.
 - Trang quản trị React `/documents` chỉ là shell công khai; dữ liệu quản trị vẫn bắt buộc token.
 - Giữ khóa định danh hội thoại cũ để không làm mất khả năng truy cập lịch sử sau khi đổi giao diện.
+- Phục vụ giao diện ngay cả khi kho quy chế chưa sẵn sàng; các API cần kho phải trả lỗi rõ ràng, không chuyển sang dữ liệu giả hoặc lưu local. Lỗi phụ thuộc không được làm mất màn hình hướng dẫn khôi phục.
 - Bản xem trước dùng PostgreSQL + App Storage của chính dự án (`HV_STORAGE_BACKEND=replit`); `.local/hocvu-data/` chỉ là cache có thể dựng lại. Dữ liệu local cũ không tự chuyển.
 - Chưa chuyển kho dữ liệu cũ hoặc tự nhập bộ tài liệu mô phỏng vào kho hỏi đáp.
 
 ## Product
 
+- Tên đề tài: “Xây dựng trợ lý ảo hội thoại (voice assistant) tư vấn quy chế đào tạo cho sinh viên, ứng dụng kiến trúc RAG (Retrieval-Augmented Generation) kết hợp Speech-to-Text/Text-to-Speech”.
+- Trọng tâm sản phẩm là hội thoại giọng nói tiếng Việt có bằng chứng quy chế; không chỉ là giao diện tìm kiếm tài liệu. Hiển thị trung thực chế độ truy xuất và trạng thái AI thực tế.
 - Tra cứu quy chế, câu hỏi gợi ý, hội thoại theo trình duyệt, trích dẫn và giọng nói.
 - Quản trị tài liệu được bảo vệ bằng token hoặc HTTP Basic.
 

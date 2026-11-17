@@ -1,5 +1,7 @@
 """The React shell is public; it never grants access to protected API data."""
 import unittest
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 import httpx
@@ -27,6 +29,25 @@ class ReactHostingTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(result.status_code, 200)
                 self.assertEqual(result.headers.get("cache-control"), "no-store")
                 self.assertNotIn("www-authenticate", result.headers)
+
+    async def test_storage_failure_keeps_shell_public_but_health_fails_explicitly(self):
+        with patch.object(server, "get_engine", side_effect=server.StorageUnavailable("Kho chưa sẵn sàng")):
+            shell = await self.client.get("/")
+            health = await self.client.get("/api/health")
+        self.assertEqual(shell.status_code, 200)
+        self.assertEqual(health.status_code, 503)
+
+    async def test_startup_does_not_require_storage_or_tts_provider(self):
+        with tempfile.TemporaryDirectory() as root:
+            with (
+                patch.object(server, "SERVER_META", Path(root) / "server.json"),
+                patch.object(server, "ensure_dirs"),
+                patch.object(server, "get_engine", side_effect=AssertionError("eager engine")),
+                patch.object(server, "get_voice_manager", side_effect=AssertionError("eager TTS")),
+                patch.object(server.uvicorn, "run") as run,
+            ):
+                server.main()
+                run.assert_called_once()
 
     async def test_assets_can_load_without_admin_authority(self):
         result = await self.client.get("/assets/nonexistent-build-file.js")

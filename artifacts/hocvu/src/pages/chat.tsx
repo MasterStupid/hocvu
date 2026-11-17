@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useSearch } from 'wouter';
 import { AnimatePresence, motion } from 'framer-motion';
-import { AlertTriangle, Download, History, RotateCw, Trash2 } from 'lucide-react';
+import { AlertTriangle, Download, History, Loader2, RotateCw, Square, Trash2, Volume2, VolumeX } from 'lucide-react';
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
 import { AnswerCard } from '@/components/chat/answer-card';
 import { Composer } from '@/components/chat/composer';
@@ -14,6 +14,7 @@ import { useSpeaker } from '@/hooks/use-voice';
 import { useToast } from '@/hooks/use-toast';
 import { usePrefs } from '@/lib/prefs';
 import { downloadBlob, todayISO } from '@/lib/format';
+import { cn } from '@/lib/utils';
 
 export default function ChatPage() {
   const chat = useChat();
@@ -46,13 +47,24 @@ export default function ChatPage() {
     if (speaker.error) { toast({ title: 'Không phát được giọng đọc', description: speaker.error }); speaker.clearError(); }
   }, [speaker, toast]);
 
+  // Read prefs at resolve time, not at send time, so disabling auto-read mid-flight is honored.
+  const autoRef = useRef(prefs.autoSpeak);
+  autoRef.current = prefs.autoSpeak;
+  const [voiceRequest, setVoiceRequest] = useState(0);
+  const micSupported = typeof window !== 'undefined' && !!((window as unknown as Record<string, unknown>).SpeechRecognition || (window as unknown as Record<string, unknown>).webkitSpeechRecognition);
+  const toggleAuto = () => {
+    const next = !prefs.autoSpeak;
+    if (!next) speaker.stop();
+    prefs.set('autoSpeak', next);
+  };
+
   const send = async (text: string) => {
     if (!chat.canSend || !text.trim()) return;
     speaker.stop();
     setDraft('');
     const res = await chat.ask(text, { refDate, useAi: prefs.aiEnabled });
     if (!res.ok && res.restoreText) setDraft(res.restoreText);
-    if (res.ok && prefs.autoSpeak) speaker.speak(`auto-${Date.now()}`, answerSpeech(res.answer));
+    if (res.ok && autoRef.current) speaker.speak(`auto-${Date.now()}`, answerSpeech(res.answer));
   };
 
   const current = conversations.data?.find((c) => c.session_id === chat.sessionId);
@@ -140,7 +152,7 @@ export default function ChatPage() {
               </div>
             )}
 
-            {chat.restore.state === 'ready' && chat.turns.length === 0 && <Welcome onAsk={send} disabled={!chat.canSend} />}
+            {chat.restore.state !== 'loading' && chat.turns.length === 0 && <Welcome onAsk={send} disabled={!chat.canSend} onVoice={() => setVoiceRequest((n) => n + 1)} micSupported={micSupported} />}
 
             <AnimatePresence initial={false}>
               {chat.turns.map((t) => {
@@ -149,14 +161,14 @@ export default function ChatPage() {
                 return (
                   <motion.article key={t.key} layout="position" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.28 }} className="space-y-3">
                     <div className="flex justify-end">
-                      <div className="max-w-[85%] rounded-lg rounded-br-sm bg-primary text-primary-foreground px-4 py-2.5 whitespace-pre-wrap break-words text-[.95rem]">
+                      <div className="max-w-[85%] rounded-2xl rounded-br-md bg-primary shadow-sm text-primary-foreground px-4 py-2.5 whitespace-pre-wrap break-words text-[.95rem]">
                         {t.question}
                       </div>
                     </div>
                     {t.status === 'pending' && (
                       <div className="paper px-5 py-4 flex items-center gap-3 text-sm text-muted-foreground" role="status">
                         <span className="dots flex gap-1" aria-hidden="true"><span /><span /><span /></span>
-                        Đang đối chiếu văn bản quy chế…
+                        Đang truy xuất điều khoản và soạn câu trả lời…
                       </div>
                     )}
                     {t.status === 'error' && (
@@ -187,14 +199,30 @@ export default function ChatPage() {
 
         <div className="sticky bottom-0 z-10 px-4 sm:px-8 pb-4 pt-2 bg-gradient-to-t from-background via-background to-background/0">
           <div className="max-w-3xl mx-auto">
+            {speaker.phase !== 'idle' && (
+              <div className="voice-bar mb-2 flex items-center gap-3 rounded-full border border-seal/30 bg-paper px-3 py-1.5 text-xs shadow-sm" role="status" data-testid="status-playback">
+                {speaker.phase === 'loading' ? <Loader2 className="w-3.5 h-3.5 animate-spin text-seal" aria-hidden="true" /> : <span className="wave" data-phase="listening" aria-hidden="true"><i /><i /><i /><i /><i /></span>}
+                <span className="flex-1">{speaker.phase === 'loading' ? 'Đang tạo giọng đọc…' : 'Đang đọc câu trả lời'}</span>
+                <button type="button" className="btn btn-ghost btn-sm !min-h-7" onClick={speaker.stop} data-testid="button-stop-playback"><Square /> Dừng đọc</button>
+              </div>
+            )}
             <Composer
+              key={chat.sessionId} onVoiceStart={speaker.stop} voiceRequest={voiceRequest}
               value={draft} onChange={setDraft} onSubmit={() => void send(draft)} canSend={chat.canSend}
               blockedReason={blockedReason} refDate={refDate} onRefDate={setRefDate}
               useAi={prefs.aiEnabled} onUseAi={(v) => prefs.set('aiEnabled', v)}
             />
-            <p className="text-[.7rem] text-muted-foreground text-center mt-2 px-4">
+            <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mt-2 px-2">
+              <button type="button" role="switch" aria-checked={prefs.autoSpeak} onClick={toggleAuto}
+                className={cn('inline-flex items-center gap-1.5 rounded-full px-2.5 h-7 text-[.72rem] border transition-colors', prefs.autoSpeak ? 'border-seal/40 bg-seal/10 text-seal' : 'border-border text-muted-foreground hover:bg-foreground/5')}
+                data-testid="button-toggle-autospeak">
+                {prefs.autoSpeak ? <Volume2 className="w-3.5 h-3.5" aria-hidden="true" /> : <VolumeX className="w-3.5 h-3.5" aria-hidden="true" />}
+                Tự đọc câu trả lời: {prefs.autoSpeak ? 'bật' : 'tắt'}
+              </button>
+            <p className="text-[.7rem] text-muted-foreground text-center">
               Kho văn bản có thể gồm dữ liệu minh họa. Hãy đối chiếu bản gốc với phòng Đào tạo trước khi quyết định.
             </p>
+            </div>
           </div>
         </div>
       </section>

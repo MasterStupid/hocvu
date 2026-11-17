@@ -692,13 +692,13 @@ app.mount("/", StaticFiles(directory=str(UI)), name="ui")
 
 # ── Hàm Khởi chạy Máy chủ Uvicorn ────────────────────────────────────────────
 def main(host: str = "127.0.0.1", port: int = 8000, verbose: bool = False, open_browser: bool = False):
-    global engine
     if requires_api_token and not config.api_token:
         raise RuntimeError("Hãy đặt HV_API_TOKEN để bảo vệ tài liệu và API trước khi chạy server.")
 
     ensure_dirs()
-    engine = get_engine()
-    get_voice_manager()
+    # Engine and voice providers initialize lazily in their API handlers.
+    # An unavailable corpus must yield an explicit 503, not prevent the
+    # public UI (including recovery guidance) from being served at all.
 
     SERVER_META.write_text(json.dumps({"pid": os.getpid(), "port": port, "server": "FastAPI/Uvicorn"}), encoding="utf-8")
     url = f"http://{host}:{port}"

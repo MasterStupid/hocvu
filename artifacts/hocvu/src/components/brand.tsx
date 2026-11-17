@@ -17,7 +17,7 @@ export function Wordmark({ invert = false }: { invert?: boolean }) {
       <Seal size={34} />
       <span className="leading-none">
         <span className={cn('block font-serif text-[1.35rem] font-semibold tracking-tight', invert && 'text-sidebar-accent-foreground')}>HocVu</span>
-        <span className={cn('kicker block mt-1 !text-[.6rem]', invert && '!text-sidebar-foreground/60')}>Tra cứu quy chế</span>
+        <span className={cn('kicker block mt-1 !text-[.6rem]', invert && '!text-sidebar-foreground/60')}>Trợ lý giọng nói quy chế</span>
       </span>
     </span>
   );

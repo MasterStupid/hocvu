@@ -1,25 +1,71 @@
 import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { ChevronRight } from 'lucide-react';
+import { motion, useReducedMotion } from 'framer-motion';
+import { AudioLines, BookMarked, ChevronRight, Mic, MicOff, ScanSearch, Volume2 } from 'lucide-react';
 import { useSuggestions } from '@/hooks/use-public';
 import { describeError } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
-export function Welcome({ onAsk, disabled }: { onAsk: (q: string) => void; disabled: boolean }) {
+const FLOW = [
+  { icon: Mic, title: 'Nói', tech: 'Speech-to-Text', body: 'Trình duyệt chuyển lời nói tiếng Việt thành văn bản. Bạn sửa bản ghi trước khi gửi.' },
+  { icon: ScanSearch, title: 'Truy xuất', tech: 'Retrieval', body: 'Máy chủ tìm các điều, khoản liên quan trong kho văn bản quy chế.' },
+  { icon: BookMarked, title: 'Trả lời có dẫn nguồn', tech: 'Generation', body: 'Câu trả lời chỉ dựa trên đoạn đã truy xuất, kèm số hiệu nguồn để mở ra đối chiếu.' },
+  { icon: Volume2, title: 'Nghe', tech: 'Text-to-Speech', body: 'Bấm Nghe hoặc bật tự đọc để nghe câu trả lời bằng giọng Việt.' },
+];
+
+interface Props { onAsk: (q: string) => void; disabled: boolean; onVoice: () => void; micSupported: boolean }
+
+export function Welcome({ onAsk, disabled, onVoice, micSupported }: Props) {
   const s = useSuggestions();
+  const reduce = useReducedMotion();
   const [open, setOpen] = useState<number | null>(0);
   return (
-    <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }} className="max-w-2xl mx-auto py-8 sm:py-14">
-      <span className="kicker text-seal">Sổ tay quy chế · Trợ lý tra cứu</span>
-      <h2 className="font-serif text-4xl sm:text-[3.3rem] leading-[1.04] font-medium mt-3">
-        Hỏi về quy chế.<br /><em className="text-seal not-italic font-normal italic">Nhận lại điều khoản.</em>
-      </h2>
-      <p className="text-muted-foreground mt-4 max-w-xl">
-        Mỗi kết luận đi kèm số hiệu nguồn bạn có thể mở ra đối chiếu. Khi văn bản không đủ rõ, HocVu nói thẳng là chưa có căn cứ.
-      </p>
+    <motion.section initial={{ opacity: 0, y: reduce ? 0 : 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }} className="py-4 sm:py-8">
+      <div className="voice-stage relative overflow-hidden rounded-2xl px-6 sm:px-10 py-10 sm:py-12 text-sidebar-accent-foreground">
+        <div className="relative grid gap-8 sm:grid-cols-[1fr_auto] items-center">
+          <div>
+            <span className="kicker !text-sidebar-foreground/70">Trợ lý giọng nói · Quy chế đào tạo</span>
+            <h2 className="font-serif text-4xl sm:text-[3.2rem] leading-[1.04] font-medium mt-3">
+              Nói câu hỏi.<br /><em className="italic font-normal text-[hsl(var(--sidebar-primary))]">Nghe điều khoản.</em>
+            </h2>
+            <p className="mt-4 max-w-md text-sidebar-foreground/80 text-[.95rem]">
+              Hỏi như đang hỏi phòng Đào tạo. HocVu tìm các điều khoản liên quan trong văn bản quy chế, trả lời kèm nguồn và đọc to cho bạn nghe. Khi văn bản không đủ rõ, HocVu nói thẳng là chưa có căn cứ.
+            </p>
+          </div>
+          <div className="flex flex-col items-center gap-3 justify-self-center">
+            <button type="button" onClick={onVoice} disabled={disabled || !micSupported}
+              aria-label={micSupported ? 'Bắt đầu nói câu hỏi' : 'Trình duyệt chưa hỗ trợ nhận dạng giọng nói'}
+              className="mic-orb" data-testid="button-voice-cta">
+              {micSupported ? <Mic className="w-9 h-9" aria-hidden="true" /> : <MicOff className="w-9 h-9" aria-hidden="true" />}
+            </button>
+            <span className="text-sm font-medium">{micSupported ? 'Bấm để nói' : 'Micro chưa hỗ trợ'}</span>
+            <span className="text-[.72rem] text-sidebar-foreground/60 max-w-[13rem] text-center">
+              {micSupported ? 'Nhận dạng chạy qua dịch vụ của trình duyệt, cần cấp quyền micro.' : 'Hãy thử Chrome hoặc Edge, hoặc gõ câu hỏi bên dưới.'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-8">
+        <div className="flex items-center gap-2 mb-3">
+          <AudioLines className="w-4 h-4 text-seal" aria-hidden="true" />
+          <h3 className="kicker !text-foreground">Cách một câu hỏi được xử lý</h3>
+        </div>
+        <ol className="flow grid gap-px rounded-xl overflow-hidden border border-border bg-border sm:grid-cols-2 lg:grid-cols-4">
+          {FLOW.map((f, i) => (
+            <li key={f.title} className="bg-paper p-4 relative">
+              <div className="flex items-center gap-2">
+                <span className="grid place-items-center w-8 h-8 rounded-full bg-seal/10 text-seal"><f.icon className="w-4 h-4" aria-hidden="true" /></span>
+                <span className="font-mono text-[.65rem] text-muted-foreground">{String(i + 1).padStart(2, '0')} · {f.tech}</span>
+              </div>
+              <p className="font-serif text-lg mt-2">{f.title}</p>
+              <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{f.body}</p>
+            </li>
+          ))}
+        </ol>
+      </div>
 
       <div className="mt-10">
-        <p className="kicker mb-3">Chủ đề thường gặp</p>
+        <p className="kicker mb-3">Hoặc chọn câu hỏi thường gặp</p>
         {s.isLoading && <div className="grid gap-2">{[0, 1, 2].map((i) => <div key={i} className="h-14 rounded-md bg-muted animate-pulse" />)}</div>}
         {s.isError && <p className="text-sm text-muted-foreground">Chưa tải được gợi ý: {describeError(s.error)} <button type="button" className="underline" onClick={() => s.refetch()} data-testid="button-retry-suggestions">Thử lại</button></p>}
         {s.isSuccess && s.data.length === 0 && <p className="text-sm text-muted-foreground">Chưa có câu hỏi gợi ý.</p>}
