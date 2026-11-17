@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { AudioLines, BookMarked, ChevronRight, Mic, MicOff, ScanSearch, Volume2 } from 'lucide-react';
+import { AudioLines, BookMarked, ChevronRight, Keyboard, Mic, MicOff, ScanSearch, Volume2 } from 'lucide-react';
 import { useSuggestions } from '@/hooks/use-public';
 import { describeError } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -19,6 +19,12 @@ export function Welcome({ onAsk, disabled, onVoice, micSupported }: Props) {
   const s = useSuggestions();
   const reduce = useReducedMotion();
   const [open, setOpen] = useState<number | null>(0);
+  const [flowOpen, setFlowOpen] = useState(false);
+  const startTyping = () => {
+    const input = document.getElementById('composer');
+    input?.focus({ preventScroll: true });
+    input?.scrollIntoView?.({ behavior: reduce ? 'auto' : 'smooth', block: 'center' });
+  };
   return (
     <motion.section initial={{ opacity: 0, y: reduce ? 0 : 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }} className="py-1 sm:py-8">
       <div className="mb-5 flex items-center gap-3 border-b border-border pb-5">
@@ -53,17 +59,27 @@ export function Welcome({ onAsk, disabled, onVoice, micSupported }: Props) {
             <p className="mt-1 text-[.72rem] text-sidebar-foreground/60">
               {micSupported ? 'Nhận dạng chạy qua dịch vụ của trình duyệt, cần cấp quyền micro.' : 'Hãy thử Chrome hoặc Edge, hoặc gõ câu hỏi bên dưới.'}
             </p>
+            <button type="button" onClick={startTyping} className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-lg border border-white/30 px-3 text-sm text-white hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+              data-testid="button-type-cta" aria-controls="composer">
+              <Keyboard className="w-4 h-4" aria-hidden="true" /> Nhập câu hỏi
+            </button>
             </div>
           </div>
         </div>
       </div>
 
       <div className="mt-8">
-        <div className="flex items-center gap-2 mb-3">
+        <div className="hidden sm:flex items-center gap-2 mb-3">
           <AudioLines className="w-4 h-4 text-seal" aria-hidden="true" />
           <h3 className="kicker !text-foreground">Cách một câu hỏi được xử lý</h3>
         </div>
-        <ol className="flow grid gap-px rounded-xl overflow-hidden border border-border bg-border sm:grid-cols-2 lg:grid-cols-4">
+        <button type="button" className="sm:hidden flex w-full items-center gap-2 py-3 text-left text-sm"
+          onClick={() => setFlowOpen(!flowOpen)} aria-expanded={flowOpen} aria-controls="voice-flow">
+          <AudioLines className="w-4 h-4 text-seal" aria-hidden="true" />
+          <span className="flex-1">Cách một câu hỏi được xử lý</span>
+          <ChevronRight className={cn('w-4 h-4 transition-transform', flowOpen && 'rotate-90')} aria-hidden="true" />
+        </button>
+        <ol id="voice-flow" className={cn('flow gap-px rounded-xl overflow-hidden border border-border bg-border sm:grid sm:grid-cols-2 lg:grid-cols-4', flowOpen ? 'grid' : 'hidden')}>
           {FLOW.map((f, i) => (
             <li key={f.title} className="bg-paper p-4 relative">
               <div className="flex items-center gap-2">
