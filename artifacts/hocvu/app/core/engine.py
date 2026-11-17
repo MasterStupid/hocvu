@@ -10,6 +10,7 @@ from .classifier import Classifier, Intent
 from .cards import best_suggestions, build_card, build_suggestion_topics
 from .corpus import build_corpus
 from .documents import DocumentRepository
+from .document_overview import answer_overview, overview_card, overview_request
 from .generator import DECLINE_MSG, Generator
 from .index_version import index_fingerprint
 from .llm import GroundedLLM, LLMError
@@ -125,6 +126,12 @@ class HocVuEngine:
             answer, confidence = "Chào bạn! Tôi hỗ trợ tra cứu quy chế đào tạo. Bạn có thể hỏi về tín chỉ, đăng ký học phần, bảo lưu, tốt nghiệp hoặc học vụ.", 1.0
         elif intent == Intent.TOXIC:
             answer, refused, reason = "Tôi chỉ hỗ trợ các câu hỏi về quy chế đào tạo trong môi trường an toàn.", True, "Unsafe request"
+        elif overview_request(question):
+            answer, references, hits, confidence = answer_overview(
+                overview_request(question), self.searcher, ref_date or date.today().isoformat(),
+            )
+            refused = not bool(references)
+            reason = "Insufficient grounded context" if refused else ""
         elif question_focus(question).kind.startswith("metadata_") and not is_comparison_query(question):
             answer, references, hits, confidence = answer_metadata(
                 question_focus(question), self.searcher, ref_date or date.today().isoformat(),
@@ -240,7 +247,11 @@ class HocVuEngine:
             audio_url=None, providers={"retrieval": ("bm25" if hits and not using_semantic else self.searcher.provider), "voice": "browser", "llm": ai_status},
             timing={"total_ms": (time.perf_counter() - started) * 1000}, session_id=session_id,
             metadata={"grounded": bool(references), "ai_mode": ai_status, "lexical_coverage": round(lexical_coverage if 'lexical_coverage' in locals() else 0.0, 4)},
-            card=build_card(answer, references, hits, confidence, best_suggestions(question, self._suggestion_topics) if refused else None),
+            card=(
+                overview_card(answer, references, hits, confidence)
+                if overview_request(question) and not refused
+                else build_card(answer, references, hits, confidence, best_suggestions(question, self._suggestion_topics) if refused else None)
+            ),
         )
         if record_session and not refused and references and intent == Intent.ACADEMIC_RULES:
             self.session.add_turn(

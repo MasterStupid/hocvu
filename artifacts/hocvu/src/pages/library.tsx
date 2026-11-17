@@ -63,7 +63,7 @@ export default function LibraryPage() {
                 <p className="font-serif text-lg leading-snug">{d.title}</p>
                 <p className="text-xs text-muted-foreground font-mono mt-0.5 truncate">{d.rid}{d.version ? ` · Bản ${d.version}` : ''}</p>
               </div>
-              <Link href={`/?q=${encodeURIComponent(`Văn bản "${d.title}" quy định những gì?`)}`}
+              <Link href={`/?q=${encodeURIComponent(`Văn bản "${d.title}" (mã ${d.rid}) quy định những gì?`)}`}
                 className="btn btn-ghost btn-sm opacity-70 group-hover:opacity-100" data-testid={`link-ask-${d.rid}`}>
                 <span className="hidden sm:inline">Hỏi về văn bản</span> <ArrowUpRight />
               </Link>

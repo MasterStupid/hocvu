@@ -31,4 +31,10 @@ Numeric eligibility verdicts compare stated student measurements with explicit s
 
 **Why:** a valid lower-bound comparison does not establish all prerequisites, and a count of reprimands does not authorize assuming a per-occurrence deduction.
 
+Treat an explicitly selected document overview as source navigation, not a policy-predicate question. Keep it bounded and extractive, distinguish partial indexed coverage from a full summary, and label archived/future documents as not current.
+
+**Why:** the library's own broad question otherwise fails clause-specific evidence gates; lowering those gates would weaken ordinary policy answers. Explicit document selection can introduce an old version without making it applicable today.
+
+**How to apply:** disambiguate same-title versions with the selected document ID, refuse unknown/ambiguous identity, and map each overview passage to its own citation rather than shifting citations with introduction paragraphs.
+
 **How to apply:** preserve source directions, intervals, exceptions and decimal precision. Keep verdicts attached to the actual supporting citation; do not shift later paragraph-to-citation assignments.
