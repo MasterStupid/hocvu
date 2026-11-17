@@ -3,6 +3,11 @@
 pypdf>=6.21.1
 PyMuPDF>=1.24.0
 sentence-transformers>=6.1.0
+# Security floors for the optional semantic retrieval dependencies.
+torch>=2.13.0
+transformers>=5.10.0
+httpcore2>=2.10.0
+httpx2>=2.12.0
 
 # Modern Web API Framework (FastAPI + ASGI + Swagger UI)
 fastapi>=0.115.0
@@ -11,6 +16,13 @@ python-multipart>=0.0.32
 
 # Server-Side Voice Synthesis (Microsoft Edge TTS Neural Voices)
 edge-tts>=7.0.0
+
+# Security floors for transitive HTTP/TLS dependencies.
+aiohttp>=3.14.4
+anyio>=4.14.2
+certifi>=2026.10.19
+h11>=0.16.0
+idna>=3.15
 
 # Optional local OCR for uploaded PNG/JPG/WEBP images
 Pillow>=13.0.0

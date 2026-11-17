@@ -1483,9 +1483,14 @@ name = "repl-nix-workspace"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "aiohttp" },
+    { name = "anyio" },
+    { name = "certifi" },
     { name = "edge-tts" },
     { name = "fastapi" },
+    { name = "h11" },
     { name = "httpx" },
+    { name = "idna" },
     { name = "pillow" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pymupdf" },
@@ -1498,9 +1503,14 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiohttp", specifier = ">=3.14.4" },
+    { name = "anyio", specifier = ">=4.14.2" },
+    { name = "certifi", specifier = ">=2026.10.19" },
     { name = "edge-tts", specifier = ">=7.0.0" },
     { name = "fastapi", specifier = ">=0.115.0" },
+    { name = "h11", specifier = ">=0.16.0" },
     { name = "httpx", specifier = ">=0.28.1" },
+    { name = "idna", specifier = ">=3.15" },
     { name = "pillow", specifier = ">=13.0.0" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
     { name = "pymupdf", specifier = ">=1.24.0" },
