@@ -126,6 +126,27 @@ class AuthThrottlingTests(unittest.IsolatedAsyncioTestCase):
             response = await self.client.get("/api/documents", headers={"X-HocVu-Token": "also-wrong"})
             self.assertEqual(response.status_code, 429)
 
+    async def test_api_auth_failure_does_not_open_native_login(self):
+        for headers in ({}, {"X-HocVu-Token": "wrong"}):
+            response = await self.client.get("/api/documents", headers=headers)
+            self.assertEqual(response.status_code, 401)
+            self.assertNotIn("www-authenticate", response.headers)
+            self.assertEqual(response.headers["cache-control"], "no-store")
+
+    async def test_legacy_page_retains_basic_login_challenge(self):
+        response = await self.client.get("/documents.html")
+        self.assertEqual(response.status_code, 401)
+        self.assertTrue(response.headers["www-authenticate"].startswith("Basic "))
+
+    async def test_valid_api_password_still_grants_document_access(self):
+        with patch.object(server, "get_engine") as engine:
+            engine.return_value.list_documents.return_value = []
+            response = await self.client.get(
+                "/api/documents", headers={"X-HocVu-Token": "synthetic-security-token"},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("www-authenticate", response.headers)
+
     async def test_invalid_and_valid_credentials_share_the_same_quota(self):
         for _ in range(2):
             await self.client.get("/api/documents", auth=("hocvu", "wrong"))

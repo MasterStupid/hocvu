@@ -309,13 +309,15 @@ async def rate_limit_and_auth_middleware(request: Request, call_next):
             )
         )
         if not browser_authenticated and not api_authenticated:
+            # React handles API authentication errors in its password form.
+            # A Basic challenge on fetch would open a second, native login.
+            headers = {"Cache-Control": "no-store"}
+            if not path.startswith("/api/"):
+                headers["WWW-Authenticate"] = 'Basic realm="HocVu AI - Document management", charset="UTF-8"'
             return JSONResponse(
                 status_code=401,
                 content={"error": "Sign in with username hocvu and your access password."},
-                headers={
-                    "WWW-Authenticate": 'Basic realm="HocVu AI - Document management", charset="UTF-8"',
-                    "Cache-Control": "no-store",
-                },
+                headers=headers,
             )
 
     if path.startswith("/api/") and request.method not in {"GET", "HEAD", "OPTIONS"}:
