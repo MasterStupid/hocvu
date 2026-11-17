@@ -1,3 +1,4 @@
 - [Nền tảng chạy HocVu](hocvu-hosting.md) — Người dùng ngừng dùng Netlify, muốn chạy HocVu trực tiếp trên Replit.
 - [JavaScript nhập từ dự án cũ](imported-js-module-scope.md) — CommonJS cần phạm vi riêng khi được nhập vào workspace ESM.
 - [Ranh giới lưu trữ HocVu](hocvu-storage-boundaries.md) — Dùng bucket của chính dự án; không tự nhập dữ liệu cũ hoặc chạy DDL production.
+- [Cô lập kiểm thử quản trị](admin-browser-isolation.md) — Kiểm tra hành vi trình duyệt bằng dữ liệu tổng hợp, không dùng kho thật để thử mutation.

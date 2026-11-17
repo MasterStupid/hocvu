@@ -25,6 +25,7 @@ export function UploadPanel({ busy, uploading, onUpload, onMessage }: {
   const total = queue.reduce((s, i) => s + i.file.size, 0);
 
   const add = (files: File[]) => {
+    if (busy) return;
     const next = [...queue]; let size = total; const errors: string[] = [];
     for (const file of files) {
       if (!/\.(pdf|docx|png|jpe?g|webp)$/i.test(file.name) || !file.size || file.size > MAX_FILE) { errors.push(`${file.name}: chỉ nhận PDF/DOCX/PNG/JPG/WEBP, từ 1 byte đến 25 MB.`); continue; }
@@ -40,6 +41,7 @@ export function UploadPanel({ busy, uploading, onUpload, onMessage }: {
 
   const onDrop = (e: DragEvent) => { e.preventDefault(); setDrag(false); if (!busy) add([...e.dataTransfer.files]); };
   const submit = async () => {
+    if (busy) return;
     const batch = queue;
     const ok = await onUpload(batch);
     if (ok) { const done = new Set(batch.map((b) => b.id)); setQueue((q) => q.filter((i) => !done.has(i.id))); }
@@ -66,7 +68,7 @@ export function UploadPanel({ busy, uploading, onUpload, onMessage }: {
         <FileUp className={cn('w-8 h-8 mx-auto transition-transform', drag ? 'text-seal -translate-y-1' : 'text-muted-foreground')} aria-hidden="true" />
         <p className="mt-2 text-sm">Kéo thả tệp vào đây hoặc</p>
         <button type="button" className="btn btn-outline btn-sm mt-2" onClick={() => input.current?.click()} disabled={busy} data-testid="button-choose-files">Chọn tệp</button>
-        <input ref={input} type="file" multiple accept={ACCEPT} className="sr-only" onChange={(e) => add([...(e.target.files || [])])} tabIndex={-1} aria-hidden="true" />
+        <input ref={input} type="file" multiple accept={ACCEPT} disabled={busy} className="sr-only" onChange={(e) => add([...(e.target.files || [])])} tabIndex={-1} aria-hidden="true" />
       </div>
 
       {queue.length > 0 && (

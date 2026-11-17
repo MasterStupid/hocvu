@@ -45,6 +45,46 @@ mutation thất bại phải giữ dữ liệu nhập, còn commit thành công 
 như rollback hoặc giữ tệp để tải trùng. Đây là kiểm thử frontend cô lập,
 không thay thế kiểm thử API FastAPI hoặc kiểm thử trình duyệt trên môi trường riêng.
 
+### Kiểm thử quản trị trên Chromium cô lập
+
+```sh
+pnpm --filter @workspace/hocvu test:browser
+```
+
+Playwright tự mở frontend Vite riêng tại `127.0.0.1:4179` và đóng sau khi chạy.
+Không cần khởi động workflow HocVu hoặc FastAPI. Nếu cổng đã bị chiếm, bài chạy
+thất bại thay vì dùng lại một máy chủ không rõ nguồn. Không cấu hình URL backend,
+không dùng mật khẩu thật và không thay Secrets để chạy kiểm thử.
+
+Mỗi bài có browser context và kho dữ liệu tổng hợp riêng. Interception cấp context
+được cài trước khi mở trang; API client, form, hooks và Radix vẫn là mã ứng dụng thật.
+Yêu cầu quản trị phải có token tổng hợp mới được fixture chấp nhận.
+API chưa có handler và kết nối ngoài bị chặn, đồng thời làm kiểm thử thất bại;
+riêng Google Fonts nhận CSS rỗng ngay trong bộ kiểm thử, không tải qua mạng.
+Máy chủ frontend cũng từ chối `/api/*` bằng 503 nếu interception bị thiếu.
+Không có backend hay quyền truy cập kho tài liệu thật trong bộ kiểm thử.
+
+Các bài kiểm tra file chooser nhiều tệp, chọn lại cùng tệp, multipart chứa byte thật,
+ngày ISO/năm nhuận, xác thực `required` native, kéo thả với `DataTransfer`/`File`
+của Chromium, giữ hàng đợi khi upload lỗi và retry, focus ban đầu/Tab/Shift+Tab/Escape
+và trả focus khi đóng hộp thoại. Response gate giữ request đang chờ để kiểm tra
+khóa upload/metadata, xóa đơn/lô, sao lưu và sửa ngày mà không dựa vào thời gian sleep.
+Kéo thả được phát bằng DOM events trên trình duyệt thật; không giả lập kéo từ cửa sổ
+quản lý tệp của hệ điều hành, và không tự động điều khiển giao diện lịch của hệ điều hành.
+Hiện bộ này chỉ chạy Chromium desktop, không khẳng định tương thích Firefox/WebKit/mobile.
+
+Replit dùng Chromium hệ thống ở `/repl/tools/bin/chromium` nếu có. Trên máy khác,
+cài browser của Playwright bằng `pnpm --filter @workspace/hocvu exec playwright install chromium`,
+hoặc truyền `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` trỏ đến Chromium đã cài (đây là
+đường dẫn chương trình, không phải secret). Không cần thay Secrets của dự án.
+Typecheck hiện kiểm tra cả cấu hình và mã kiểm thử trình duyệt.
+Report HTML, screenshot và trace khi lỗi nằm ở `generated-artifacts/hocvu-browser/`
+(đã bị loại khỏi Git và gói publish). Mở report bằng:
+
+```sh
+pnpm --filter @workspace/hocvu exec playwright show-report ../../generated-artifacts/hocvu-browser/report
+```
+
 - Trang hỏi đáp và shell React `/documents` công khai; dữ liệu/API quản trị vẫn yêu cầu xác thực.
 - Đăng nhập quản trị trong React dùng `X-HocVu-Token`, chỉ giữ mật khẩu trong bộ nhớ,
   không lưu vào localStorage/sessionStorage. Bookmark cũ `/documents.html` vẫn có lớp HTTP Basic.

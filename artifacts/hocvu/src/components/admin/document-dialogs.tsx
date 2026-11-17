@@ -3,13 +3,15 @@ import { Loader2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { ErrorPanel, SkeletonLines } from '@/components/states';
 import { useDocumentText } from '@/hooks/use-admin';
+import { useDialogReturnFocus } from '@/hooks/use-dialog-return-focus';
 import { describeError, type DocumentItem } from '@/lib/api';
 
 export function PreviewDialog({ token, doc, onClose }: { token: string; doc: DocumentItem | null; onClose: () => void }) {
   const q = useDocumentText(token, doc?.id ?? null);
+  const focus = useDialogReturnFocus();
   return (
     <Dialog open={!!doc} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="bg-paper max-w-3xl max-h-[88dvh] flex flex-col">
+      <DialogContent className="bg-paper max-w-3xl max-h-[88dvh] flex flex-col" {...focus}>
         <span className="kicker text-seal">Văn bản đã trích xuất</span>
         <DialogTitle className="font-serif text-2xl font-medium leading-tight pr-6">{q.data?.title || doc?.title}</DialogTitle>
         <DialogDescription className="text-xs">{q.data ? `${q.data.chunk_count || 0} đoạn truy xuất` : 'Đang tải nội dung…'}</DialogDescription>
@@ -30,6 +32,7 @@ export function DateDialog({ doc, onClose, onSave }: {
   const [value, setValue] = useState('');
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ error: boolean; text: string } | null>(null);
+  const focus = useDialogReturnFocus();
   useEffect(() => { if (doc) { setValue(doc.document_date || ''); setMsg(null); } }, [doc]);
 
   const submit = async (e: FormEvent) => {
@@ -44,13 +47,13 @@ export function DateDialog({ doc, onClose, onSave }: {
 
   return (
     <Dialog open={!!doc} onOpenChange={(v) => { if (!v && !saving) onClose(); }}>
-      <DialogContent className="bg-paper max-w-md">
+      <DialogContent className="bg-paper max-w-md" {...focus}>
         <form onSubmit={submit}>
           <span className="kicker text-seal">Sửa ngày áp dụng</span>
           <DialogTitle className="font-serif text-2xl font-medium leading-tight mt-1">{doc?.title}</DialogTitle>
           <DialogDescription className="text-sm mt-1">Chỉ thay đổi ngày áp dụng; mã tài liệu và tệp gốc được giữ nguyên.</DialogDescription>
           <label className="block mt-5"><span className="label">Ngày áp dụng</span>
-            <input type="date" required className="field" value={value} onChange={(e) => setValue(e.target.value)} disabled={saving} autoFocus data-testid="input-edit-date" />
+            <input type="date" required className="field" value={value} onChange={(e) => setValue(e.target.value)} disabled={saving} data-testid="input-edit-date" />
           </label>
           {msg && <p role={msg.error ? 'alert' : 'status'} className={msg.error ? 'text-sm text-destructive mt-2' : 'text-sm text-muted-foreground mt-2'}>{msg.text}</p>}
           <div className="flex justify-end gap-2 mt-5">
