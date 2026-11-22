@@ -1,9 +1,49 @@
 import type { ReactNode } from 'react';
 
-// Safe renderer: text nodes only; recognises lists, pipe tables and **bold**.
+const URL_RE = /(https?:\/\/[^\s<>]+)/g;
+
+function renderLinks(text: string, key: string): ReactNode[] {
+  const parts = text.split(URL_RE);
+  const out: ReactNode[] = [];
+  parts.forEach((part, idx) => {
+    if (!part) return;
+    if (idx % 2 === 1) {
+      // Strip trailing sentence punctuation that is not part of the URL.
+      const match = /^(https?:\/\/[^\s<>]+?)([.,;:!?)\]]*)$/.exec(part);
+      const href = match ? match[1] : part;
+      const trailing = match ? match[2] : '';
+      let safeHref = '';
+      try {
+        const parsed = new URL(href);
+        if (parsed.protocol === 'http:' || parsed.protocol === 'https:') safeHref = parsed.href;
+      } catch { /* invalid url */ }
+      if (safeHref) {
+        out.push(
+          <a
+            key={`${key}-u${idx}`}
+            href={safeHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline decoration-seal/60 underline-offset-2 text-seal hover:text-seal/80 break-all"
+          >
+            {href}
+          </a>,
+        );
+        if (trailing) out.push(<span key={`${key}-t${idx}`}>{trailing}</span>);
+        return;
+      }
+    }
+    out.push(<span key={`${key}-s${idx}`}>{part}</span>);
+  });
+  return out;
+}
+
+// Safe renderer: text nodes only; recognises lists, pipe tables, safe http(s) URLs, and **bold**.
 function inline(text: string, key: string): ReactNode[] {
   return text.split(/(\*\*[^*]+\*\*)/g).filter(Boolean).map((part, i) =>
-    part.startsWith('**') && part.endsWith('**') ? <strong key={`${key}-${i}`}>{part.slice(2, -2)}</strong> : <span key={`${key}-${i}`}>{part}</span>,
+    part.startsWith('**') && part.endsWith('**')
+      ? <strong key={`${key}-${i}`}>{renderLinks(part.slice(2, -2), `${key}-b${i}`)}</strong>
+      : <span key={`${key}-${i}`}>{renderLinks(part, `${key}-p${i}`)}</span>,
   );
 }
 const cells = (line: string) => line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());

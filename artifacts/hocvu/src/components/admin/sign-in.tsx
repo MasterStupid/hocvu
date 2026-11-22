@@ -59,8 +59,8 @@ export function SignIn() {
           </button>
 
           <div className="mt-8 rounded-md border border-border bg-muted/40 px-4 py-3 text-xs text-muted-foreground leading-relaxed">
-            <p className="font-medium text-foreground text-[.8rem] mb-1">Chưa có mật khẩu?</p>
-            Chủ dự án cần đặt biến <code className="font-mono text-foreground">HV_API_TOKEN</code> trong mục Secrets của Replit, sau đó khởi động lại ứng dụng. Giá trị đó chính là mật khẩu đăng nhập tại đây. Ứng dụng không có mật khẩu mặc định.
+            <p className="font-medium text-foreground text-[.8rem] mb-1">Dành cho cán bộ quản trị</p>
+            Khu vực này dùng để tải lên và cập nhật văn bản quy chế chính thức. Sinh viên không cần đăng nhập để tra cứu hỏi đáp. Nếu bạn là quản trị viên và chưa có mật khẩu, hãy liên hệ bộ phận vận hành hệ thống.
           </div>
         </motion.form>
       </div>

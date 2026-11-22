@@ -28,12 +28,19 @@ function GroundingMeter({ g }: { g?: Grounding }) {
 
 function ModeLabel({ answer }: { answer: Answer }) {
   const llm = answer.providers?.llm;
-  let text: string; let tone = '';
+  let text: string; let tone = ''; let detail: string | undefined;
   if (llm === 'on') text = 'AI diễn đạt lại từ nguồn đã truy xuất';
-  else if (llm === 'fallback') { text = 'AI không khả dụng · dùng câu trả lời trích xuất'; tone = 'text-ochre'; }
-  else if (llm === 'off') text = 'Trả lời trích xuất · không dùng AI';
+  else if (llm === 'fallback') {
+    text = 'AI không khả dụng · dùng câu trả lời trích xuất';
+    tone = 'text-ochre';
+    detail = answer.refusalReason || 'Máy chủ chưa cấu hình API key AI hoặc mô hình tạm thời không phản hồi.';
+  } else if (llm === 'off') text = 'Trả lời trích xuất · không dùng AI';
   else text = answer.restored ? 'Lượt đã lưu · không rõ chế độ diễn đạt' : 'Chế độ diễn đạt không xác định';
-  return <span className={cn('ml-auto pr-2 kicker', tone)} data-testid="text-answer-mode">{text}</span>;
+  return (
+    <span className={cn('ml-auto pr-2 kicker', tone)} title={detail} data-testid="text-answer-mode">
+      {text}
+    </span>
+  );
 }
 
 interface Props {
@@ -92,22 +99,22 @@ export function AnswerCard({ answer, index, turnKey, onFollowUp, followUpDisable
   }
 
   if (answer.presentation === 'refusal') {
+    const label = refusalLabel(answer.refusalReason);
+    const showReason = Boolean(label && answer.refusalReason !== 'Insufficient grounded context');
     return (
       <div className="paper border-ochre/50 px-5 py-4 bg-[repeating-linear-gradient(135deg,transparent_0_10px,hsl(var(--ochre)/.04)_10px_20px)]">
         <span className="kicker text-ochre">Không đủ căn cứ</span>
         <h3 className="font-serif text-xl mt-1">Chưa tìm thấy quy định phù hợp</h3>
         <div className="mt-2 text-[.95rem]"><RichText text={answer.text} /></div>
-        {answer.refusalReason && <p className="text-xs text-muted-foreground mt-2">Lý do: {refusalLabel(answer.refusalReason)}</p>}
-        <p className="text-sm text-muted-foreground mt-3">
-          HocVu không đoán khi nguồn chưa rõ. {answer.card.suggestions?.length
-            ? 'Bạn có thể thử một câu hỏi có căn cứ:'
-            : 'Hãy bổ sung tên văn bản, điều khoản hoặc nội dung cụ thể cần tra cứu.'}
-        </p>
+        {showReason && <p className="text-xs text-muted-foreground mt-2">{label}</p>}
         {!!answer.card.suggestions?.length && (
-          <div className="flex flex-wrap gap-2 mt-2.5">
-            {answer.card.suggestions.map((q, i) => (
-              <button key={i} type="button" className="chip" disabled={followUpDisabled} onClick={() => onFollowUp(q)} data-testid={`button-followup-${turnKey}-${i}`}>{q}</button>
-            ))}
+          <div className="mt-3">
+            <p className="text-xs text-muted-foreground mb-2">Gợi ý câu hỏi có căn cứ trong kho quy chế:</p>
+            <div className="flex flex-wrap gap-2">
+              {answer.card.suggestions.map((q, i) => (
+                <button key={i} type="button" className="chip" disabled={followUpDisabled} onClick={() => onFollowUp(q)} data-testid={`button-followup-${turnKey}-${i}`}>{q}</button>
+              ))}
+            </div>
           </div>
         )}
         <div className="flex gap-1 mt-3 -ml-2">{copyBtn}{listen}</div>
