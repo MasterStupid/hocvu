@@ -1,0 +1,3 @@
+{
+  "install": "uv sync --python 3.13 && (pnpm approve-builds --all 2>/dev/null || true) && pnpm install && (sed -i '/case \\$- in/,/esac/d' ~/.bashrc 2>/dev/null || true) && (grep -qxF 'export PATH=\"$PWD/.venv/bin:$PATH\"' ~/.bashrc || echo 'export PATH=\"$PWD/.venv/bin:$PATH\"' >> ~/.bashrc)"
+}
