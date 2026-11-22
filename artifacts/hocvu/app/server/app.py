@@ -7,6 +7,7 @@ import hashlib
 import base64
 import binascii
 import json
+import logging
 import os
 import re
 import secrets
@@ -31,7 +32,7 @@ from core.session import LEGACY_API_OWNER, SessionAccessError, SessionClosedErro
 from core.documents import DocumentError, DocumentNotFoundError, DocumentRepository
 from core.settings import AUD, INDEX_JSON, SERVER_META, UI, ROOT, ensure_dirs, load_config
 from core.persistent_db import StorageUnavailable
-from core.voice import VoiceManager, clean_text_for_tts, DEFAULT_VOICE, DEFAULT_RATE, RATE_PATTERN, MALE_VOICE
+from core.voice import VoiceManager, SpeechUnavailable, clean_text_for_tts, DEFAULT_VOICE, DEFAULT_RATE, RATE_PATTERN, MALE_VOICE
 from server.security import SlidingWindowLimiter, client_address, parse_trusted_proxies
 
 
@@ -39,6 +40,7 @@ from server.security import SlidingWindowLimiter, client_address, parse_trusted_
 engine: HocVuEngine | None = None
 _engine_lock = threading.Lock()
 _voice_lock = threading.Lock()
+logger = logging.getLogger("hocvu.server")
 # Offloaded writers must not race the manifest's read/modify/write cycle.
 # Wait asynchronously, before reading upload bytes or occupying a worker.
 _document_write_lock = anyio.Lock()
@@ -613,6 +615,17 @@ async def delete_history(
 
 
 # ── Endpoint Xử lý Giọng nói (Server-side Edge-TTS) ──────────────────────────
+def _speech_unavailable() -> JSONResponse:
+    # A distinct code lets the browser fall back to its own Vietnamese voice.
+    return JSONResponse(
+        status_code=503,
+        content={
+            "detail": "Dịch vụ giọng đọc của máy chủ tạm thời không phản hồi. Hãy thử lại sau ít phút.",
+            "code": "tts_unavailable",
+        },
+    )
+
+
 @app.get("/api/tts", summary="Tổng hợp giọng nói tiếng Việt (GET stream)")
 async def tts_get(
     text: str = Query(..., description="Văn bản cần đọc"),
@@ -630,8 +643,13 @@ async def tts_get(
             media_type="audio/mpeg",
             headers={"Content-Disposition": "inline; filename=speech.mp3"},
         )
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Lỗi tổng hợp giọng nói: {exc}")
+    except SpeechUnavailable:
+        return _speech_unavailable()
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception:
+        logger.exception("Speech synthesis failed")
+        raise HTTPException(status_code=500, detail="Lỗi tổng hợp giọng nói.") from None
 
 
 @app.post("/api/tts", summary="Tổng hợp giọng nói tiếng Việt (POST)")
@@ -645,8 +663,13 @@ async def tts_post(payload: TTSRequest):
             cleaned, voice=payload.voice or DEFAULT_VOICE, rate=payload.rate or DEFAULT_RATE,
         )
         return {"status": "ok", "audio_url": audio_url}
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Lỗi tổng hợp giọng nói: {exc}")
+    except SpeechUnavailable:
+        return _speech_unavailable()
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception:
+        logger.exception("Speech synthesis failed")
+        raise HTTPException(status_code=500, detail="Lỗi tổng hợp giọng nói.") from None
 
 
 @app.get("/api/audio/{filename}", summary="Phát file âm thanh đã lưu")

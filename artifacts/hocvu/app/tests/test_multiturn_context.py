@@ -247,22 +247,28 @@ class MultiturnContextTests(unittest.TestCase):
                 self.assertEqual(history[-1]["context_root"], questions[0])
                 self.assertIn(questions[0], history[-1]["context_question"])
 
-    def test_greetings_unsafe_and_refusals_are_not_recorded(self):
-        for question in ("", "Xin chào", "Cảm ơn", "Tự sát", "Wifi ở ký túc xá thế nào?"):
+    def test_greetings_unsafe_and_refusals_are_shown_but_never_become_context(self):
+        asked = ("Xin chào", "Cảm ơn", "Tự sát", "Wifi ở ký túc xá thế nào?")
+        for question in ("", *asked):
             with self.subTest(question=question):
                 with patch.object(self.engine.session, "add_turn", wraps=self.engine.session.add_turn) as add_turn:
                     self.engine.ask(question, "not-recorded")
                 add_turn.assert_not_called()
-        self.assertEqual(self.engine.history("not-recorded"), [])
+        # The transcript keeps what the student saw; an empty question is not a turn.
+        history = self.engine.history("not-recorded")
+        self.assertEqual([turn["question"] for turn in history], list(asked))
+        self.assertTrue(all(turn["rid"] == turn["article_id"] == turn["context_root"] == "" for turn in history))
+        self.assertIsNone(self.engine.session.latest_grounded_turn("not-recorded"))
         response = self.engine.ask("Còn điều kiện nào khác?", "not-recorded")
         self.assertTrue(response.refused)
-        self.assertEqual(self.engine.history("not-recorded"), [])
+        self.assertEqual(response.references, [])
+        self.assertEqual(len(self.engine.history("not-recorded")), len(asked) + 1)
 
     def test_non_grounded_turns_do_not_replace_a_successful_antecedent(self):
         self.seed_history()
         for question in ("Xin chào", "Tự sát", "Wifi ở ký túc xá thế nào?"):
             self.engine.ask(question, "conversation")
-        self.assertEqual(len(self.engine.history("conversation")), 1)
+        self.assertEqual(len(self.engine.history("conversation")), 4)
         response = self.engine.ask("Thế còn thời gian tối đa?", "conversation")
         self.assertFalse(response.refused)
         self.assertIn("4 học kỳ", response.answer)

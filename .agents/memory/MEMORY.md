@@ -25,3 +25,5 @@
 - [Dependency audit floors](dependency-audit-floors.md) — the dependency scanner checks manifest minimums even when the installed environment already uses patched releases.
 - [UI preview verification](ui-preview-verification.md) — workflow fails without App Storage; preview UI via temp local-mode server; screenshot /index.html?x, not /.
 - [App Storage bucket binding](app-storage-bucket-binding.md) — startup StorageUnavailable = HV_STORAGE_BUCKET_ID pointing at a bucket the platform replaced.
+- [Server voice fallback](server-voice-fallback.md) — Edge read-aloud is intermittently empty from this host; retry, then fall back once to the browser's Vietnamese voice.
+- [Conditional follow-ups](conditional-follow-ups.md) — "Nếu … thì sao?" links to the previous topic only via a shared clause; otherwise answer alone with a visible note.

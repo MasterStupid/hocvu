@@ -11,9 +11,12 @@ WORKSPACE = APP.parents[2]
 
 
 def main() -> None:
-    port = int(os.environ["PORT"])
+    try:
+        port = int(os.environ.get("PORT", ""))
+    except ValueError:
+        port = 0
     if not 0 < port < 65536:
-        raise RuntimeError("PORT must be between 1 and 65535.")
+        raise RuntimeError("PORT must be set to a number between 1 and 65535.")
     if os.environ.get("BASE_PATH", "/") != "/":
         raise RuntimeError("This imported application must be mounted at '/'.")
 

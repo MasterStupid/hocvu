@@ -162,13 +162,16 @@ class SessionStore:
         conn.row_factory = sqlite3.Row
         try:
             conn.execute("BEGIN")
-            # Join the first turn by primary key in the same read-only snapshot,
-            # rather than issuing one title lookup per conversation.
+            # Join the title turn by primary key in the same read-only snapshot,
+            # rather than issuing one title lookup per conversation. A saved
+            # greeting is not a useful title when a real question follows it.
             rows = conn.execute("""
                 SELECT summary.session_id, first_turn.question AS title,
                        summary.turn_count, summary.updated_at
                 FROM (
-                    SELECT t.session_id, MIN(t.id) AS first_id, MAX(t.id) AS last_id,
+                    SELECT t.session_id,
+                           COALESCE(MIN(CASE WHEN t.intent <> 'greeting' THEN t.id END), MIN(t.id)) AS first_id,
+                           MAX(t.id) AS last_id,
                            COUNT(*) AS turn_count, o.updated_at
                     FROM turns t LEFT JOIN session_owners o ON o.session_id = t.session_id
                     WHERE (o.owner = ? OR (? = ? AND o.owner IS NULL))
@@ -213,8 +216,9 @@ class SessionStore:
         article_id: str, rid: str, *, context_question: str = "", context_root: str = "",
         response: dict | None = None,
     ):
-        # Also defend callers other than HocVuEngine. Old ungrounded rows remain
-        # readable, but new greetings/refusals must not become conversation state.
+        # Also defend callers other than HocVuEngine: only a grounded academic
+        # answer may become conversation context. Greetings and refusals are
+        # kept for display through ``add_display_turn``.
         if not question.strip() or intent != Intent.ACADEMIC_RULES.value or not article_id or not rid:
             return None
         if Classifier().classify(question) != Intent.ACADEMIC_RULES:
@@ -246,6 +250,46 @@ class SessionStore:
                 context_question or question,
                 context_root or (question if not is_context_dependent(question) else ""),
                 *display_state,
+            ))
+            conn.execute(
+                "UPDATE session_owners SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE session_id = ?",
+                (session_id,),
+            )
+            conn.commit()
+            return cursor.lastrowid
+        finally:
+            conn.close()
+
+    def add_display_turn(
+        self, session_id: str, question: str, answer: str, intent: str, *, response: dict,
+    ):
+        """Keep a greeting or refusal in the transcript without making it context.
+
+        The row carries no source IDs and no resolved context, so
+        ``contextualize`` can never select it; a refusal is stored as refused.
+        Grounded academic answers must use ``add_turn`` instead.
+        """
+        if not question.strip():
+            return None
+        refused = bool(response["refused"])
+        if intent == Intent.ACADEMIC_RULES.value and not refused:
+            return None
+        conn = self._connect()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            if self._is_closed(conn, session_id):
+                raise SessionClosedError(session_id)
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO turns (
+                    session_id, question, answer, intent, article_id, rid,
+                    context_question, context_root, refused, references_json,
+                    card_json, confidence, refusal_reason
+                ) VALUES (?, ?, ?, ?, '', '', '', '', ?, ?, ?, ?, ?)
+            ''', (
+                session_id, question, answer, intent, int(refused), "[]",
+                json.dumps(response["card"], ensure_ascii=False),
+                response["confidence"], response["refusal_reason"],
             ))
             conn.execute(
                 "UPDATE session_owners SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE session_id = ?",
@@ -306,6 +350,25 @@ class SessionStore:
             return cursor.rowcount
         finally:
             conn.close()
+
+    def latest_grounded_turn(self, session_id: str) -> dict | None:
+        """The newest answer that may serve as context, under the same policy."""
+        conn = self._connect()
+        try:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute('''
+                SELECT question, article_id, rid FROM turns
+                WHERE session_id = ? AND intent = ?
+                    AND COALESCE(refused, 0) = 0
+                    AND TRIM(COALESCE(rid, '')) != ''
+                    AND TRIM(COALESCE(article_id, '')) != ''
+                ORDER BY id DESC LIMIT 1
+            ''', (session_id, Intent.ACADEMIC_RULES.value)).fetchone()
+        finally:
+            conn.close()
+        if row is None or Classifier().classify(row["question"]) != Intent.ACADEMIC_RULES:
+            return None
+        return {"question": row["question"], "article_id": row["article_id"], "rid": row["rid"]}
 
     def contextualize(self, session_id: str, question: str, limit: int = 8) -> tuple[str, str]:
         """Resolve against grounded turns, retaining the root across follow-ups.

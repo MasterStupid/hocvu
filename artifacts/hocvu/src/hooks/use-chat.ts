@@ -41,17 +41,20 @@ export function fromResponse(res: AskResponse): Answer {
   };
 }
 
-function fromRow(row: HistoryRow): ChatTurn {
+export function fromRow(row: HistoryRow): ChatTurn {
   // Old engine rows used empty source IDs for academic refusals (legacy parity).
   const legacyRefusal = row.intent === 'unsafe' || (row.intent === 'academic_rules' && row.article_id === '' && row.rid === '');
   const refused = typeof row.refused === 'boolean' ? row.refused : legacyRefusal ? true : null;
   const normalized = { refused, references: row.references, card: row.card };
   const presentation: Presentation = refused ? 'refusal' : row.intent === 'greeting' ? 'greeting' : hasSavedEvidence(normalized) ? 'answer' : 'legacy';
+  // Saved with the answer itself; older rows have no recorded wording mode.
+  const mode = row.card?.answer_mode;
+  const providers = mode === 'on' || mode === 'off' || mode === 'fallback' ? { llm: mode } : undefined;
   return {
     key: `row-${row.id ?? uuid()}`, question: row.question, status: 'done',
     answer: {
       text: row.answer, references: row.references || [], card: row.card || {}, intent: row.intent || 'other',
-      refused, refusalReason: row.refusal_reason || '', presentation, restored: true,
+      refused, refusalReason: row.refusal_reason || '', presentation, restored: true, providers,
     },
   };
 }

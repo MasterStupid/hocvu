@@ -265,7 +265,10 @@ class ConversationApiTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_origin_auth_rate_limit_and_empty_greeting_policy_are_preserved(self):
         await self.ask(self.a, "greeting", "Xin chào")
-        self.assertEqual((await self.a.get("/api/conversations")).json(), [])
+        # A greeting is shown again after a reload, but is never context.
+        listed = (await self.a.get("/api/conversations")).json()
+        self.assertEqual([(row["session_id"], row["title"], row["turn_count"]) for row in listed], [("greeting", "Xin chào", 1)])
+        self.assertIsNone(self.engine.session.latest_grounded_turn("greeting"))
         forbidden = await self.a.delete(
             "/api/history", params={"session_id": "greeting"},
             headers={"Origin": "https://attacker.test"},

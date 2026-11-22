@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 import re
 from pathlib import Path
 from .settings import AUD
@@ -13,6 +14,17 @@ DEFAULT_VOICE = "vi-VN-HoaiMyNeural"  # Nữ miền Bắc
 MALE_VOICE = "vi-VN-NamMinhNeural"    # Nam miền Bắc
 DEFAULT_RATE = "+0%"
 RATE_PATTERN = r"^[+-][0-9]+%$"
+# The free Edge read-aloud endpoint intermittently closes a request without
+# audio, then serves the same text on the next attempt. Retry briefly before
+# reporting the provider as unavailable.
+SYNTHESIS_ATTEMPTS = 3
+SYNTHESIS_RETRY_DELAY = 0.4
+
+logger = logging.getLogger(__name__)
+
+
+class SpeechUnavailable(Exception):
+    """The external speech provider returned no audio after bounded retries."""
 
 
 def normalize_rate(rate: str | None = DEFAULT_RATE) -> str:
@@ -66,17 +78,37 @@ class VoiceManager:
             return b""
         import edge_tts
 
-        communicator = edge_tts.Communicate(
-            text=cleaned,
-            voice=voice,
-            rate=rate,
-            pitch=pitch,
-        )
-        chunks = []
-        async for chunk in communicator.stream():
-            if chunk["type"] == "audio":
-                chunks.append(chunk["data"])
-        return b"".join(chunks)
+        last_error: Exception | None = None
+        for attempt in range(1, SYNTHESIS_ATTEMPTS + 1):
+            try:
+                communicator = edge_tts.Communicate(
+                    text=cleaned,
+                    voice=voice,
+                    rate=rate,
+                    pitch=pitch,
+                )
+                chunks = []
+                async for chunk in communicator.stream():
+                    if chunk["type"] == "audio":
+                        chunks.append(chunk["data"])
+                audio = b"".join(chunks)
+                if audio:
+                    return audio
+                last_error = SpeechUnavailable("empty audio stream")
+            except (ValueError, TypeError):
+                # Invalid parameters cannot succeed on a retry.
+                raise
+            except Exception as exc:  # provider/network failures are transient
+                last_error = exc
+            logger.warning(
+                "Edge TTS attempt %d/%d returned no audio (%s, voice=%s, chars=%d)",
+                attempt, SYNTHESIS_ATTEMPTS, type(last_error).__name__, voice, len(cleaned),
+            )
+            if attempt < SYNTHESIS_ATTEMPTS:
+                await asyncio.sleep(SYNTHESIS_RETRY_DELAY * attempt)
+        raise SpeechUnavailable(
+            "Dịch vụ giọng đọc tạm thời không phản hồi."
+        ) from last_error
 
     async def generate_audio_file(
         self,

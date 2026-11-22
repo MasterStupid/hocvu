@@ -18,3 +18,9 @@ Citation numbers such as `[1]` belong to an individual answer, not to the whole 
 New and restored greetings must remain ordinary chat messages, regardless of confidence or any card-shaped payload.
 
 **Why:** a greeting makes no regulatory claim to assess. Showing an academic conclusion or “Căn cứ yếu · 0 nguồn” incorrectly treats it as an unsupported academic answer.
+
+Greetings and refusals are saved as display-only transcript rows: no source IDs, no resolved context, refusal flag kept. They must never be selectable as conversation context or as an antecedent.
+
+**Why:** the user's student-experience test showed refused turns vanishing on reload and a wrong turn count; students must see again everything they were shown, while the grounded-only context policy stays intact.
+
+**How to apply:** keep two write paths (grounded answer vs. display-only row) and keep the context queries filtering on source IDs; the visible transcript limit is separate from the context window. Anything a restored answer needs to display (for example its wording mode) travels inside the saved card snapshot, which avoids a schema change on the production database.

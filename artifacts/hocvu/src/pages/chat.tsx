@@ -16,6 +16,8 @@ import { usePrefs } from '@/lib/prefs';
 import { downloadBlob, todayISO } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
+const DISCLAIMER = 'Kho văn bản có thể gồm dữ liệu minh họa. Hãy đối chiếu bản gốc với phòng Đào tạo trước khi quyết định.';
+
 export default function ChatPage() {
   const chat = useChat();
   const prefs = usePrefs();
@@ -37,6 +39,20 @@ export default function ChatPage() {
   }, [search, navigate]);
 
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [chat.turns.length, chat.sending]);
+
+  // The composer stays on screen, so anything scrolled into view must stop
+  // above it instead of underneath (new answers, cited sources).
+  const composerDock = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const dock = composerDock.current;
+    const root = document.documentElement;
+    if (!dock) return;
+    const apply = () => { root.style.scrollPaddingBottom = `${Math.ceil(dock.getBoundingClientRect().height) + 12}px`; };
+    apply();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(apply);
+    observer?.observe(dock);
+    return () => { observer?.disconnect(); root.style.scrollPaddingBottom = ''; };
+  }, []);
 
   // Stop audio when switching conversation.
   const stopRef = useRef(speaker.stop);
@@ -197,13 +213,13 @@ export default function ChatPage() {
           </div>
         </div>
 
-        <div className={cn('bottom-0 z-10 px-4 sm:px-8 pb-4 pt-2 bg-gradient-to-t from-background via-background to-background/0',
+        <div ref={composerDock} className={cn('bottom-0 z-10 px-4 sm:px-8 pb-2 sm:pb-4 pt-2 bg-gradient-to-t from-background via-background to-background/0',
           chat.turns.length > 0 ? 'sticky' : 'relative sm:sticky')}>
           <div className="max-w-3xl mx-auto">
             {speaker.phase !== 'idle' && (
               <div className="voice-bar mb-2 flex items-center gap-3 rounded-full border border-seal/30 bg-paper px-3 py-1.5 text-xs shadow-sm" role="status" data-testid="status-playback">
                 {speaker.phase === 'loading' ? <Loader2 className="w-3.5 h-3.5 animate-spin text-seal" aria-hidden="true" /> : <span className="wave" data-phase="listening" aria-hidden="true"><i /><i /><i /><i /><i /></span>}
-                <span className="flex-1">{speaker.phase === 'loading' ? 'Đang tạo giọng đọc…' : 'Đang đọc câu trả lời'}</span>
+                <span className="flex-1">{speaker.phase === 'loading' ? 'Đang tạo giọng đọc…' : speaker.source === 'browser' ? 'Đang đọc bằng giọng của trình duyệt (giọng máy chủ tạm thời không phản hồi)' : 'Đang đọc câu trả lời'}</span>
                 <button type="button" className="btn btn-ghost btn-sm !min-h-7" onClick={speaker.stop} data-testid="button-stop-playback"><Square /> Dừng đọc</button>
               </div>
             )}
@@ -220,12 +236,13 @@ export default function ChatPage() {
                 {prefs.autoSpeak ? <Volume2 className="w-3.5 h-3.5" aria-hidden="true" /> : <VolumeX className="w-3.5 h-3.5" aria-hidden="true" />}
                 Tự đọc câu trả lời: {prefs.autoSpeak ? 'bật' : 'tắt'}
               </button>
-            <p className="text-[.7rem] text-muted-foreground text-center">
-              Kho văn bản có thể gồm dữ liệu minh họa. Hãy đối chiếu bản gốc với phòng Đào tạo trước khi quyết định.
-            </p>
+              <p className="hidden sm:block text-[.7rem] text-muted-foreground text-center">{DISCLAIMER}</p>
             </div>
           </div>
         </div>
+        {/* On phones the notice follows the transcript instead of staying on
+            screen, so the fixed composer leaves more room for the answer. */}
+        <p className="sm:hidden px-6 pb-4 text-[.7rem] text-muted-foreground text-center" data-testid="text-disclaimer-mobile">{DISCLAIMER}</p>
       </section>
 
       <ConfirmDialog

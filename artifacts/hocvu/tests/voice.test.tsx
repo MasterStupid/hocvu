@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useDictation, useSpeaker } from '@/hooks/use-voice';
+import { speechChunks, useDictation, useSpeaker } from '@/hooks/use-voice';
 import { api } from '@/lib/api';
 import { Composer } from '@/components/chat/composer';
 
@@ -186,6 +186,104 @@ describe('Speech playback ownership', () => {
     unmount();
     await speak('late', 'Không phát sau khi rời trang');
     expect(api.tts).not.toHaveBeenCalled();
+  });
+});
+
+describe('Browser voice fallback', () => {
+  class Utterance {
+    lang = ''; voice: unknown = null; rate = 1;
+    onend: (() => void) | null = null;
+    onerror: ((event: { error: string }) => void) | null = null;
+    constructor(public text: string) {}
+  }
+  const vietnamese = { lang: 'vi-VN', name: 'Tiếng Việt' };
+  function installSynth(voices: unknown[] = [vietnamese]) {
+    const spoken: Utterance[] = [];
+    const synth = { speak: vi.fn((u: Utterance) => { spoken.push(u); }), cancel: vi.fn(), getVoices: () => voices };
+    vi.stubGlobal('SpeechSynthesisUtterance', Utterance);
+    Object.defineProperty(window, 'speechSynthesis', { value: synth, configurable: true });
+    return { synth, spoken };
+  }
+  afterEach(() => { delete (window as unknown as Record<string, unknown>).speechSynthesis; });
+
+  it('reads with the browser voice when the server voice is unavailable', async () => {
+    const { synth, spoken } = installSynth();
+    vi.mocked(api.tts).mockRejectedValueOnce(new Error('503'));
+    const { result } = renderHook(() => useSpeaker('vi-VN-HoaiMyNeural', '+10%'));
+    await act(async () => { await result.current.speak('turn', 'Câu thứ nhất. Câu thứ hai.'); });
+    expect(result.current.phase).toBe('playing');
+    expect(result.current.source).toBe('browser');
+    expect(result.current.error).toBeNull();
+    expect(spoken.map((u) => u.text)).toEqual(['Câu thứ nhất.']);
+    expect(spoken[0].lang).toBe('vi-VN');
+    expect(spoken[0].voice).toBe(vietnamese);
+    expect(spoken[0].rate).toBeCloseTo(1.1);
+    act(() => spoken[0].onend?.());
+    expect(spoken.map((u) => u.text)).toEqual(['Câu thứ nhất.', 'Câu thứ hai.']);
+    act(() => spoken[1].onend?.());
+    expect(result.current.phase).toBe('idle');
+    expect(result.current.activeKey).toBeNull();
+    expect(synth.speak).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops the browser voice and ignores its late callbacks', async () => {
+    const { synth, spoken } = installSynth();
+    vi.mocked(api.tts).mockRejectedValueOnce(new Error('503'));
+    const { result } = renderHook(() => useSpeaker('vi-VN-HoaiMyNeural', '+0%'));
+    await act(async () => { await result.current.speak('turn', 'Câu thứ nhất. Câu thứ hai.'); });
+    act(() => result.current.stop());
+    expect(synth.cancel).toHaveBeenCalled();
+    expect(result.current.phase).toBe('idle');
+    act(() => { spoken[0].onend?.(); spoken[0].onerror?.({ error: 'synthesis-failed' }); });
+    expect(synth.speak).toHaveBeenCalledTimes(1);
+    expect(result.current.error).toBeNull();
+  });
+
+  it('starts one fallback when the audio error and rejected play() both fire', async () => {
+    const { synth } = installSynth();
+    vi.mocked(api.tts).mockResolvedValueOnce({ status: 'ok', audio_url: '/api/audio/a.mp3' });
+    let element!: { onerror: (() => void) | null };
+    vi.stubGlobal('Audio', vi.fn(function Audio(this: Record<string, unknown>) {
+      Object.assign(this, {
+        onended: null, onerror: null, pause: vi.fn(), load: vi.fn(), removeAttribute: vi.fn(),
+        play: () => { element.onerror?.(); return Promise.reject(new Error('decode')); },
+      });
+      element = this as unknown as typeof element;
+    }));
+    const { result } = renderHook(() => useSpeaker('vi-VN-HoaiMyNeural', '+0%'));
+    await act(async () => { await result.current.speak('turn', 'Một câu trả lời.'); });
+    await act(async () => { await Promise.resolve(); });
+    expect(synth.speak).toHaveBeenCalledTimes(1);
+    expect(result.current.source).toBe('browser');
+    expect(result.current.phase).toBe('playing');
+  });
+
+  it('explains the failure when the browser has no Vietnamese voice', async () => {
+    const { synth } = installSynth([{ lang: 'en-US', name: 'English' }]);
+    vi.mocked(api.tts).mockRejectedValueOnce(new Error('503'));
+    const { result } = renderHook(() => useSpeaker('vi-VN-HoaiMyNeural', '+0%'));
+    await act(async () => { await result.current.speak('turn', 'Một câu trả lời.'); });
+    expect(synth.speak).not.toHaveBeenCalled();
+    expect(result.current.phase).toBe('idle');
+    expect(result.current.error).toContain('không có giọng đọc tiếng Việt');
+  });
+
+  it('does not fall back after the listener cancels the request', async () => {
+    const { synth } = installSynth();
+    vi.mocked(api.tts).mockRejectedValueOnce(new DOMException('aborted', 'AbortError'));
+    const { result } = renderHook(() => useSpeaker('vi-VN-HoaiMyNeural', '+0%'));
+    await act(async () => { await result.current.speak('turn', 'Một câu trả lời.'); });
+    expect(synth.speak).not.toHaveBeenCalled();
+    expect(result.current.phase).toBe('idle');
+    expect(result.current.error).toBeNull();
+  });
+
+  it('splits long answers into short spoken parts without losing text', () => {
+    const long = `${'từ '.repeat(120).trim()}. Câu ngắn.`;
+    const parts = speechChunks(long);
+    expect(parts.every((part) => part.length <= 180)).toBe(true);
+    expect(parts.join(' ')).toBe(long);
+    expect(speechChunks('   ')).toEqual([]);
   });
 });
 

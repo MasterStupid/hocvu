@@ -78,6 +78,28 @@ def is_contextual_follow_up(question: str) -> bool:
     return any(_matches_follow_up_phrase(words, phrase) for phrase in prefixes)
 
 
+def is_conditional_follow_up(question: str) -> bool:
+    """A named condition whose consequence is left open: "Nếu ... thì sao?".
+
+    Unlike a bare reference, the question retrieves evidence on its own. It
+    may still be asking how that condition affects the previous topic, so the
+    engine looks for one clause supporting both, never borrowing either side.
+    """
+    words = re.findall(r"\w+", normalize(question).lower())
+    while words and any(_matches_follow_up_phrase(words, particle, len(words) - 1)
+                        for particle in ("ạ", "nhỉ", "vậy", "thế", "nhé")):
+        words = words[:-1]
+    opening = next((len(phrase.split()) for phrase in (
+        "trong trường hợp", "trường hợp", "giả sử", "nếu như", "nếu", "lỡ", "nhỡ",
+    ) if _matches_follow_up_phrase(words, phrase)), 0)
+    closing = next((len(phrase.split()) for phrase in (
+        "thì có ảnh hưởng gì không", "thì có sao không", "thì như thế nào",
+        "thì thế nào", "thì ra sao", "thì sao",
+    ) if _matches_follow_up_phrase(words, phrase, len(words) - len(phrase.split()))), 0)
+    # At least two words must name the condition itself.
+    return bool(opening and closing) and len(words) - opening - closing >= 2
+
+
 def is_historical_query(question: str) -> bool:
     """Whether the user explicitly asks to inspect a superseded regulation."""
     q = strip_accents(normalize(question)).lower()

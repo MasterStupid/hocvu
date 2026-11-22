@@ -18,11 +18,14 @@ from .models import Regulation, Response
 from .question_focus import question_focus
 from .regulation_queries import answer_metadata
 from .searcher import HybridSearcher, StaleIndexError
-from .scenarios import comparison_subjects, comparison_topic, expand_retrieval_query, is_attendance_training_scenario, is_comparison_query, is_context_dependent, is_contextual_follow_up, is_historical_query, is_version_comparison_query
+from .scenarios import comparison_subjects, comparison_topic, expand_retrieval_query, is_attendance_training_scenario, is_comparison_query, is_conditional_follow_up, is_context_dependent, is_contextual_follow_up, is_historical_query, is_version_comparison_query
 from .storage_backend import document_repository, session_store, writing, storage_backend
 from .persistent_documents import rollback_index
 from .settings import DOCS, INDEX_JSON, SESSION_DB, AppConfig
 from .splitter import split_regulation
+
+# Transcript restore is independent of the (much smaller) context window.
+HISTORY_DISPLAY_LIMIT = 200
 
 
 def build_index(
@@ -120,6 +123,7 @@ class HocVuEngine:
         ai_status = "off"
         using_semantic = False
         context_question = context_root = question
+        unlinked = None
         if not question:
             answer, refused, reason = "Bạn hãy nhập câu hỏi về quy chế đào tạo.", True, "Empty question"
         elif intent == Intent.GREETING:
@@ -190,6 +194,27 @@ class HocVuEngine:
             # antecedent, never answer a reference-only question from such hits.
             if dependent and not context_used:
                 hits = []
+            # "Nếu ... thì sao?" names its own condition but may ask how it
+            # affects the previous answer. Use the earlier topic only when one
+            # clause of that same article also states the new condition; the
+            # history never supplies evidence the clause itself lacks.
+            if (use_context and not dependent and not comparison and not scenario
+                    and is_conditional_follow_up(question)):
+                previous = self.session.latest_grounded_turn(session_id)
+                if previous:
+                    def same_article(hit):
+                        return (hit.chunk.rid, hit.chunk.aid) == (previous["rid"], previous["article_id"])
+
+                    linked = [
+                        hit for hit in retrieve(f"{previous['question']} | {retrieval_question}")
+                        if same_article(hit) and self.searcher.has_specific_evidence(retrieval_question, [hit])
+                    ]
+                    if linked:
+                        hits, context_used = linked, True
+                        context_question = f"{previous['question']} | {question}"
+                        context_root = previous["question"]
+                    else:
+                        unlinked = previous
             if historical and not comparison:
                 # When the student explicitly asks for the old rule, an
                 # expired source is the intended evidence, not a fallback.
@@ -253,14 +278,35 @@ class HocVuEngine:
                 else build_card(answer, references, hits, confidence, best_suggestions(question, self._suggestion_topics) if refused else None)
             ),
         )
+        if references and not refused:
+            # Saved with the card so a restored answer shows how it was worded.
+            response.card["answer_mode"] = ai_status
+            if unlinked and not any(
+                (ref.rid, ref.aid) == (unlinked["rid"], unlinked["article_id"]) for ref in references
+            ):
+                # State plainly that the two questions were not connected.
+                response.card["notes"] = [{
+                    "icon": "scope",
+                    "text": (
+                        "HocVu trả lời riêng cho câu hỏi này và chưa tìm thấy điều khoản nối nó với "
+                        f"câu hỏi trước (“{unlinked['question'][:160]}”). Nếu bạn muốn hỏi về mối liên hệ, "
+                        "hãy nêu cả hai nội dung trong cùng một câu."
+                    ),
+                }, *response.card.get("notes", [])][:5]
         if record_session and not refused and references and intent == Intent.ACADEMIC_RULES:
             self.session.add_turn(
                 session_id, question, answer, intent.value, references[0].aid, references[0].rid,
                 context_question=context_question, context_root=context_root,
                 response=response.to_dict(),
             )
-        # Also discard greetings/refusals and non-recorded replies if deletion
-        # completed during retrieval or generation.
+        elif record_session and question:
+            # The student must find every exchange again after a reload, but a
+            # greeting or refusal is display-only and never becomes context.
+            self.session.add_display_turn(
+                session_id, question, answer, intent.value, response=response.to_dict(),
+            )
+        # Also discard non-recorded replies if deletion completed during
+        # retrieval or generation.
         self.ensure_session_open(session_id)
         return response
 
@@ -363,7 +409,8 @@ class HocVuEngine:
         return [chunk.to_dict() for chunk in self.searcher.chunks]
 
     def history(self, session_id: str, *, owner: str | None = None) -> list[dict]:
-        return self.session.get_history(session_id, self.config.max_history, owner=owner)
+        # max_history bounds the context window, not the visible transcript.
+        return self.session.get_history(session_id, HISTORY_DISPLAY_LIMIT, owner=owner)
 
     def authorize_session(self, session_id: str, owner: str, *, create: bool = False):
         self.session.authorize(session_id, owner, create=create)

@@ -20,3 +20,9 @@ Run long subprocess-heavy regression suites as background shell tasks.
 **Why:** foreground runs in this environment have repeatedly exhausted the shell-call time budget, while the identical suite completed normally in a background task. A partial log ending at a subprocess test is not by itself evidence of a failed assertion or deadlock.
 
 **How to apply:** use the normal module entry point, wait for the completion notification, and read the final test summary. Check that a timed-out foreground process is gone before starting a replacement; never report a partial pass count as a complete run.
+
+PostgreSQL server tools (`initdb`, `pg_ctl`) are installed, so database behaviour can be tested against a throwaway cluster in a temporary directory on a Unix socket. Prefer that over an isolated schema inside the real development database.
+
+**Why:** the user requires setup checks to use synthetic data and never write to the real PostgreSQL or App Storage; a private cluster also allows testing the "no tables yet" state, which a shared database cannot.
+
+**How to apply:** child processes for such checks must start from an environment with the real database URL, storage IDs and secrets removed, and keep authentication enabled.

@@ -30,9 +30,21 @@ class DocumentState:
             """)
             return {"initialized": bool(result.rowcount), "environment": "development"}
 
-    def snapshot(self, *, initialized=True):
+    @staticmethod
+    def _read(sql):
+        from psycopg.errors import UndefinedTable
         with connect_database() as connection:
-            row = connection.execute("SELECT revision, manifest, objects FROM hv_document_state WHERE id = 1").fetchone()
+            try:
+                return connection.execute(sql).fetchone()
+            except UndefinedTable:
+                # A database without the schema is a setup step, not a crash.
+                raise StorageUnavailable(
+                    "Thiếu bảng PostgreSQL. Áp dụng schema development (python manage.py init-storage-schema) "
+                    "và publish; không dùng lưu trữ cục bộ thay thế."
+                ) from None
+
+    def snapshot(self, *, initialized=True):
+        row = self._read("SELECT revision, manifest, objects FROM hv_document_state WHERE id = 1")
         if row is None:
             if initialized:
                 raise StorageUnavailable("Chưa khởi tạo kho. Chạy init-empty-storage --confirm cho kho mới hoặc migrate-storage khi chủ động chuyển dữ liệu.")
@@ -40,8 +52,7 @@ class DocumentState:
         return row
 
     def revision(self):
-        with connect_database() as connection:
-            row = connection.execute("SELECT revision FROM hv_document_state WHERE id = 1").fetchone()
+        row = self._read("SELECT revision FROM hv_document_state WHERE id = 1")
         if row is None:
             raise StorageUnavailable("Chưa chuyển dữ liệu sang kho bền vững.")
         return row[0]

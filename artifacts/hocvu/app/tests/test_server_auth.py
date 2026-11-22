@@ -82,7 +82,12 @@ class BrowserAuthenticationTests(IsolatedServerEngineTests):
             with self.subTest(path=path):
                 response = await self.client.get(path)
                 self.assertEqual(response.status_code, 401)
-                self.assertIn("Basic", response.headers["www-authenticate"])
+                if path.startswith("/api/"):
+                    # The React password form handles API sign-in; a Basic
+                    # challenge on fetch would open a second, native prompt.
+                    self.assertNotIn("www-authenticate", response.headers)
+                else:
+                    self.assertIn("Basic", response.headers["www-authenticate"])
 
     async def test_chat_pages_assets_and_catalog_are_public(self):
         for path in ["/", "/index.html", "/main.js", "/theme.js", "/styles.css", "/api-errors.js", "/api/catalog", "/api/suggestions"]:

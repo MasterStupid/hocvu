@@ -71,9 +71,57 @@ class HistoryMetadataTests(unittest.TestCase):
         self.assertEqual(self.engine.ask("Xin chào", "conversation").intent, "greeting")
         self.assertTrue(self.engine.ask("Tự sát", "conversation").refused)
         self.assertTrue(self.engine.ask("Giá vàng hôm nay?", "conversation").refused)
-        self.assertEqual(len(self.engine.history("conversation")), 1)
+        # The transcript keeps every exchange; only the grounded one is context.
+        history = self.engine.history("conversation")
+        self.assertEqual(
+            [(turn["question"], turn["refused"]) for turn in history],
+            [("Điều kiện bảo lưu?", False), ("Xin chào", False), ("Tự sát", True), ("Giá vàng hôm nay?", True)],
+        )
+        for turn in history[1:]:
+            self.assertEqual((turn["article_id"], turn["rid"], turn["references"]), ("", "", []))
+            self.assertEqual((turn["context_question"], turn["context_root"]), ("", ""))
         _, root = self.engine.session.contextualize("conversation", "Còn điều kiện nào khác?")
         self.assertEqual(root, "Điều kiện bảo lưu?")
+        self.assertEqual(self.engine.session.latest_grounded_turn("conversation")["question"], "Điều kiện bảo lưu?")
+
+    def test_refusal_survives_restart_with_its_reason_and_suggestions(self):
+        live = self.engine.ask("Giá vàng hôm nay?", "conversation").to_dict()
+        self.assertTrue(live["refused"])
+        restored = SessionStore(self.root / "sessions.db").get_history("conversation", 8)[0]
+        for key in ("answer", "intent", "refused", "refusal_reason", "card", "confidence"):
+            self.assertEqual(restored[key], live[key], key)
+        self.assertEqual(restored["references"], [])
+        # A conversation of refusals alone offers no antecedent.
+        self.assertEqual(self.engine.session.contextualize("conversation", "Còn điều kiện nào khác?"), ("Còn điều kiện nào khác?", ""))
+        self.assertIsNone(self.engine.session.latest_grounded_turn("conversation"))
+        self.assertTrue(self.engine.ask("Còn điều kiện nào khác?", "conversation").refused)
+
+    def test_conversation_is_titled_by_its_first_real_question(self):
+        from core.session import LEGACY_API_OWNER
+        self.engine.ask("Xin chào", "conversation")
+        listed = self.engine.session.list_conversations(LEGACY_API_OWNER)
+        self.assertEqual([(row["title"], row["turn_count"]) for row in listed], [("Xin chào", 1)])
+        self.engine.ask("Giá vàng hôm nay?", "conversation")
+        self.grounded_turn()
+        listed = self.engine.session.list_conversations(LEGACY_API_OWNER)
+        self.assertEqual([(row["title"], row["turn_count"]) for row in listed], [("Giá vàng hôm nay?", 3)])
+
+    def test_display_turn_cannot_store_a_grounded_academic_answer(self):
+        store = self.engine.session
+        response = {"refused": False, "card": {}, "confidence": 1.0, "refusal_reason": ""}
+        self.assertIsNone(store.add_display_turn("conversation", "Điều kiện bảo lưu?", "Có", "academic_rules", response=response))
+        self.assertIsNone(store.add_display_turn("conversation", "  ", "Có", "greeting", response=response))
+        self.assertEqual(self.engine.history("conversation"), [])
+
+    def test_restored_answer_keeps_its_wording_mode(self):
+        live = self.grounded_turn()
+        self.assertEqual(live["card"]["answer_mode"], "off")
+        self.assertEqual(self.engine.history("conversation")[0]["card"]["answer_mode"], "off")
+
+    def test_transcript_is_not_truncated_to_the_context_window(self):
+        for _ in range(self.engine.config.max_history + 3):
+            self.engine.ask("Giá vàng hôm nay?", "conversation")
+        self.assertEqual(len(self.engine.history("conversation")), self.engine.config.max_history + 3)
 
     def test_explicitly_refused_rows_are_not_context_even_with_legacy_source_ids(self):
         self.grounded_turn()

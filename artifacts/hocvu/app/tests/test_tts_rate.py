@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import httpx
 
 from core.index_storage import atomic_write
-from core.voice import DEFAULT_RATE, DEFAULT_VOICE, MALE_VOICE, VoiceManager, normalize_rate
+from core.voice import DEFAULT_RATE, DEFAULT_VOICE, MALE_VOICE, SYNTHESIS_ATTEMPTS, SpeechUnavailable, VoiceManager, normalize_rate
 from server import app as server
 
 
@@ -91,6 +91,41 @@ class VoiceRateTests(unittest.IsolatedAsyncioTestCase):
             text="Xin chào", voice=MALE_VOICE, rate="+10%", pitch="+0Hz",
         )
 
+    async def test_transient_empty_streams_are_retried_then_succeed(self):
+        calls = []
+        def communicate(**kwargs):
+            calls.append(kwargs)
+            async def stream():
+                if len(calls) < 3:
+                    raise RuntimeError("No audio was received.")
+                yield {"type": "audio", "data": b"voice"}
+            return SimpleNamespace(stream=stream)
+        manager = VoiceManager(audio_dir=self.manager.audio_dir)
+        with (
+            patch.dict(sys.modules, {"edge_tts": SimpleNamespace(Communicate=communicate)}),
+            patch("core.voice.SYNTHESIS_RETRY_DELAY", 0),
+        ):
+            self.assertEqual(await manager.synthesize("Xin chào"), b"voice")
+        self.assertEqual(len(calls), 3)
+
+    async def test_persistent_provider_failure_is_reported_without_caching(self):
+        calls = []
+        def communicate(**kwargs):
+            calls.append(kwargs)
+            async def stream():
+                return
+                yield  # pragma: no cover - makes this an empty async generator
+            return SimpleNamespace(stream=stream)
+        manager = VoiceManager(audio_dir=self.manager.audio_dir)
+        with (
+            patch.dict(sys.modules, {"edge_tts": SimpleNamespace(Communicate=communicate)}),
+            patch("core.voice.SYNTHESIS_RETRY_DELAY", 0),
+        ):
+            with self.assertRaises(SpeechUnavailable):
+                await manager.generate_audio_file("Xin chào")
+        self.assertEqual(len(calls), SYNTHESIS_ATTEMPTS)
+        self.assertEqual(list(manager.audio_dir.iterdir()), [])
+
     def test_rate_normalization(self):
         for raw, expected in ((None, "+0%"), ("-0%", "+0%"), ("+000%", "+0%"), ("-010%", "-10%")):
             self.assertEqual(normalize_rate(raw), expected)
@@ -131,6 +166,24 @@ class TtsRateApiTests(unittest.IsolatedAsyncioTestCase):
         again = await self.client.post("/api/tts", json={"text": "Xin chào", "rate": "+10%"})
         self.assertEqual(again.json()["audio_url"], urls[0])
         self.assertEqual(self.manager.synthesize.await_count, 3)
+
+    async def test_unavailable_provider_has_a_distinct_status_for_browser_fallback(self):
+        self.manager.synthesize = AsyncMock(side_effect=SpeechUnavailable("provider down"))
+        for response in (
+            await self.client.post("/api/tts", json={"text": "Xin chào"}),
+            await self.client.get("/api/tts", params={"text": "Xin chào"}),
+        ):
+            self.assertEqual(response.status_code, 503, response.text)
+            self.assertEqual(response.json()["code"], "tts_unavailable")
+            self.assertNotIn("provider down", response.text)
+        self.assertEqual(list(self.audio.iterdir()), [])
+
+    async def test_unexpected_synthesis_error_does_not_leak_details(self):
+        self.manager.synthesize = AsyncMock(side_effect=RuntimeError("secret internal path"))
+        with self.assertLogs("hocvu.server", level="ERROR"):
+            response = await self.client.post("/api/tts", json={"text": "Xin chào"})
+        self.assertEqual(response.status_code, 500)
+        self.assertNotIn("secret", response.text)
 
     async def test_post_default_and_explicit_null_keep_default_rate(self):
         omitted = await self.client.post("/api/tts", json={"text": "Xin chào"})
