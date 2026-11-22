@@ -1,4 +1,4 @@
-modules = ["python-3.12", "nodejs-20", "web"]
+modules = ["python-3.12", "web", "nodejs-24"]
 
 [deployment]
 router = "application"
@@ -9,7 +9,7 @@ args = ["pnpm", "store", "prune"]
 env = { "CI" = "true" }
 
 [workflows]
-runButton = "Project"
+runButton = "artifacts/hocvu: web"
 
 [[workflows.workflow]]
 name = "Project"
@@ -56,7 +56,7 @@ timeoutMs = 20000
 
 [nix]
 channel = "stable-25_05"
-packages = ["freetype", "gumbo", "harfbuzz", "jbig2dec", "lcms2", "libimagequant", "libjpeg", "libjpeg_turbo", "libtiff", "libwebp", "libxcrypt", "mupdf", "openjpeg", "postgresql", "swig", "tcl", "tesseract", "tk", "xcbuild", "zlib"]
+packages = ["cacert", "freetype", "gumbo", "harfbuzz", "jbig2dec", "lcms2", "libimagequant", "libjpeg", "libjpeg_turbo", "libtiff", "libwebp", "libxcrypt", "mupdf", "openjpeg", "postgresql", "swig", "tcl", "tesseract", "tk", "xcbuild", "zlib"]
 
 [userenv]
 
@@ -64,6 +64,7 @@ packages = ["freetype", "gumbo", "harfbuzz", "jbig2dec", "lcms2", "libimagequant
 HV_BROWSER_AUTH = "1"
 HV_SEMANTIC = "0"
 HV_STORAGE_BACKEND = "replit"
+HV_STORAGE_BUCKET_ID = "replit-objstore-45d95f2e-5cd1-4fa9-b219-db2535ac1bd4"
 
 [userenv.shared]
 HV_STORAGE_PREFIX = "hocvu/v1"
@@ -72,4 +73,4 @@ HV_STORAGE_PREFIX = "hocvu/v1"
 HV_STORAGE_BACKEND = "replit"
 
 [objectStorage]
-defaultBucketID = "replit-objstore-5ab5d012-9124-4510-824f-72d165a9d80c"
+defaultBucketID = "replit-objstore-45d95f2e-5cd1-4fa9-b219-db2535ac1bd4"

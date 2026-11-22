@@ -5,6 +5,10 @@
 ## Run & Operate
 
 - Workflow **artifacts/hocvu: web** chạy `pnpm --filter @workspace/hocvu run dev`.
+- Nút **Run** khởi động workflow này; các workflow kiểm thử không phải máy chủ web.
+- Môi trường Replit hiện dùng Node.js 24 để tương thích với Vite và bộ kiểm thử trình duyệt giả lập.
+- Khi thiết lập một bản nhập mới: cài gói pnpm, cài các gói Python từ requirements, rồi cấu hình App Storage thuộc dự án hiện tại. Đặt `HV_STORAGE_BUCKET_ID` cho development theo bucket vừa tạo.
+- Chỉ khởi tạo kho development mới bằng `cd artifacts/hocvu/app && python manage.py init-storage-schema && python manage.py init-empty-storage --confirm`. Không chạy các lệnh này với production, không tự nhập dữ liệu cũ.
 - Máy chủ Python duy nhất phục vụ giao diện `/` và API `/api/*`, dùng `PORT` do artifact cung cấp.
 - `pnpm --filter @workspace/hocvu run build` build React bằng Vite và kiểm tra biên dịch Python.
 - Workflow build frontend trước khi khởi chạy FastAPI; sau khi sửa UI cần restart workflow để cập nhật bản xem trước.
