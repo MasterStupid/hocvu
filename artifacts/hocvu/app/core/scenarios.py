@@ -78,6 +78,25 @@ def is_contextual_follow_up(question: str) -> bool:
     return any(_matches_follow_up_phrase(words, phrase) for phrase in prefixes)
 
 
+def is_underspecified_follow_up(question: str) -> bool:
+    """Detect natural follow-up facets (eligibility, amount, deadline, procedure)
+    that omit the regulation subject (e.g., "Thế sinh viên năm nhất có được xét không?",
+    "Mức tiền nhận được là bao nhiêu?"). Used only as a second-stage fallback when
+    standalone retrieval cannot ground the question independently.
+    """
+    q = strip_accents(normalize(question)).lower()
+    if not q or len(q.split()) > 18:
+        return False
+    patterns = (
+        r"\b(?:sinh vien nam nhat|tan sinh vien|nam nhat|nam 1|sinh vien nam cuoi)\b.*\b(?:duoc xet|co duoc|duoc huong|ap dung|duoc nhan)\b",
+        r"\bmuc tien\b|\btien nhan duoc\b|\bnhan duoc bao nhieu\b|\bduoc bao nhieu tien\b|\bmuc huong\b",
+        r"\bho so\b.*\b(?:gom|can|nop)\b|\bthu tuc\b.*\b(?:the nao|ra sao|gom)\b",
+        r"\bnop o dau\b|\bhan nop\b|\bdang ky o dau\b|\bap dung cho he nao\b|\bdoi tuong nao duoc\b",
+        r"\b(?:co bi|co duoc|duoc khong)\b.*\b(?:xet|huong|mien|giam)\b",
+    )
+    return any(re.search(pattern, q) for pattern in patterns)
+
+
 def is_historical_query(question: str) -> bool:
     """Whether the user explicitly asks to inspect a superseded regulation."""
     q = strip_accents(normalize(question)).lower()

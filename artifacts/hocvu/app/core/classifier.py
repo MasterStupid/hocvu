@@ -9,6 +9,7 @@ from .nlp import normalize, strip_accents
 
 class Intent(str, Enum):
     GREETING = "greeting"
+    THANKS = "thanks"
     ACADEMIC_RULES = "academic_rules"
     OUT_OF_SCOPE = "out_of_scope"  # Legacy value; scope is now checked by retrieval evidence.
     TOXIC = "unsafe"
@@ -17,7 +18,8 @@ class Intent(str, Enum):
 class Classifier:
     """Small, transparent classifier appropriate for an offline pilot."""
 
-    _greetings = ("xin chao", "chao ban", "hello", "hi", "cam on")
+    _greetings = ("xin chao", "chao ban", "chao tro ly", "hello", "hi")
+    _thanks = ("cam on", "thank you", "thanks", "tam biet", "bye")
     _toxic = ("giết", "giet", "tu sat", "tự sát", "danh bom")
 
     def classify(self, question: str) -> Intent:
@@ -29,7 +31,10 @@ class Classifier:
             return Intent.TOXIC
         # Phrase boundaries matter: the greeting "hi" must not turn "thi
         # lại" (a core academic query) into a greeting.
-        if len(q.split()) <= 5 and any(has_phrase(word) for word in self._greetings):
+        words = q.split()
+        if len(words) <= 6 and any(has_phrase(word) for word in self._thanks):
+            return Intent.THANKS
+        if len(words) <= 5 and any(has_phrase(word) for word in self._greetings):
             return Intent.GREETING
         # Do not reject legitimate policy topics by a closed vocabulary. The
         # retriever's evidence threshold is the scope gate: unsupported

@@ -53,13 +53,36 @@ ACADEMIC_TOKEN_ALIASES = {
 _TONE_MARKS = {"\u0300": "1", "\u0301": "2", "\u0303": "3", "\u0309": "4", "\u0323": "5"}
 
 
+def normalize_stt_terms(text: str) -> str:
+    """Fix common Vietnamese Web Speech API phonetic errors for academic terms.
+
+    Deterministic and idempotent: only corrects unambiguous speech-to-text
+    mishearings of academic terms so retrieval does not falsely refuse.
+    """
+    normalized = normalize(text)
+    if not normalized:
+        return ""
+    stt_fixes = (
+        (r"\btính chỉ\b", "tín chỉ"),
+        (r"\bai\s*eo(?:\s*ét)?\b|\bi\s*eo\b", "IELTS"),
+        (r"\btô\s*[íế]ch\b|\btô\s*ít\b", "TOEIC"),
+        (r"\bđê\s*rờ\s*lờ\b|\bđiểm rèn luyên\b", "điểm rèn luyện"),
+        (r"\bbảo\s+lu\b", "bảo lưu"),
+        (r"\bcảnh báo học bộ\b", "cảnh báo học vụ"),
+        (r"\bgờ\s*pê\s*a\b", "GPA"),
+    )
+    for pattern, replacement in stt_fixes:
+        normalized = re.sub(pattern, replacement, normalized, flags=re.IGNORECASE)
+    return normalize(normalized)
+
+
 def expand_academic_terms(text: str) -> str:
     """Normalize common student shorthand to terms present in regulations.
 
     This is deterministic query normalization, not answer generation: it only
     replaces a student's wording with an equivalent retrieval term.
     """
-    normalized = normalize(text)
+    normalized = normalize_stt_terms(text)
     # An explicit temporary study break followed by returning to study is
     # different from missing classes. Do this before the ordinary absence alias;
     # preserve any reasons, qualifications or unknown features around the frame.
@@ -82,16 +105,22 @@ def expand_academic_terms(text: str) -> str:
     replacements = (
         (r"\bgpa\b", "điểm trung bình tích lũy"),
         (r"\bđrl\b|\brl\b", "điểm rèn luyện"),
+        # Colloquial student wording mapped deterministically to regulation terms.
+        (r"\b(?:rớt|tạch|trượt)\s+(?:môn|học phần)\b|\brớt\b|\btạch\b", "trượt học lại"),
+        (r"\bđuổi học\b", "buộc thôi học"),
+        (r"\bra trường\b", "tốt nghiệp"),
+        (r"\bnghỉ ngang(?:\s+(?:một|1)\s+năm)?\b|\bnghỉ\s+(?:học\s+)?(?:một|1)\s+năm\b", "bảo lưu"),
+        (r"\b(?:đóng|nộp)\s+(?:tiền học|học phí)\s+(?:muộn|trễ)\b", "nộp học phí trễ hạn"),
         (r"\bnghỉ học\b|\bnghỉ\b", "vắng mặt"),
         (r"%", " phần trăm "),
         (r"\bhọc 2 ngành\b|\bhai ngành\b", "học song ngành"),
-        (r"\bhọc phí\b", "học phí tài chính"),
-        (r"\bquy đổi\b", "quy đổi chứng chỉ"),
+        (r"\bhọc phí\b(?!\s+tài chính)", "học phí tài chính"),
+        (r"\bquy đổi\b(?!\s+chứng chỉ)", "quy đổi chứng chỉ"),
         (r"\bđược tính như thế nào\b|\btính như thế nào\b", "đánh giá dựa trên tỷ trọng"),
     )
     for pattern, replacement in replacements:
         normalized = re.sub(pattern, replacement, normalized, flags=re.IGNORECASE)
-    if re.search(r"\bsong ngành\b", normalized, flags=re.IGNORECASE):
+    if re.search(r"\bsong ngành\b", normalized, flags=re.IGNORECASE) and "học cùng lúc hai chương trình" not in normalized.lower():
         normalized = f"{normalized} học cùng lúc hai chương trình"
     return normalize(normalized)
 

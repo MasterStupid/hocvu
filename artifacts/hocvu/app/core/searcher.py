@@ -39,7 +39,11 @@ class HybridSearcher:
 
     @property
     def provider(self) -> str:
-        return "bm25+multilingual-e5" if self.semantic and self.semantic.available else "bm25"
+        if self.semantic and self.semantic.available:
+            name = getattr(self.semantic, "provider_name", None)
+            suffix = name if isinstance(name, str) and name else "multilingual-e5"
+            return f"bm25+{suffix}"
+        return "bm25"
 
     def build(self, chunks: list[Chunk]) -> None:
         self.chunks = chunks
@@ -65,6 +69,7 @@ class HybridSearcher:
             self.semantic_error = "Disabled by HV_SEMANTIC"
             return
         self.semantic = SemanticEncoder(self.config.embedding_model, MODELS)
+        self.semantic.config = self.config
         passages = [self._evidence_text(chunk) for chunk in chunks]
         if not self.semantic.build(passages, index_fingerprint=index_fingerprint(self.config)):
             self.semantic_error = self.semantic.error
