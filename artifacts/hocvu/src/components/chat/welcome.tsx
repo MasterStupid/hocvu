@@ -1,21 +1,21 @@
 import { useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { AudioLines, BookMarked, ChevronRight, Keyboard, Mic, MicOff, ScanSearch, Volume2 } from 'lucide-react';
+import { AudioLines, BookMarked, ChevronRight, Keyboard, Mic, MicOff, Radio, ScanSearch, Volume2 } from 'lucide-react';
 import { useSuggestions } from '@/hooks/use-public';
 import { describeError } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { UniversityLogo } from '@/components/brand';
 
 const FLOW = [
-  { icon: Mic, title: 'Nói', tech: 'Speech-to-Text', body: 'Trình duyệt chuyển lời nói tiếng Việt thành văn bản. Bạn sửa bản ghi trước khi gửi.' },
-  { icon: ScanSearch, title: 'Truy xuất', tech: 'Retrieval', body: 'Máy chủ tìm các điều, khoản liên quan trong kho văn bản quy chế.' },
-  { icon: BookMarked, title: 'Trả lời có dẫn nguồn', tech: 'Generation', body: 'Câu trả lời chỉ dựa trên đoạn đã truy xuất, kèm số hiệu nguồn để mở ra đối chiếu.' },
-  { icon: Volume2, title: 'Nghe', tech: 'Text-to-Speech', body: 'Bấm Nghe hoặc bật tự đọc để nghe câu trả lời bằng giọng Việt.' },
+  { icon: Mic, title: 'Nói hoặc Live', tech: 'Speech-to-Text', body: 'Nhận dạng giọng nói tiếng Việt trực tiếp (hỗ trợ hội thoại rảnh tay Live và tự động dự phòng máy chủ).' },
+  { icon: ScanSearch, title: 'Truy xuất', tech: 'Hybrid RAG', body: 'Máy chủ tìm đúng điều, khoản liên quan trong kho quy chế kèm ngày hiệu lực.' },
+  { icon: BookMarked, title: 'Trả lời có dẫn nguồn', tech: 'Grounded Gen', body: 'Câu trả lời bám sát văn bản đã truy xuất, kèm trích dẫn [n] để đối chiếu trực tiếp.' },
+  { icon: Volume2, title: 'Nghe tức thì', tech: 'Streaming TTS', body: 'Phát giọng đọc Việt theo luồng độ trễ thấp, có giọng trình duyệt dự phòng và hỗ trợ ngắt lời.' },
 ];
 
-interface Props { onAsk: (q: string) => void; disabled: boolean; onVoice: () => void; micSupported: boolean }
+interface Props { onAsk: (q: string) => void; disabled: boolean; onVoice: () => void; onLive?: () => void; micSupported: boolean }
 
-export function Welcome({ onAsk, disabled, onVoice, micSupported }: Props) {
+export function Welcome({ onAsk, disabled, onVoice, onLive, micSupported }: Props) {
   const s = useSuggestions();
   const reduce = useReducedMotion();
   const [open, setOpen] = useState<number | null>(0);
@@ -31,7 +31,7 @@ export function Welcome({ onAsk, disabled, onVoice, micSupported }: Props) {
         <UniversityLogo size={56} />
         <div className="min-w-0">
           <p className="text-xs sm:text-sm font-bold tracking-[.07em] text-primary leading-relaxed">TRƯỜNG ĐẠI HỌC HẢI PHÒNG</p>
-          <p className="mt-1 text-[.72rem] sm:text-xs text-muted-foreground">HocVu AI · Trợ lý tư vấn quy chế đào tạo</p>
+          <p className="mt-1 text-[.72rem] sm:text-xs text-muted-foreground">HocVu AI · Trợ lý giọng nói tư vấn quy chế đào tạo</p>
         </div>
       </div>
       <div className="voice-stage relative overflow-hidden rounded-2xl px-5 sm:px-10 py-6 sm:py-12 text-sidebar-accent-foreground">
@@ -42,27 +42,36 @@ export function Welcome({ onAsk, disabled, onVoice, micSupported }: Props) {
               Nói câu hỏi.<br /><em className="italic font-normal text-[hsl(var(--sidebar-primary))]">Nghe điều khoản.</em>
             </h2>
             <p className="mt-4 max-w-md text-sidebar-foreground/80 text-[.95rem] hidden sm:block">
-              Hỏi như đang hỏi phòng Đào tạo. HocVu tìm các điều khoản liên quan trong văn bản quy chế, trả lời kèm nguồn và đọc to cho bạn nghe. Khi văn bản không đủ rõ, HocVu nói thẳng là chưa có căn cứ.
+              Hỏi như đang trò chuyện với phòng Đào tạo. Bật chế độ hội thoại trực tiếp (Live) để nói liên tục, nghe câu trả lời kèm điều khoản và hỏi nối tiếp rảnh tay. Khi văn bản chưa đủ rõ, HocVu nói thẳng là chưa có căn cứ.
             </p>
             <p className="mt-3 text-sm text-sidebar-foreground/80 sm:hidden">
-              Hỏi bằng giọng nói hoặc nhập chữ. Nhận câu trả lời kèm điều khoản để đối chiếu.
+              Hỏi bằng giọng nói (Live rảnh tay) hoặc nhập chữ. Nhận câu trả lời kèm điều khoản đối chiếu.
             </p>
           </div>
           <div className="flex sm:flex-col items-center gap-5 sm:gap-3 justify-self-center py-2 sm:py-0">
-            <button type="button" onClick={onVoice} disabled={disabled || !micSupported}
+            <button type="button" onClick={onLive || onVoice} disabled={disabled || !micSupported}
               aria-label={micSupported ? 'Bắt đầu nói câu hỏi' : 'Trình duyệt chưa hỗ trợ nhận dạng giọng nói'}
               className="mic-orb" data-testid="button-voice-cta">
               {micSupported ? <Mic className="w-9 h-9" aria-hidden="true" /> : <MicOff className="w-9 h-9" aria-hidden="true" />}
             </button>
-            <div className="sm:text-center max-w-[13rem]">
-            <p className="text-sm font-medium">{micSupported ? 'Bấm để nói' : 'Micro chưa hỗ trợ'}</p>
-            <p className="mt-1 text-[.72rem] text-sidebar-foreground/60">
-              {micSupported ? 'Nhận dạng chạy qua dịch vụ của trình duyệt, cần cấp quyền micro.' : 'Hãy thử Chrome hoặc Edge, hoặc gõ câu hỏi bên dưới.'}
-            </p>
-            <button type="button" onClick={startTyping} className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-lg border border-white/30 px-3 text-sm text-white hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-              data-testid="button-type-cta" aria-controls="composer">
-              <Keyboard className="w-4 h-4" aria-hidden="true" /> Nhập câu hỏi
-            </button>
+            <div className="sm:text-center max-w-[14rem]">
+              <p className="text-sm font-medium">{micSupported ? (onLive ? 'Bấm để trò chuyện Live' : 'Bấm để nói') : 'Micro chưa hỗ trợ'}</p>
+              <p className="mt-1 text-[.72rem] text-sidebar-foreground/60">
+                {micSupported ? 'Nói câu hỏi, nghe phản hồi và tự mở micro cho lượt tiếp theo.' : 'Hãy thử Chrome hoặc Edge, hoặc gõ câu hỏi bên dưới.'}
+              </p>
+              <div className="mt-3 flex flex-wrap sm:justify-center gap-2">
+                {onLive && micSupported && (
+                  <button type="button" onClick={onVoice} disabled={disabled}
+                    className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-white/30 px-2.5 text-xs text-white hover:bg-white/10"
+                    data-testid="button-dictate-cta">
+                    <Radio className="w-3.5 h-3.5" aria-hidden="true" /> Nói từng câu
+                  </button>
+                )}
+                <button type="button" onClick={startTyping} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-white/30 px-3 text-sm text-white hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                  data-testid="button-type-cta" aria-controls="composer">
+                  <Keyboard className="w-4 h-4" aria-hidden="true" /> Nhập câu hỏi
+                </button>
+              </div>
             </div>
           </div>
         </div>

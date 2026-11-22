@@ -16,6 +16,7 @@ interface Prefs {
   voice: string;
   rate: string;
   autoSpeak: boolean;
+  autoSendVoice: boolean;
 }
 interface PrefsCtx extends Prefs {
   resolvedTheme: 'light' | 'dark';
@@ -23,7 +24,7 @@ interface PrefsCtx extends Prefs {
 }
 
 const KEYS: Record<keyof Prefs, string> = {
-  theme: 'hv_theme', aiEnabled: 'hv_ai_enabled', voice: 'hv_voice', rate: 'hv_voice_rate', autoSpeak: 'hv_auto_speak',
+  theme: 'hv_theme', aiEnabled: 'hv_ai_enabled', voice: 'hv_voice', rate: 'hv_voice_rate', autoSpeak: 'hv_auto_speak', autoSendVoice: 'hv_auto_send_voice',
 };
 const read = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
 
@@ -37,6 +38,7 @@ function load(): Prefs {
     voice: VOICES.some((v) => v.id === voice) ? (voice as string) : VOICES[0].id,
     rate: RATES.some((r) => r.id === rate) ? (rate as string) : '+0%',
     autoSpeak: read(KEYS.autoSpeak) === 'true',
+    autoSendVoice: read(KEYS.autoSendVoice) === 'true',
   };
 }
 

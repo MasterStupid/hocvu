@@ -52,25 +52,39 @@ export default function SettingsPage() {
             { id: 'system', label: 'Theo máy', icon: <Monitor className="w-3.5 h-3.5" /> },
           ]} />
         </Row>
-        <Row title="AI diễn đạt theo nguồn" hint="Mặc định cho ô hỏi đáp. AI chỉ viết lại nội dung đã truy xuất, không thêm quy định mới.">
-          <Switch checked={p.aiEnabled} onCheckedChange={(v) => p.set('aiEnabled', v)} aria-label="AI diễn đạt theo nguồn" data-testid="switch-ai" />
+        <Row
+          title="AI diễn đạt theo nguồn"
+          hint={health.data?.llm_available === false
+            ? 'Máy chủ chưa cấu hình API key AI — hệ thống đang dùng chế độ trích xuất trực tiếp từ văn bản.'
+            : 'Mặc định cho ô hỏi đáp. AI chỉ viết lại nội dung đã truy xuất, không thêm quy định mới.'}
+        >
+          <Switch
+            checked={health.data?.llm_available === false ? false : p.aiEnabled}
+            disabled={health.data?.llm_available === false}
+            onCheckedChange={(v) => p.set('aiEnabled', v)}
+            aria-label="AI diễn đạt theo nguồn"
+            data-testid="switch-ai"
+          />
         </Row>
       </section>
 
       <section className="mt-10">
-        <h2 className="kicker text-seal mb-1">Giọng đọc</h2>
-        <Row title="Giọng" hint="Dùng khi bấm Nghe trên phiếu trả lời.">
+        <h2 className="kicker text-seal mb-1">Giọng nói &amp; Hội thoại</h2>
+        <Row title="Giọng" hint="Dùng khi bấm Nghe hoặc bật tự đọc / Live.">
           <Segmented label="voice" value={p.voice} onChange={(v) => p.set('voice', v)} options={VOICES.map((v) => ({ id: v.id, label: v.label }))} />
         </Row>
         <Row title="Tốc độ">
           <Segmented label="rate" value={p.rate} onChange={(v) => p.set('rate', v)} options={RATES.map((r) => ({ id: r.id, label: r.label }))} />
         </Row>
-        <Row title="Tự đọc câu trả lời mới" hint="Trình duyệt có thể chặn tự phát âm thanh cho đến khi bạn tương tác với trang.">
+        <Row title="Tự đọc câu trả lời mới" hint="Tự động phát giọng đọc ngay khi nhận câu trả lời (có giọng trình duyệt dự phòng nếu Edge-TTS gián đoạn).">
           <Switch checked={p.autoSpeak} onCheckedChange={(v) => p.set('autoSpeak', v)} aria-label="Tự đọc câu trả lời" data-testid="switch-autospeak" />
+        </Row>
+        <Row title="Tự gửi sau khi nói xong" hint="Khi dùng nút Nói thường, đếm ngược ngắn 1,2 giây rồi tự gửi (vẫn có nút Sửa lại). Chế độ Live luôn tự gửi.">
+          <Switch checked={p.autoSendVoice} onCheckedChange={(v) => p.set('autoSendVoice', v)} aria-label="Tự gửi sau khi nói xong" data-testid="switch-autosend" />
         </Row>
         <Row title="Nghe thử" hint={speaker.error || undefined}>
           <button type="button" className="btn btn-outline" data-testid="button-test-voice"
-            onClick={() => (testing ? speaker.stop() : speaker.speak('test', 'Xin chào, tôi là HocVu. Tôi tra cứu quy chế đào tạo và luôn dẫn nguồn điều khoản.'))}>
+            onClick={() => { speaker.unlock(); if (testing) speaker.stop(); else void speaker.speak('test', 'Xin chào, tôi là HocVu. Tôi hỗ trợ tra cứu quy chế đào tạo, chứng chỉ IELTS, TOEIC và luôn dẫn nguồn điều khoản.'); }}>
             {testing && speaker.phase === 'loading' ? <Loader2 className="animate-spin" /> : testing ? <Square /> : <Volume2 />}
             {testing ? (speaker.phase === 'loading' ? 'Đang tạo…' : 'Dừng') : 'Nghe thử'}
           </button>
@@ -90,17 +104,17 @@ export default function SettingsPage() {
           <dl className="grid grid-cols-2 md:grid-cols-3 gap-px bg-border border border-border rounded-lg overflow-hidden">
             {[
               ['Trạng thái', health.data.status === 'ok' ? 'Hoạt động' : health.data.status],
-              ['Văn bản lập chỉ mục', String(health.data.documents)],
+              ['Văn bản lập chỉ mục', `${health.data.documents}${health.data.demo_only ? ' (mẫu)' : ''}`],
               ['Truy xuất', retrievalLabel(health.data.retrieval)],
+              ['AI diễn đạt', health.data.llm_available ? `Sẵn sàng (${health.data.llm_backend || 'cloud'})` : 'Chưa cấu hình (chỉ trích xuất)'],
+              ['STT dự phòng', health.data.stt_fallback ? 'Sẵn sàng trên máy chủ' : 'Chỉ dùng trình duyệt'],
               ['Giọng đọc', health.data.voice || 'Chưa rõ'],
-              ['Nền tảng API', health.data.api_framework || 'Chưa rõ'],
-              ['Phiên bản API', health.data.api_version || 'Chưa rõ'],
             ].map(([k, v]) => (
               <div key={k} className="bg-paper px-4 py-3.5"><dt className="kicker">{k}</dt><dd className="mt-1 font-medium break-words" data-testid={`text-health-${k}`}>{v}</dd></div>
             ))}
           </dl>
         )}
-        {health.data?.semantic_error && <p className="text-sm text-ochre mt-3">Tìm kiếm ngữ nghĩa đang tắt: {health.data.semantic_error}. Hệ thống dùng tìm kiếm từ khóa thay thế.</p>}
+        {health.data?.semantic_error && <p className="text-sm text-ochre mt-3">Tìm kiếm ngữ nghĩa đang tắt: {health.data.semantic_error}. Hệ thống dùng tìm kiếm từ khóa kết hợp từ điển đồng nghĩa thay thế.</p>}
       </section>
 
       <section className="mt-10 paper px-5 py-4 text-sm text-muted-foreground">

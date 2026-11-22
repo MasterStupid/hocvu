@@ -46,7 +46,9 @@ export interface AskRequest {
   session_id: string;
   ref_date: string | null;
   use_ai: boolean;
-  with_audio: false;
+  with_audio?: boolean;
+  voice?: string;
+  rate?: string;
 }
 /** One saved turn: question AND answer live in the same row. */
 export interface HistoryRow {
@@ -69,13 +71,28 @@ export interface HistoryStatus { session_id: string; closed: boolean }
 export interface Health {
   status: string;
   documents: number;
+  uploaded_documents?: number;
+  demo_only?: boolean;
   voice?: string;
+  stt_fallback?: boolean;
+  llm_available?: boolean;
+  llm_backend?: string;
   retrieval?: string;
   semantic_error?: string | null;
   api_framework?: string;
   api_version?: string;
 }
 export interface CatalogItem { rid: string; title: string; version: string }
+export interface PublicArticle { aid: string; heading: string; text: string }
+export interface PublicDocument {
+  rid: string;
+  title: string;
+  version?: string;
+  valid_from?: string;
+  valid_until?: string | null;
+  kind?: string;
+  articles: PublicArticle[];
+}
 export interface SuggestionTopic { topic: string; questions: string[] }
 export interface DocumentItem {
   rid: string;
@@ -242,17 +259,69 @@ export async function requestBlob(path: string, opts: RequestOptions = {}): Prom
   return res.blob();
 }
 
+export interface AskStreamHandlers {
+  onEvidence?: (ev: { references: Reference[]; refused: boolean; intent: string; streaming_ai: boolean }) => void;
+  onDelta?: (text: string) => void;
+  onDone?: (res: AskResponse) => void;
+}
+
 /* ---------- Endpoints ---------- */
 const enc = encodeURIComponent;
 export const api = {
   health: (signal?: AbortSignal) => request<Health>('/api/health', { signal }),
   catalog: (signal?: AbortSignal) => request<CatalogItem[]>('/api/catalog', { signal }),
+  catalogDetail: (rid: string, signal?: AbortSignal) =>
+    request<PublicDocument>(`/api/catalog/${enc(rid)}`, { signal, fallback: 'Không tải được nội dung văn bản.' }),
   suggestions: (signal?: AbortSignal) => request<SuggestionTopic[]>('/api/suggestions', { signal }),
 
   ask: (owner: string, body: AskRequest, signal?: AbortSignal) =>
     request<AskResponse>('/api/ask', { method: 'POST', json: body, owner, signal, fallback: 'Không nhận được câu trả lời.' }),
-  history: (owner: string, sessionId: string, signal?: AbortSignal) =>
-    request<HistoryRow[]>(`/api/history?session_id=${enc(sessionId)}`, { owner, signal }),
+  askStream: async (owner: string, body: AskRequest, handlers: AskStreamHandlers, signal?: AbortSignal): Promise<AskResponse> => {
+    const res = await send('/api/ask/stream', { method: 'POST', json: body, owner, signal, fallback: 'Không nhận được câu trả lời.' });
+    if (!res.ok) throw await failure(res, 'Không nhận được câu trả lời.');
+    if (!res.body) throw new ApiError('Trình duyệt không hỗ trợ đọc luồng phản hồi.', res.status);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let finalRes: AskResponse | null = null;
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const blocks = buffer.split('\n\n');
+      buffer = blocks.pop() || '';
+      for (const block of blocks) {
+        let ev = 'message';
+        const dataLines: string[] = [];
+        for (const line of block.split('\n')) {
+          if (line.startsWith('event:')) ev = line.slice(6).trim();
+          else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+        }
+        if (!dataLines.length) continue;
+        let parsed: unknown;
+        try { parsed = JSON.parse(dataLines.join('\n')); } catch { continue; }
+        if (ev === 'evidence') handlers.onEvidence?.(parsed as Parameters<NonNullable<AskStreamHandlers['onEvidence']>>[0]);
+        else if (ev === 'delta') {
+          const t = (parsed as { text?: unknown }).text;
+          if (typeof t === 'string') handlers.onDelta?.(t);
+        } else if (ev === 'done') {
+          finalRes = parsed as AskResponse;
+          handlers.onDone?.(finalRes);
+        } else if (ev === 'error') {
+          const err = parsed as { detail?: string; code?: string; session_id?: string };
+          throw new ApiError(err.detail || 'Không nhận được câu trả lời.', err.code === 'session_closed' ? 410 : 500, err.code || '', err.session_id || '');
+        }
+      }
+    }
+    if (!finalRes) throw new ApiError('Luồng phản hồi kết thúc bất ngờ.', 0);
+    return finalRes;
+  },
+  history: (owner: string, sessionId: string, signal?: AbortSignal, opts?: { limit?: number; beforeId?: number }) => {
+    const params = new URLSearchParams({ session_id: sessionId });
+    if (opts?.limit) params.set('limit', String(opts.limit));
+    if (opts?.beforeId) params.set('before_id', String(opts.beforeId));
+    return request<HistoryRow[]>(`/api/history?${params.toString()}`, { owner, signal });
+  },
   historyStatus: (owner: string, sessionId: string, signal?: AbortSignal) =>
     request<HistoryStatus>(`/api/history/status?session_id=${enc(sessionId)}`, { owner, signal }),
   deleteHistory: (owner: string, sessionId: string) =>
@@ -260,6 +329,18 @@ export const api = {
   conversations: (owner: string, signal?: AbortSignal) => request<Conversation[]>('/api/conversations', { owner, signal }),
   tts: (text: string, voice: string, rate: string, signal?: AbortSignal) =>
     request<{ status: string; audio_url: string }>('/api/tts', { method: 'POST', json: { text, voice, rate }, signal, fallback: 'Không tạo được giọng đọc.' }),
+  ttsStream: async (text: string, voice: string, rate: string, signal?: AbortSignal): Promise<Blob> => {
+    const res = await send('/api/tts/stream', { method: 'POST', json: { text, voice, rate }, signal, fallback: 'Không tạo được giọng đọc.' });
+    if (!res.ok) throw await failure(res, 'Không tạo được giọng đọc.');
+    return res.blob();
+  },
+  stt: (audio: Blob, filename = 'voice.webm', signal?: AbortSignal) => {
+    const form = new FormData();
+    form.append('file', audio, filename);
+    return request<{ status: string; text: string; provider?: string }>('/api/stt', {
+      method: 'POST', form, signal, fallback: 'Không nhận dạng được đoạn ghi âm.',
+    });
+  },
 
   documents: (token: string, signal?: AbortSignal) => request<DocumentItem[]>('/api/documents', { token, signal }),
   documentText: (token: string, id: string, signal?: AbortSignal) => request<DocumentText>(`/api/documents/${enc(id)}/text`, { token, signal }),

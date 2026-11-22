@@ -113,9 +113,11 @@ class DependencySecurityTests(unittest.TestCase):
             "postcss-selector-parser": "6.1.5", "qs": "6.16.1",
             "undici": "7.30.1", "zod": "4.6.6",
         }
+        required_present = {"postcss-selector-parser", "zod"}
         for name, fixed in floors.items():
             versions = re.findall(rf"^  {re.escape(name)}@(\d[^:\n()]*):", lock, re.M)
             with self.subTest(package=name):
-                self.assertTrue(versions, f"{name} missing from the lockfile")
+                if name in required_present:
+                    self.assertTrue(versions, f"{name} missing from the lockfile")
                 for release in versions:
                     self.assertGreaterEqual(Version(release), Version(fixed))

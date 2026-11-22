@@ -1,12 +1,26 @@
-# A small production image for Render (or any Docker-compatible host).
-# Python 3.12 has broad wheel support for the PDF/OCR dependencies.
+# Multi-stage production image: builds the React Voice Assistant UI and serves it from FastAPI.
+FROM node:22-slim AS frontend
+
+RUN corepack enable && corepack prepare pnpm@latest --activate
+WORKDIR /workspace
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json tsconfig.json .npmrc ./
+COPY artifacts/hocvu/package.json ./artifacts/hocvu/
+COPY scripts/package.json ./scripts/
+RUN pnpm install --frozen-lockfile
+
+COPY artifacts/hocvu ./artifacts/hocvu
+RUN pnpm --filter @workspace/hocvu exec vite build --config vite.config.ts
+
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     HV_SEMANTIC=0 \
-    HV_DATA_DIR=/var/data
+    HV_BROWSER_AUTH=1 \
+    HV_DATA_DIR=/var/data \
+    HV_UI_DIR=/app/dist/public
 
 WORKDIR /app
 
@@ -18,7 +32,8 @@ RUN apt-get update \
 COPY requirements.production.txt ./requirements.production.txt
 RUN pip install --no-cache-dir -r requirements.production.txt
 
-COPY . .
+COPY artifacts/hocvu/app ./
+COPY --from=frontend /workspace/artifacts/hocvu/dist/public ./dist/public
 RUN mkdir -p /var/data
 
 EXPOSE 10000

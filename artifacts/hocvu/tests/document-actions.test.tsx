@@ -166,7 +166,11 @@ describe('Document actions', () => {
     await waitFor(() => expect(anchorClick).toHaveBeenCalledOnce());
     const download = http.mock.calls.find(([url]) => url === '/api/admin/storage/backups/synthetic.zip')!;
     expect(new Headers(download[1]!.headers).get('X-HocVu-Token')).toBe(TOKEN);
-    expect(createUrl).toHaveBeenCalledWith(expect.any(Blob));
+    expect(createUrl).toHaveBeenCalledOnce();
+    const downloaded = (createUrl.mock.calls[0] as unknown as [Blob])[0];
+    expect(typeof downloaded?.size).toBe('number');
+    expect(downloaded.size).toBeGreaterThan(0);
+    expect(typeof downloaded?.arrayBuffer).toBe('function');
     expect((anchorClick.mock.instances[0] as HTMLAnchorElement).download).toBe('synthetic.zip');
     expect(http.mock.calls.every(([url]) => String(url).startsWith('/api/'))).toBe(true);
   });

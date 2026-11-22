@@ -1,11 +1,15 @@
-import { Plus, RotateCw } from 'lucide-react';
+import { Plus, RotateCw, Trash2 } from 'lucide-react';
 import { useConversations } from '@/hooks/use-chat';
 import { describeError } from '@/lib/api';
 import { historyGroup, historyTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
-export function ConversationList({ currentId, onOpen, onNew, disabled }: {
-  currentId: string; onOpen: (id: string) => void; onNew: () => void; disabled: boolean;
+export function ConversationList({ currentId, onOpen, onNew, onDelete, disabled }: {
+  currentId: string;
+  onOpen: (id: string) => void;
+  onNew: () => void;
+  onDelete?: (id: string, title: string) => void;
+  disabled: boolean;
 }) {
   const q = useConversations();
   const list = q.data || [];
@@ -47,14 +51,39 @@ export function ConversationList({ currentId, onOpen, onNew, disabled }: {
           return (
             <div key={c.session_id}>
               {heading && <p className="kicker px-3 pt-4 pb-1.5">{heading}</p>}
-              <button type="button" onClick={() => onOpen(c.session_id)} disabled={disabled && !active}
-                aria-current={active ? 'page' : undefined} title={c.title} data-testid={`button-conversation-${c.session_id}`}
-                className={cn('w-full text-left rounded-md px-3 py-2 transition-colors relative',
-                  active ? 'bg-paper shadow-sm border border-border' : 'hover:bg-foreground/5 border border-transparent')}>
+              <div
+                className={cn(
+                  'group relative flex items-center rounded-md transition-colors',
+                  active ? 'bg-paper shadow-sm border border-border' : 'hover:bg-foreground/5 border border-transparent',
+                )}
+              >
                 {active && <span className="absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-r bg-seal" aria-hidden="true" />}
-                <span className="block text-sm truncate">{c.title}</span>
-                <span className="block text-[.7rem] text-muted-foreground font-mono mt-0.5">{c.turn_count} lượt · {historyTime(c.updated_at)}</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => onOpen(c.session_id)}
+                  disabled={disabled && !active}
+                  aria-current={active ? 'page' : undefined}
+                  title={c.title}
+                  data-testid={`button-conversation-${c.session_id}`}
+                  className="flex-1 min-w-0 text-left px-3 py-2"
+                >
+                  <span className="block text-sm truncate">{c.title}</span>
+                  <span className="block text-[.7rem] text-muted-foreground font-mono mt-0.5">{c.turn_count} lượt · {historyTime(c.updated_at)}</span>
+                </button>
+                {onDelete && (
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={(e) => { e.stopPropagation(); onDelete(c.session_id, c.title); }}
+                    aria-label={`Xóa hội thoại ${c.title}`}
+                    title="Xóa hội thoại này"
+                    data-testid={`button-delete-conversation-${c.session_id}`}
+                    className="mr-1.5 p-1.5 rounded text-muted-foreground opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-destructive hover:bg-destructive/10 transition-opacity"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                  </button>
+                )}
+              </div>
             </div>
           );
         })}

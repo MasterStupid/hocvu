@@ -102,15 +102,54 @@ def build_grounding(references: list[Reference], normalized_score: float) -> dic
     return {"level": level, "label": label, "source_count": source_count}
 
 
-def build_card(answer: str, references: list[Reference], hits: list[RankedChunk], normalized_score: float, suggestions: list[str] | None = None) -> dict:
-    paragraphs = [paragraph.strip() for paragraph in answer.split("\n\n") if paragraph.strip()]
-    # Stage 1 mapping: generator output preserves selected chunk order. For
-    # explanatory scenario paragraphs, the same deterministic order remains
-    # preferable to an ungrounded semantic guess.
-    verdict_segments = [
-        {"text": paragraph, "cites": [min(index + 1, len(references))] if references else []}
-        for index, paragraph in enumerate(paragraphs)
+def _match_reference_by_overlap(paragraph: str, references: list[Reference]) -> list[int]:
+    if not references:
+        return []
+    para_tokens = set(content_tokens(paragraph))
+    if not para_tokens:
+        return [1]
+    scored = [
+        (len(para_tokens.intersection(content_tokens(f"{ref.art_heading} {ref.excerpt}"))), idx + 1)
+        for idx, ref in enumerate(references)
     ]
+    best_overlap = max((score for score, _ in scored), default=0)
+    if best_overlap <= 0:
+        return [1]
+    return [idx for score, idx in scored if score == best_overlap][:2]
+
+
+def build_card(
+    answer: str,
+    references: list[Reference],
+    hits: list[RankedChunk],
+    normalized_score: float,
+    suggestions: list[str] | None = None,
+    *,
+    llm_rewritten: bool = False,
+) -> dict:
+    paragraphs = [paragraph.strip() for paragraph in answer.split("\n\n") if paragraph.strip()]
+    max_ref = len(references)
+    verdict_segments = []
+    if llm_rewritten and references:
+        for paragraph in paragraphs:
+            cited = [
+                int(num) for num in re.findall(r"\[(\d+)\]", paragraph)
+                if 1 <= int(num) <= max_ref
+            ]
+            unique_cites = list(dict.fromkeys(cited))
+            # Strip raw inline [n] markers so UI citation buttons never duplicate them.
+            cleaned_text = re.sub(r"\s*\[(\d+)\]", "", paragraph).strip()
+            cleaned_text = re.sub(r"\s+([.,;:!?])", r"\1", cleaned_text)
+            cites = unique_cites or _match_reference_by_overlap(cleaned_text, references)
+            verdict_segments.append({"text": cleaned_text or paragraph, "cites": cites})
+    else:
+        # Stage 1 mapping: generator output preserves selected chunk order. For
+        # explanatory scenario paragraphs, the same deterministic order remains
+        # preferable to an ungrounded semantic guess.
+        verdict_segments = [
+            {"text": paragraph, "cites": [min(index + 1, max_ref)] if references else []}
+            for index, paragraph in enumerate(paragraphs)
+        ]
     return {
         "verdict_segments": verdict_segments,
         "grounding": build_grounding(references, normalized_score),

@@ -82,7 +82,10 @@ class BrowserAuthenticationTests(IsolatedServerEngineTests):
             with self.subTest(path=path):
                 response = await self.client.get(path)
                 self.assertEqual(response.status_code, 401)
-                self.assertIn("Basic", response.headers["www-authenticate"])
+                if not path.startswith("/api/"):
+                    self.assertIn("Basic", response.headers["www-authenticate"])
+                else:
+                    self.assertNotIn("www-authenticate", response.headers)
 
     async def test_chat_pages_assets_and_catalog_are_public(self):
         for path in ["/", "/index.html", "/main.js", "/theme.js", "/styles.css", "/api-errors.js", "/api/catalog", "/api/suggestions"]:

@@ -14,18 +14,58 @@ export interface Answer {
   presentation: Presentation;
   restored: boolean;
   providers?: Record<string, string>;
+  audioUrl?: string | null;
 }
 export interface ChatTurn {
   key: string;
+  rowId?: number;
   question: string;
   status: 'pending' | 'done' | 'error';
+  streamingText?: string;
   answer?: Answer;
   error?: string;
+  createdAt?: number;
 }
 export type Notice = { tone: 'info' | 'ok' | 'warn' | 'error'; text: string } | null;
 export type RestoreState = { state: 'loading' | 'ready' | 'failed'; error?: string };
 
 export const conversationsKey = ['conversations'] as const;
+
+const LOCAL_TURNS_PREFIX = 'hv_local_turns_';
+const HISTORY_PAGE_SIZE = 100;
+
+function localKey(sessionId: string) {
+  return `${LOCAL_TURNS_PREFIX}${sessionId}`;
+}
+
+function readLocalTurns(sessionId: string): ChatTurn[] {
+  try {
+    const raw = localStorage.getItem(localKey(sessionId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalTurns(sessionId: string, turns: ChatTurn[]) {
+  try {
+    // Only persist non-grounded display turns (greetings, thanks, refusals)
+    // that the backend intentionally excludes from RAG context storage.
+    const ephemeral = turns
+      .filter((t) => t.status === 'done' && t.answer && (t.answer.refused === true || t.answer.intent === 'greeting' || t.answer.intent === 'thanks'))
+      .slice(-30);
+    if (!ephemeral.length) localStorage.removeItem(localKey(sessionId));
+    else localStorage.setItem(localKey(sessionId), JSON.stringify(ephemeral));
+  } catch {
+    /* ignore quota/privacy errors */
+  }
+}
+
+function clearLocalTurns(sessionId: string) {
+  try { localStorage.removeItem(localKey(sessionId)); } catch { /* ignore */ }
+}
 
 function hasSavedEvidence(r: { refused: boolean | null; references: Reference[] | null; card: AnswerCard | null }) {
   const g = r.card?.grounding;
@@ -34,10 +74,12 @@ function hasSavedEvidence(r: { refused: boolean | null; references: Reference[] 
 }
 
 export function fromResponse(res: AskResponse): Answer {
+  const conversational = res.intent === 'greeting' || res.intent === 'thanks';
   return {
     text: res.answer, references: res.references || [], card: res.card || {}, intent: res.intent,
     refused: res.refused, refusalReason: res.refusal_reason || '', restored: false, providers: res.providers,
-    presentation: res.refused ? 'refusal' : res.intent === 'greeting' ? 'greeting' : 'answer',
+    audioUrl: res.audio_url ?? null,
+    presentation: res.refused ? 'refusal' : conversational ? 'greeting' : 'answer',
   };
 }
 
@@ -46,9 +88,13 @@ function fromRow(row: HistoryRow): ChatTurn {
   const legacyRefusal = row.intent === 'unsafe' || (row.intent === 'academic_rules' && row.article_id === '' && row.rid === '');
   const refused = typeof row.refused === 'boolean' ? row.refused : legacyRefusal ? true : null;
   const normalized = { refused, references: row.references, card: row.card };
-  const presentation: Presentation = refused ? 'refusal' : row.intent === 'greeting' ? 'greeting' : hasSavedEvidence(normalized) ? 'answer' : 'legacy';
+  const conversational = row.intent === 'greeting' || row.intent === 'thanks';
+  const presentation: Presentation = refused ? 'refusal' : conversational ? 'greeting' : hasSavedEvidence(normalized) ? 'answer' : 'legacy';
   return {
-    key: `row-${row.id ?? uuid()}`, question: row.question, status: 'done',
+    key: `row-${row.id ?? uuid()}`,
+    rowId: typeof row.id === 'number' ? row.id : undefined,
+    question: row.question,
+    status: 'done',
     answer: {
       text: row.answer, references: row.references || [], card: row.card || {}, intent: row.intent || 'other',
       refused, refusalReason: row.refusal_reason || '', presentation, restored: true,
@@ -72,6 +118,8 @@ export function useChat() {
   const qc = useQueryClient();
   const [sessionId, setSessionId] = useState<string>(() => storedSessionId() || uuid());
   const [turns, setTurns] = useState<ChatTurn[]>([]);
+  const [hasMoreHistory, setHasMoreHistory] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [restore, setRestore] = useState<RestoreState>({ state: 'loading' });
   const [sending, setSending] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -96,6 +144,8 @@ export function useChat() {
     storeSessionId(id);
     setSessionId(id);
     setTurns([]);
+    setHasMoreHistory(false);
+    setLoadingMore(false);
     setSending(false);
     setDeleting(false);
     setRestore({ state: 'ready' });
@@ -108,6 +158,7 @@ export function useChat() {
 
   const forget = useCallback((id: string, message?: string) => {
     closed.current.add(id);
+    clearLocalTurns(id);
     dropFromList(id);
     if (id !== sessionRef.current) return;
     resetTo(freshId());
@@ -124,12 +175,18 @@ export function useChat() {
     try {
       const owner = ownerKey();
       const [rows, status] = await Promise.all([
-        api.history(owner, id, ctrl.signal), api.historyStatus(owner, id, ctrl.signal),
+        api.history(owner, id, ctrl.signal, { limit: HISTORY_PAGE_SIZE }),
+        api.historyStatus(owner, id, ctrl.signal),
       ]);
       if (v !== version.current) return;
       if (status.closed === true) { forget(id); return; }
       if (!Array.isArray(rows)) throw new Error('Lịch sử hội thoại không hợp lệ.');
-      setTurns(rows.map(fromRow));
+      const serverTurns = rows.map(fromRow);
+      const localTurns = readLocalTurns(id);
+      const seenKeys = new Set(serverTurns.map((t) => t.key));
+      const merged = [...serverTurns, ...localTurns.filter((t) => !seenKeys.has(t.key))];
+      setTurns(merged);
+      setHasMoreHistory(rows.length >= HISTORY_PAGE_SIZE);
       setRestore({ state: 'ready' });
     } catch (e) {
       if (v !== version.current || isAbort(e)) return;
@@ -143,6 +200,26 @@ export function useChat() {
       setRestore({ state: 'failed', error: describeError(e) });
     }
   }, [forget, freshId, qc, resetTo]);
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMoreHistory) return;
+    const oldest = turns.find((t) => typeof t.rowId === 'number');
+    if (!oldest?.rowId) { setHasMoreHistory(false); return; }
+    const v = version.current;
+    const id = sessionRef.current;
+    setLoadingMore(true);
+    try {
+      const rows = await api.history(ownerKey(), id, undefined, { limit: HISTORY_PAGE_SIZE, beforeId: oldest.rowId });
+      if (v !== version.current) return;
+      const olderTurns = rows.map(fromRow);
+      setTurns((prev) => [...olderTurns, ...prev]);
+      setHasMoreHistory(rows.length >= HISTORY_PAGE_SIZE);
+    } catch {
+      /* keep existing view */
+    } finally {
+      if (v === version.current) setLoadingMore(false);
+    }
+  }, [hasMoreHistory, loadingMore, turns]);
 
   const retryRestore = useCallback(() => { void open(sessionRef.current); }, [open]);
 
@@ -160,25 +237,58 @@ export function useChat() {
     void open(sessionRef.current);
   }, [open]);
 
-  type SendResult = { ok: true; answer: Answer } | { ok: false; restoreText?: string };
-  const ask = useCallback(async (question: string, opts: { refDate: string; useAi: boolean }): Promise<SendResult> => {
+  type SendResult = { ok: true; key: string; answer: Answer } | { ok: false; restoreText?: string };
+  const ask = useCallback(async (
+    question: string,
+    opts: { refDate: string; useAi: boolean; withAudio?: boolean; voice?: string; rate?: string },
+  ): Promise<SendResult> => {
     const q = question.trim();
     if (!q || sending || deleting || restore.state !== 'ready') return { ok: false, restoreText: question };
     const v = version.current;
     const id = sessionRef.current;
     const key = uuid();
-    setTurns((t) => [...t, { key, question: q, status: 'pending' }]);
+    setTurns((t) => [...t, { key, question: q, status: 'pending', createdAt: Date.now() }]);
     setSending(true);
     setNotice(null);
+    const body = {
+      question: q,
+      session_id: id,
+      ref_date: opts.refDate || null,
+      use_ai: opts.useAi,
+      with_audio: Boolean(opts.withAudio && !opts.useAi),
+      voice: opts.voice,
+      rate: opts.rate,
+    };
     try {
-      const res = await api.ask(ownerKey(), {
-        question: q, session_id: id, ref_date: opts.refDate || null, use_ai: opts.useAi, with_audio: false,
-      });
+      let res: AskResponse;
+      if (opts.useAi && typeof api.askStream === 'function') {
+        try {
+          res = await api.askStream(ownerKey(), body, {
+            onDelta: (delta) => {
+              if (v !== version.current) return;
+              setTurns((prev) => prev.map((x) => (
+                x.key === key ? { ...x, streamingText: (x.streamingText || '') + delta } : x
+              )));
+            },
+          });
+        } catch (streamErr) {
+          if (streamErr instanceof ApiError && (streamErr.status === 410 || streamErr.code === 'session_unavailable' || streamErr.status === 429)) {
+            throw streamErr;
+          }
+          res = await api.ask(ownerKey(), body);
+        }
+      } else {
+        res = await api.ask(ownerKey(), body);
+      }
       void qc.invalidateQueries({ queryKey: conversationsKey });
       if (v !== version.current) return { ok: false };
       const answer = fromResponse(res);
-      setTurns((t) => t.map((x) => (x.key === key ? { ...x, status: 'done', answer } : x)));
-      return { ok: true, answer };
+      setTurns((prev) => {
+        const next = prev.map((x) => (x.key === key ? { ...x, status: 'done' as const, streamingText: undefined, answer } : x));
+        writeLocalTurns(id, next);
+        return next;
+      });
+      return { ok: true, key, answer };
     } catch (e) {
       if (v !== version.current) return { ok: false };
       if (e instanceof ApiError && e.status === 410 && e.code === 'session_closed' && (!e.sessionId || e.sessionId === id)) {
@@ -190,7 +300,7 @@ export function useChat() {
         setNotice({ tone: 'warn', text: 'Không có quyền truy cập hội thoại cũ. Đã mở hội thoại mới; bản lưu cũ không bị xóa.' });
         return { ok: false, restoreText: q };
       }
-      setTurns((t) => t.map((x) => (x.key === key ? { ...x, status: 'error', error: describeError(e) } : x)));
+      setTurns((t) => t.map((x) => (x.key === key ? { ...x, status: 'error', streamingText: undefined, error: describeError(e) } : x)));
       return { ok: false };
     } finally {
       if (v === version.current) setSending(false);
@@ -199,21 +309,26 @@ export function useChat() {
 
   const dismissTurn = useCallback((key: string) => setTurns((t) => t.filter((x) => x.key !== key)), []);
 
-  const deleteCurrent = useCallback(async () => {
-    if (sending || deleting || restore.state === 'loading') return false;
-    const id = sessionRef.current;
+  const deleteSession = useCallback(async (targetId: string) => {
+    if (deleting) return false;
+    const isCurrent = targetId === sessionRef.current;
+    if (isCurrent && (sending || restore.state === 'loading')) return false;
     const v = version.current;
     const next = freshId();
     setDeleting(true);
     try {
-      await api.deleteHistory(ownerKey(), id);
-      closed.current.add(id);
-      dropFromList(id);
+      await api.deleteHistory(ownerKey(), targetId);
+      closed.current.add(targetId);
+      clearLocalTurns(targetId);
+      dropFromList(targetId);
       void qc.invalidateQueries({ queryKey: conversationsKey });
-      announceDeletion(id);
-      if (v === version.current) {
+      announceDeletion(targetId);
+      if (isCurrent && v === version.current) {
         resetTo(next);
         setNotice({ tone: 'ok', text: 'Đã xóa vĩnh viễn lịch sử hội thoại. Hội thoại mới đã sẵn sàng.' });
+      } else if (v === version.current) {
+        setDeleting(false);
+        setNotice({ tone: 'ok', text: 'Đã xóa vĩnh viễn hội thoại đã chọn.' });
       }
       return true;
     } catch (e) {
@@ -225,6 +340,8 @@ export function useChat() {
       return false;
     }
   }, [deleting, dropFromList, freshId, qc, resetTo, restore.state, sending]);
+
+  const deleteCurrent = useCallback(() => deleteSession(sessionRef.current), [deleteSession]);
 
   // Cross-tab deletion notices and server-side closure checks.
   useEffect(() => {
@@ -258,14 +375,15 @@ export function useChat() {
 
   return {
     sessionId, turns, restore, sending, deleting, notice, setNotice,
-    open, retryRestore, newChat, ask, dismissTurn, deleteCurrent,
+    hasMoreHistory, loadingMore, loadMore,
+    open, retryRestore, newChat, ask, dismissTurn, deleteCurrent, deleteSession,
     canSend: restore.state === 'ready' && !sending && !deleting,
   };
 }
 
 /* ---------- Export (same structure as legacy transcript export) ---------- */
 function exportAnswer(a: Answer): string[] {
-  if (a.presentation === 'greeting') return ['Trạng thái: Lời chào — không sử dụng căn cứ.', a.text];
+  if (a.presentation === 'greeting') return ['Trạng thái: Giao tiếp xã giao — không sử dụng căn cứ.', a.text];
   if (a.presentation === 'refusal') return ['Trạng thái: Từ chối trả lời — chưa đủ căn cứ.', a.text, ...(a.refusalReason ? [`Lý do từ chối: ${a.refusalReason}`] : [])];
   if (a.presentation === 'legacy') return ['Trạng thái: Lượt đã lưu — chi tiết căn cứ không có trong bản lưu này.', a.text];
   const segs = a.card.verdict_segments?.length ? a.card.verdict_segments : [{ text: a.text, cites: [] }];

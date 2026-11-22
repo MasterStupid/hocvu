@@ -256,7 +256,7 @@ class SessionStore:
         finally:
             conn.close()
 
-    def get_history(self, session_id: str, limit: int, *, owner: str | None = None) -> list[dict]:
+    def get_history(self, session_id: str, limit: int, *, owner: str | None = None, before_id: int | None = None) -> list[dict]:
         conn = self._connect()
         try:
             if owner is not None:
@@ -266,12 +266,20 @@ class SessionStore:
                 self._authorize(conn, session_id, owner)
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
-            cursor.execute('''
-                SELECT * FROM turns 
-                WHERE session_id = ? 
-                ORDER BY id DESC 
-                LIMIT ?
-            ''', (session_id, limit))
+            if before_id is not None:
+                cursor.execute('''
+                    SELECT * FROM turns
+                    WHERE session_id = ? AND id < ?
+                    ORDER BY id DESC
+                    LIMIT ?
+                ''', (session_id, before_id, limit))
+            else:
+                cursor.execute('''
+                    SELECT * FROM turns
+                    WHERE session_id = ?
+                    ORDER BY id DESC
+                    LIMIT ?
+                ''', (session_id, limit))
             rows = cursor.fetchall()
             history = []
             for row in reversed(rows):
@@ -307,14 +315,14 @@ class SessionStore:
         finally:
             conn.close()
 
-    def contextualize(self, session_id: str, question: str, limit: int = 8) -> tuple[str, str]:
+    def contextualize(self, session_id: str, question: str, limit: int = 8, *, force: bool = False) -> tuple[str, str]:
         """Resolve against grounded turns, retaining the root across follow-ups.
 
         The root and a bounded tail of follow-ups prevent query growth. Raw
         questions remain intact in display history; legacy rows without resolved
         fields recover their root from an earlier independent grounded question.
         """
-        if not is_context_dependent(question):
+        if not force and not is_context_dependent(question):
             return question, ""
         conn = self._connect()
         try:

@@ -10,20 +10,21 @@
 - Workflow build frontend trước khi khởi chạy FastAPI; sau khi sửa UI cần restart workflow để cập nhật bản xem trước.
 - `pnpm --filter @workspace/hocvu run typecheck` kiểm tra frontend TypeScript.
 - Kiểm thử gốc: `cd artifacts/hocvu/app && python -m unittest discover -s tests`.
-- Máy chủ Express mẫu được chuyển sang `/__template-api`; không dùng nó cho API HocVu.
+- Chạy cục bộ ngoài Replit: `./run.sh` (Linux/macOS) hoặc `run.bat` (Windows), gọi `artifacts/hocvu/local_run.py`.
 
 ## Stack
 
 - React/TypeScript, Vite, React Query, backend Python 3.13/FastAPI/Uvicorn.
-- BM25 mặc định (`HV_SEMANTIC=0`), không yêu cầu LLM để chạy tra cứu.
+- BM25 mặc định (`HV_SEMANTIC=0`), hỗ trợ bật Semantic hybrid (local E5 hoặc Cloud Embedding API Gemini/OpenAI) và không yêu cầu LLM để chạy tra cứu.
 - Python dependencies ở `pyproject.toml` và `uv.lock` trong workspace.
 - pnpm workspace chỉ cung cấp lệnh khởi chạy và quản lý artifact.
 
 ## Where things live
 
-- `artifacts/hocvu/src/`: giao diện React, API client và quản lý trạng thái.
-- `artifacts/hocvu/app/`: backend ứng dụng gốc, kiểm thử và giao diện cũ giữ để đối chiếu.
+- `artifacts/hocvu/src/`: giao diện React, API client, Live voice mode và quản lý trạng thái.
+- `artifacts/hocvu/app/`: backend ứng dụng duy nhất (FastAPI + RAG + Voice/STT/TTS), kiểm thử và giao diện cũ giữ để đối chiếu.
 - `artifacts/hocvu/run.py`: bộ chạy tích hợp môi trường Replit.
+- `artifacts/hocvu/local_run.py`: bộ chạy cục bộ chuẩn (tự tạo token dev, tự build UI nếu chưa có).
 - `artifacts/hocvu/README.md`: hướng dẫn chạy, quản trị và điều kiện publish.
 - `artifacts/hocvu/app/docs/persistent-storage.md`: thiết kế lưu trữ bền vững hiện có.
 - `dist/public/` là giao diện đang được FastAPI phục vụ; không phục vụ mã nguồn hoặc secret.

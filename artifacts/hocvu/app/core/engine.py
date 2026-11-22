@@ -15,10 +15,11 @@ from .generator import DECLINE_MSG, Generator
 from .index_version import index_fingerprint
 from .llm import GroundedLLM, LLMError
 from .models import Regulation, Response
+from .nlp import normalize, strip_accents
 from .question_focus import question_focus
 from .regulation_queries import answer_metadata
 from .searcher import HybridSearcher, StaleIndexError
-from .scenarios import comparison_subjects, comparison_topic, expand_retrieval_query, is_attendance_training_scenario, is_comparison_query, is_context_dependent, is_contextual_follow_up, is_historical_query, is_version_comparison_query
+from .scenarios import comparison_subjects, comparison_topic, expand_retrieval_query, is_attendance_training_scenario, is_comparison_query, is_context_dependent, is_contextual_follow_up, is_historical_query, is_underspecified_follow_up, is_version_comparison_query
 from .storage_backend import document_repository, session_store, writing, storage_backend
 from .persistent_documents import rollback_index
 from .settings import DOCS, INDEX_JSON, SESSION_DB, AppConfig
@@ -110,23 +111,45 @@ class HocVuEngine:
                     self.searcher = searcher
                     self._indexed_revision = repository.revision
 
-    def ask(self, question: str, session_id: str, ref_date: str | None = None, with_audio: bool = False, use_context: bool = True, use_ai: bool = False, record_session: bool = True) -> Response:
-        started = time.perf_counter()
-        self._refresh_corpus()
-        self.ensure_session_open(session_id)
-        question = (question or "").strip()
+    def _recent_grounded_history(self, session_id: str) -> list[dict]:
+        try:
+            rows = self.session.get_history(session_id, 3)
+        except Exception:
+            return []
+        return [
+            row for row in rows
+            if row.get("intent") == Intent.ACADEMIC_RULES.value and not row.get("refused")
+        ]
+
+    def _retrieve_and_generate(
+        self,
+        question: str,
+        session_id: str,
+        ref_date: str | None = None,
+        use_context: bool = True,
+    ) -> dict:
         intent = self.classifier.classify(question)
         refused, reason, references, hits, confidence = False, "", [], [], 0.0
-        ai_status = "off"
         using_semantic = False
+        lexical_coverage = 0.0
         context_question = context_root = question
+        is_overview = False
+
         if not question:
             answer, refused, reason = "Bạn hãy nhập câu hỏi về quy chế đào tạo.", True, "Empty question"
         elif intent == Intent.GREETING:
             answer, confidence = "Chào bạn! Tôi hỗ trợ tra cứu quy chế đào tạo. Bạn có thể hỏi về tín chỉ, đăng ký học phần, bảo lưu, tốt nghiệp hoặc học vụ.", 1.0
+        elif intent == Intent.THANKS:
+            q_ascii = strip_accents(normalize(question)).lower()
+            if "tam biet" in q_ascii or "bye" in q_ascii:
+                answer = "Chào tạm biệt bạn! Khi nào cần tra cứu quy chế đào tạo, bạn cứ quay lại hỏi tôi nhé."
+            else:
+                answer = "Không có gì! Nếu bạn cần tra cứu thêm quy định học vụ nào khác, cứ nói hoặc nhập câu hỏi nhé."
+            confidence = 1.0
         elif intent == Intent.TOXIC:
             answer, refused, reason = "Tôi chỉ hỗ trợ các câu hỏi về quy chế đào tạo trong môi trường an toàn.", True, "Unsafe request"
         elif overview_request(question):
+            is_overview = True
             answer, references, hits, confidence = answer_overview(
                 overview_request(question), self.searcher, ref_date or date.today().isoformat(),
             )
@@ -146,10 +169,7 @@ class HocVuEngine:
             historical = version_comparison or is_historical_query(question)
             retrieval_question = expand_retrieval_query(comparison_topic(question) if comparison else question)
             is_follow_up = is_contextual_follow_up(question)
-            # Coverage can only rerank clauses present in this bounded pool.
-            # Eligibility thresholds can rank below the first 12 BM25 hits
-            # when generic "conditions/receive" wording favours other rules.
-            # Keep recall separate from the unchanged evidence/refusal gates.
+            underspecified = is_underspecified_follow_up(question)
             retrieval_limit = max(self.config.top_k, 20)
             today_str = ref_date or date.today().isoformat()
 
@@ -160,12 +180,20 @@ class HocVuEngine:
                     ),
                 )
 
-            # Always try the current subject first. A discourse prefix such as
-            # "Thế còn học phí?" must not force a previous, unrelated topic in.
+            def evaluate_gate(r_query, r_hits, *, ctx_used: bool):
+                sem = any(hit.vec != 0 for hit in r_hits)
+                lex = self.searcher.lexical_coverage(question_focus(r_query).topic, r_hits)
+                conf = min(1.0, r_hits[0].score) if sem and r_hits else lex
+                fl = self.config.semantic_floor if sem else self.config.lexical_coverage_floor
+                if scenario and not sem:
+                    fl = min(fl, 0.30)
+                if (is_follow_up or underspecified) and ctx_used and not sem:
+                    fl = min(fl, 0.40)
+                spec = self.searcher.has_specific_evidence(r_query, r_hits)
+                return sem, lex, conf, fl, spec
+
             hits = retrieve(retrieval_question)
             if subjects:
-                # Give both sides their own bounded retrieval allowance;
-                # combined-query ranking can otherwise omit the shorter side.
                 by_id = {(hit.chunk.rid, hit.chunk.cid): hit for hit in hits}
                 for subject in subjects:
                     for hit in retrieve(expand_retrieval_query(subject)):
@@ -173,9 +201,6 @@ class HocVuEngine:
                 hits = list(by_id.values())
             dependent = is_context_dependent(question)
             context_used = False
-            # A connective alone does not license borrowing evidence for an
-            # unsupported new subject ("Thế còn wifi?"). Only an actual
-            # reference/ellipsis needs its antecedent to resolve the query.
             if use_context and is_follow_up and dependent:
                 context_q, root = self.session.contextualize(
                     session_id, retrieval_question, limit=self.config.max_history,
@@ -186,34 +211,31 @@ class HocVuEngine:
                         hits, retrieval_question = context_hits, context_q
                         context_used = True
                         context_question, context_root = context_q, root
-            # Generic "conditions" can match any regulation. Without a usable
-            # antecedent, never answer a reference-only question from such hits.
+            elif use_context and not dependent and underspecified and not comparison:
+                # Stage-3 grounded fallback: natural follow-up facets lacking a
+                # named regulation subject try standalone first, then inherit
+                # the recent root topic only if standalone evidence is absent.
+                _, _, s_conf, s_floor, s_spec = evaluate_gate(retrieval_question, hits, ctx_used=False)
+                if not hits or s_conf < s_floor or not s_spec:
+                    context_q, root = self.session.contextualize(
+                        session_id, retrieval_question, limit=self.config.max_history, force=True,
+                    )
+                    if context_q != retrieval_question and root:
+                        context_hits = [hit for hit in retrieve(context_q) if self.searcher.has_root_topic(root, hit)]
+                        if self.searcher.has_specific_evidence(context_q, context_hits):
+                            hits, retrieval_question = context_hits, context_q
+                            context_used = True
+                            context_question, context_root = context_q, root
             if dependent and not context_used:
                 hits = []
             if historical and not comparison:
-                # When the student explicitly asks for the old rule, an
-                # expired source is the intended evidence, not a fallback.
                 expired = [hit for hit in hits if hit.chunk.valid_until]
                 hits = expired + [hit for hit in hits if not hit.chunk.valid_until]
-            # Query-time fallback is local to this response; the encoder stays
-            # available for a later retry. Do not use raw BM25 as cosine confidence.
-            using_semantic = any(hit.vec != 0 for hit in hits)
-            lexical_coverage = self.searcher.lexical_coverage(question_focus(retrieval_question).topic, hits)
-            confidence = min(1.0, hits[0].score) if using_semantic and hits else lexical_coverage
-            floor = self.config.semantic_floor if using_semantic else self.config.lexical_coverage_floor
-            # Scenario expansion deliberately adds the regulation vocabulary
-            # needed to retrieve both attendance and training-score evidence.
-            if scenario and not using_semantic:
-                floor = min(floor, 0.30)
-            if is_follow_up and context_used and not using_semantic:
-                # The pronouns in a short follow-up are intentionally not in
-                # the document; its earlier turn supplies the actual topic.
-                floor = min(floor, 0.40)
-            specific_evidence = self.searcher.has_specific_evidence(retrieval_question, hits)
+            using_semantic, lexical_coverage, confidence, floor, specific_evidence = evaluate_gate(
+                retrieval_question, hits, ctx_used=context_used,
+            )
             if comparison and not version_comparison:
                 selected = self.generator.select_comparison_evidence(question, hits)
-                # A comparison is supported only when *each* requested side is
-                # grounded. Pool-wide max coverage cannot establish that.
                 specific_evidence = bool(selected)
                 lexical_coverage = min((
                     self.searcher.lexical_coverage(subject, hit)
@@ -224,7 +246,7 @@ class HocVuEngine:
                     else self.searcher.lexical_coverage(subject, hit)
                     for subject, hit in zip(subjects, selected)
                 ), default=0.0)
-                floor = 0.0  # Per-side lexical/semantic floors were checked above.
+                floor = 0.0
             if not hits or confidence < floor or not specific_evidence:
                 answer, refused, reason = DECLINE_MSG, True, "Insufficient grounded context"
             else:
@@ -234,35 +256,127 @@ class HocVuEngine:
                 )
                 refused = not bool(references)
                 reason = "Insufficient grounded context" if refused else ""
-                if use_ai and not refused:
-                    try:
-                        answer = self.llm.rewrite(question, answer, references, hits=hits)
-                        ai_status = "on"
-                    except LLMError as exc:
-                        ai_status = "fallback"
-                        reason = str(exc)
+
+        return {
+            "question": question,
+            "intent": intent,
+            "answer": answer,
+            "refused": refused,
+            "reason": reason,
+            "references": references,
+            "hits": hits,
+            "confidence": confidence,
+            "using_semantic": using_semantic,
+            "lexical_coverage": lexical_coverage,
+            "context_question": context_question,
+            "context_root": context_root,
+            "is_overview": is_overview,
+        }
+
+    def _build_response(self, state: dict, *, session_id: str, started: float, ai_status: str, record_session: bool) -> Response:
+        question = state["question"]
+        answer = state["answer"]
+        references = state["references"]
+        hits = state["hits"]
+        confidence = state["confidence"]
+        refused = state["refused"]
+        reason = state["reason"]
+        intent = state["intent"]
+        using_semantic = state["using_semantic"]
+        lexical_coverage = state["lexical_coverage"]
+
         response = Response(
             query=question, answer=answer, references=references, confidence=confidence,
             refused=refused, refusal_reason=reason, intent=intent.value, retrieved=hits,
             audio_url=None, providers={"retrieval": ("bm25" if hits and not using_semantic else self.searcher.provider), "voice": "browser", "llm": ai_status},
             timing={"total_ms": (time.perf_counter() - started) * 1000}, session_id=session_id,
-            metadata={"grounded": bool(references), "ai_mode": ai_status, "lexical_coverage": round(lexical_coverage if 'lexical_coverage' in locals() else 0.0, 4)},
+            metadata={"grounded": bool(references), "ai_mode": ai_status, "lexical_coverage": round(lexical_coverage, 4)},
             card=(
                 overview_card(answer, references, hits, confidence)
-                if overview_request(question) and not refused
-                else build_card(answer, references, hits, confidence, best_suggestions(question, self._suggestion_topics) if refused else None)
+                if state["is_overview"] and not refused
+                else build_card(
+                    answer, references, hits, confidence,
+                    best_suggestions(question, self._suggestion_topics) if refused else None,
+                    llm_rewritten=(ai_status == "on"),
+                )
             ),
         )
         if record_session and not refused and references and intent == Intent.ACADEMIC_RULES:
             self.session.add_turn(
                 session_id, question, answer, intent.value, references[0].aid, references[0].rid,
-                context_question=context_question, context_root=context_root,
+                context_question=state["context_question"], context_root=state["context_root"],
                 response=response.to_dict(),
             )
         # Also discard greetings/refusals and non-recorded replies if deletion
         # completed during retrieval or generation.
         self.ensure_session_open(session_id)
         return response
+
+    def ask(self, question: str, session_id: str, ref_date: str | None = None, with_audio: bool = False, use_context: bool = True, use_ai: bool = False, record_session: bool = True) -> Response:
+        started = time.perf_counter()
+        self._refresh_corpus()
+        self.ensure_session_open(session_id)
+        question = (question or "").strip()
+        state = self._retrieve_and_generate(question, session_id, ref_date=ref_date, use_context=use_context)
+        ai_status = "off"
+        if use_ai and not state["refused"] and state["references"] and state["intent"] == Intent.ACADEMIC_RULES and not state["is_overview"]:
+            try:
+                history_summary = self._recent_grounded_history(session_id) if use_context else None
+                state["answer"] = self.llm.rewrite(
+                    question, state["answer"], state["references"], hits=state["hits"],
+                    history_summary=history_summary,
+                )
+                ai_status = "on"
+            except LLMError as exc:
+                ai_status = "fallback"
+                state["reason"] = str(exc)
+        return self._build_response(state, session_id=session_id, started=started, ai_status=ai_status, record_session=record_session)
+
+    def stream_ask(self, question: str, session_id: str, ref_date: str | None = None, use_context: bool = True, use_ai: bool = False, record_session: bool = True):
+        """Yield SSE-ready events: evidence -> delta* -> done."""
+        started = time.perf_counter()
+        self._refresh_corpus()
+        self.ensure_session_open(session_id)
+        question = (question or "").strip()
+        state = self._retrieve_and_generate(question, session_id, ref_date=ref_date, use_context=use_context)
+        yield {
+            "event": "evidence",
+            "data": {
+                "references": [ref.to_dict() for ref in state["references"]],
+                "refused": state["refused"],
+                "intent": state["intent"].value,
+                "streaming_ai": bool(
+                    use_ai and self.llm.configured and not state["refused"]
+                    and state["references"] and state["intent"] == Intent.ACADEMIC_RULES and not state["is_overview"]
+                ),
+            },
+        }
+        ai_status = "off"
+        if use_ai and not state["refused"] and state["references"] and state["intent"] == Intent.ACADEMIC_RULES and not state["is_overview"]:
+            if not self.llm.configured:
+                ai_status = "fallback"
+                state["reason"] = "Chế độ AI chưa được cấu hình API key."
+            else:
+                chunks: list[str] = []
+                try:
+                    history_summary = self._recent_grounded_history(session_id) if use_context else None
+                    for delta in self.llm.stream_rewrite(
+                        question, state["answer"], state["references"], history_summary=history_summary,
+                    ):
+                        chunks.append(delta)
+                        yield {"event": "delta", "data": {"text": delta}}
+                    rewritten = "".join(chunks).strip()
+                    if rewritten:
+                        state["answer"] = rewritten
+                        ai_status = "on"
+                    else:
+                        ai_status = "fallback"
+                        state["reason"] = "Mô hình AI không trả về nội dung hợp lệ; đã dùng câu trả lời từ tài liệu."
+                except LLMError as exc:
+                    ai_status = "fallback"
+                    state["reason"] = str(exc)
+        response = self._build_response(state, session_id=session_id, started=started, ai_status=ai_status, record_session=record_session)
+        yield {"event": "done", "data": response.to_dict()}
 
     def suggestion_topics(self) -> list[dict]:
         return self._suggestion_topics
@@ -359,11 +473,67 @@ class HocVuEngine:
             "persistent_copy": bool(result.get("backup_key")),
         }
 
+    def public_document(self, rid: str) -> dict | None:
+        """Return sanitized public regulation articles from indexed chunks only.
+
+        Never exposes admin filenames, filesystem paths, hashes, or OCR flags.
+        """
+        self._refresh_corpus()
+        with self._corpus_lock:
+            doc_chunks = [chunk for chunk in self.searcher.chunks if chunk.rid == rid]
+            if not doc_chunks:
+                return None
+            doc_meta = next((doc for doc in self._list_documents() if doc.get("rid") == rid), None)
+            articles: list[dict] = []
+            by_aid: dict[str, dict] = {}
+            for chunk in doc_chunks:
+                entry = by_aid.get(chunk.aid)
+                body = self.searcher._clause_body(chunk).strip()
+                if entry is None:
+                    entry = {
+                        "aid": chunk.aid,
+                        "heading": chunk.art_heading,
+                        "clauses": [body] if body else [],
+                    }
+                    by_aid[chunk.aid] = entry
+                    articles.append(entry)
+                elif body and body not in entry["clauses"]:
+                    entry["clauses"].append(body)
+            first = doc_chunks[0]
+            return {
+                "rid": first.rid,
+                "title": first.reg_title,
+                "version": (doc_meta or {}).get("version") or first.version,
+                "valid_from": (doc_meta or {}).get("valid_from") or first.valid_from,
+                "valid_until": (doc_meta or {}).get("valid_until") if doc_meta is not None else first.valid_until,
+                "kind": (doc_meta or {}).get("kind", "demo"),
+                "articles": [
+                    {
+                        "aid": art["aid"],
+                        "heading": art["heading"],
+                        "text": "\n".join(art["clauses"]),
+                    }
+                    for art in articles
+                ],
+            }
+
     def list_sources(self) -> list[dict]:
         return [chunk.to_dict() for chunk in self.searcher.chunks]
 
-    def history(self, session_id: str, *, owner: str | None = None) -> list[dict]:
-        return self.session.get_history(session_id, self.config.max_history, owner=owner)
+    def history(
+        self,
+        session_id: str,
+        *,
+        owner: str | None = None,
+        limit: int | None = None,
+        before_id: int | None = None,
+    ) -> list[dict]:
+        # Decouple UI display history (default 100 turns) from RAG context
+        # window (config.max_history = 8 used in session.contextualize).
+        display_limit = 100 if limit is None else max(1, min(int(limit), 200))
+        if before_id is not None:
+            return self.session.get_history(session_id, display_limit, owner=owner, before_id=before_id)
+        return self.session.get_history(session_id, display_limit, owner=owner)
 
     def authorize_session(self, session_id: str, owner: str, *, create: bool = False):
         self.session.authorize(session_id, owner, create=create)

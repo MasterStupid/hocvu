@@ -109,6 +109,7 @@ class AppConfig:
     bm25_weight: float = 0.10   # lexical tie-breaker; semantic retrieval leads
     embed_dim: int = 1024
     embedding_model: str = "intfloat/multilingual-e5-small"
+    embedding_backend: str = "auto"   # auto | local | gemini | openai
     semantic_enabled: bool = True
 
     # ── Chunking ────────────────────────────────
@@ -137,6 +138,7 @@ class AppConfig:
     gemini_key: str = ""
     gemini_url: str = "https://generativelanguage.googleapis.com/v1beta"
     gemini_model: str = "gemini-3.8-flash"
+    gemini_embed: str = "gemini-embedding-001"
 
     # ── API access ─────────────────────────────
     api_token: str = ""
@@ -155,6 +157,7 @@ class AppConfig:
             "bm25_weight": self.bm25_weight,
             "embed_dim": self.embed_dim,
             "embedding_model": self.embedding_model,
+            "embedding_backend": self.embedding_backend,
             "semantic_enabled": self.semantic_enabled,
             "confidence_floor": self.confidence_floor,
             "semantic_floor": self.semantic_floor,
@@ -173,6 +176,7 @@ def load_config() -> AppConfig:
         bm25_weight=_f("HV_BM25_WEIGHT", 0.10),
         embed_dim=_i("HV_EMBED_DIM", 1024),
         embedding_model=_e("HV_EMBEDDING_MODEL", "intfloat/multilingual-e5-small"),
+        embedding_backend=_e("HV_EMBEDDING_BACKEND", "auto").strip().lower(),
         semantic_enabled=_b("HV_SEMANTIC", True),
         max_chunk_chars=_i("HV_MAX_CHUNK_CHARS", 800),
         overlap_sents=_i("HV_OVERLAP_SENTS", 1),
@@ -189,6 +193,7 @@ def load_config() -> AppConfig:
         gemini_key=clean_api_key(_e("GEMINI_API_KEY", "")),
         gemini_url=_e("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta"),
         gemini_model=_e("GEMINI_MODEL", "gemini-3.8-flash"),
+        gemini_embed=_e("GEMINI_EMBED_MODEL", "gemini-embedding-001"),
         api_token=_e("HV_API_TOKEN", ""),
         rate_limit_per_minute=_i("HV_RATE_LIMIT_PER_MINUTE", 120),
         seed=_i("HV_SEED", 20262027),

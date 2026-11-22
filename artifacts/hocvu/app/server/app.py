@@ -31,6 +31,7 @@ from core.session import LEGACY_API_OWNER, SessionAccessError, SessionClosedErro
 from core.documents import DocumentError, DocumentNotFoundError, DocumentRepository
 from core.settings import AUD, INDEX_JSON, SERVER_META, UI, ROOT, ensure_dirs, load_config
 from core.persistent_db import StorageUnavailable
+from core.stt import CloudSTT, MAX_AUDIO_BYTES, STTError
 from core.voice import VoiceManager, clean_text_for_tts, DEFAULT_VOICE, DEFAULT_RATE, RATE_PATTERN, MALE_VOICE
 from server.security import SlidingWindowLimiter, client_address, parse_trusted_proxies
 
@@ -158,11 +159,13 @@ class AskRequest(BaseModel):
     ref_date: Optional[str] = Field(None, description="Ngày tra cứu hiệu lực văn bản (YYYY-MM-DD)")
     with_audio: Optional[bool] = Field(False, description="Yêu cầu sinh kèm URL âm thanh phản hồi")
     use_ai: Optional[bool] = Field(False, description="Bật Google Gemini diễn đạt lại câu trả lời")
+    voice: Optional[str] = Field(DEFAULT_VOICE, max_length=64, description="Giọng đọc khi with_audio=true")
+    rate: Optional[str] = Field(DEFAULT_RATE, pattern=RATE_PATTERN, max_length=12, description="Tốc độ đọc khi with_audio=true")
 
 
 class TTSRequest(BaseModel):
-    text: str = Field(..., description="Văn bản cần đọc")
-    voice: Optional[str] = Field(DEFAULT_VOICE, description="Tên giọng đọc (vi-VN-HoaiMyNeural hoặc vi-VN-NamMinhNeural)")
+    text: str = Field(..., max_length=4000, description="Văn bản cần đọc (tối đa 4000 ký tự)")
+    voice: Optional[str] = Field(DEFAULT_VOICE, max_length=64, description="Tên giọng đọc (vi-VN-HoaiMyNeural hoặc vi-VN-NamMinhNeural)")
     rate: Optional[str] = Field(DEFAULT_RATE, pattern=RATE_PATTERN, max_length=12, description="Tốc độ đọc, ví dụ: +0%, +10%, -10%")
 
 
@@ -207,12 +210,15 @@ PUBLIC_CHAT_API = {
     ("GET", "/api/catalog"),
     ("GET", "/api/suggestions"),
     ("POST", "/api/ask"),
+    ("POST", "/api/ask/stream"),
     ("GET", "/api/history"),
     ("DELETE", "/api/history"),
     ("GET", "/api/history/status"),
     ("GET", "/api/conversations"),
     ("GET", "/api/tts"),
     ("POST", "/api/tts"),
+    ("POST", "/api/tts/stream"),
+    ("POST", "/api/stt"),
 }
 PUBLIC_CHAT_PAGES = {
     "/", "/index.html", "/main.js", "/theme.js", "/styles.css",
@@ -230,6 +236,7 @@ def is_public_chat_request(request: Request) -> bool:
         # Compiled React assets contain no server credentials or private data.
         or (method == "GET" and path.startswith("/assets/"))
         or (method == "GET" and path.startswith("/api/audio/"))
+        or (method == "GET" and path.startswith("/api/catalog/"))
     )
 
 
@@ -343,7 +350,7 @@ async def rate_limit_and_auth_middleware(request: Request, call_next):
                 return JSONResponse(status_code=401, content={"error": "API token is required for network access."})
 
     response = await call_next(request)
-    if path == "/api/ask" or path.startswith(("/api/history", "/api/conversations")):
+    if path in {"/api/ask", "/api/ask/stream", "/api/stt"} or path.startswith(("/api/history", "/api/conversations")):
         response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -352,12 +359,25 @@ async def rate_limit_and_auth_middleware(request: Request, call_next):
 @app.get("/api/health", summary="Kiểm tra trạng thái hệ thống")
 def health_check():
     eng = get_engine()
+    docs = eng.list_documents()
+    uploaded = sum(1 for item in docs if isinstance(item, dict) and item.get("kind") == "uploaded")
+    cfg = getattr(eng, "config", None)
+    stt_available = CloudSTT(cfg).available if cfg is not None else False
+    llm = getattr(eng, "llm", None)
+    llm_available = bool(getattr(llm, "configured", False))
+    llm_backend = (getattr(cfg, "llm_backend", "local") if cfg is not None else "local") if llm_available else "local"
+    searcher = getattr(eng, "searcher", None)
     return {
         "status": "ok",
-        "documents": len(eng.list_documents()),
+        "documents": len(docs),
+        "uploaded_documents": uploaded,
+        "demo_only": uploaded == 0,
         "voice": "edge-tts+browser",
-        "retrieval": eng.searcher.provider,
-        "semantic_error": eng.searcher.semantic_error,
+        "stt_fallback": stt_available,
+        "llm_available": llm_available,
+        "llm_backend": llm_backend,
+        "retrieval": getattr(searcher, "provider", "bm25"),
+        "semantic_error": getattr(searcher, "semantic_error", ""),
         "api_framework": "FastAPI/Uvicorn",
         "api_version": "answer-cards-1",
     }
@@ -382,7 +402,12 @@ async def ask_question(payload: AskRequest, request: Request):
     if payload.with_audio and not result.get("audio_url"):
         try:
             vm = await run_in_threadpool(get_voice_manager)
-            audio_url, _ = await vm.generate_audio_file(response.answer, prefix="ask")
+            audio_url, _ = await vm.generate_audio_file(
+                response.answer,
+                voice=payload.voice or DEFAULT_VOICE,
+                prefix="ask",
+                rate=payload.rate or DEFAULT_RATE,
+            )
             result["audio_url"] = audio_url
         except Exception:
             pass
@@ -391,6 +416,63 @@ async def ask_question(payload: AskRequest, request: Request):
         await run_in_threadpool(_call_engine, "ensure_session_open", session_id)
 
     return result
+
+
+@app.post("/api/ask/stream", summary="Đặt câu hỏi tư vấn quy chế (SSE streaming)")
+async def ask_question_stream(payload: AskRequest, request: Request):
+    session_id = payload.session_id or str(uuid.uuid4())
+    owner = conversation_owner(request)
+    await run_in_threadpool(_call_engine, "authorize_session", session_id, owner, create=True)
+    await run_in_threadpool(_call_engine, "ensure_session_open", session_id)
+
+    async def event_stream():
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue[tuple[str, Any]] = asyncio.Queue()
+
+        def producer():
+            try:
+                eng = get_engine()
+                for item in eng.stream_ask(
+                    question=payload.question,
+                    session_id=session_id,
+                    ref_date=payload.ref_date,
+                    use_ai=bool(payload.use_ai),
+                ):
+                    loop.call_soon_threadsafe(queue.put_nowait, ("item", item))
+            except SessionClosedError as exc:
+                loop.call_soon_threadsafe(queue.put_nowait, ("closed", str(exc)))
+            except Exception as exc:
+                loop.call_soon_threadsafe(queue.put_nowait, ("error", str(exc)))
+            finally:
+                loop.call_soon_threadsafe(queue.put_nowait, ("end", None))
+
+        worker = asyncio.create_task(run_in_threadpool(producer))
+        try:
+            while True:
+                kind, data = await queue.get()
+                if kind == "end":
+                    break
+                if kind == "closed":
+                    err_payload = json.dumps(
+                        {"detail": data, "code": "session_closed", "session_id": session_id},
+                        ensure_ascii=False,
+                    )
+                    yield f"event: error\ndata: {err_payload}\n\n"
+                    break
+                if kind == "error":
+                    err_payload = json.dumps({"detail": "Không thể xử lý câu hỏi lúc này."}, ensure_ascii=False)
+                    yield f"event: error\ndata: {err_payload}\n\n"
+                    break
+                encoded = json.dumps(data["data"], ensure_ascii=False)
+                yield f"event: {data['event']}\ndata: {encoded}\n\n"
+        finally:
+            await worker
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.get("/api/documents", summary="Danh sách tài liệu đã lập chỉ mục")
@@ -407,6 +489,14 @@ def public_catalog():
         {key: item.get(key, "") for key in ("rid", "title", "version")}
         for item in get_engine().list_documents()
     ]
+
+
+@app.get("/api/catalog/{rid}", summary="Xem toàn văn các điều khoản công khai của một quy chế")
+def public_catalog_detail(rid: str):
+    doc = get_engine().public_document(rid)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy văn bản trong danh mục công khai.")
+    return doc
 
 
 @app.get("/api/admin/storage", summary="Trạng thái lưu trữ (chỉ quản trị)")
@@ -563,10 +653,20 @@ async def reindex_documents():
 
 
 @app.get("/api/history", summary="Lấy lịch sử hội thoại theo phiên")
-def get_history(request: Request, response: Response, session_id: str = Query(..., min_length=1, description="Mã phiên hội thoại")):
+def get_history(
+    request: Request,
+    response: Response,
+    session_id: str = Query(..., min_length=1, description="Mã phiên hội thoại"),
+    limit: int = Query(100, ge=1, le=200, description="Số lượt hiển thị tối đa (1–200)"),
+    before_id: Optional[int] = Query(None, ge=1, description="Lấy các lượt cũ hơn mã lượt này"),
+):
     response.headers["Cache-Control"] = "no-store"
     owner = conversation_owner(request)
     eng = get_engine()
+    if before_id is not None:
+        return eng.history(session_id, owner=owner, limit=limit, before_id=before_id)
+    if limit != 100:
+        return eng.history(session_id, owner=owner, limit=limit)
     return eng.history(session_id, owner=owner)
 
 
@@ -612,11 +712,11 @@ async def delete_history(
     return {"status": "deleted", "session_id": session_id, "deleted_turns": deleted}
 
 
-# ── Endpoint Xử lý Giọng nói (Server-side Edge-TTS) ──────────────────────────
+# ── Endpoint Xử lý Giọng nói (Server-side Edge-TTS & Cloud STT Fallback) ────
 @app.get("/api/tts", summary="Tổng hợp giọng nói tiếng Việt (GET stream)")
 async def tts_get(
-    text: str = Query(..., description="Văn bản cần đọc"),
-    voice: Optional[str] = Query(DEFAULT_VOICE, description="Giọng đọc"),
+    text: str = Query(..., max_length=4000, description="Văn bản cần đọc"),
+    voice: Optional[str] = Query(DEFAULT_VOICE, max_length=64, description="Giọng đọc"),
     rate: Optional[str] = Query(DEFAULT_RATE, pattern=RATE_PATTERN, max_length=12, description="Tốc độ đọc"),
 ):
     vm = await run_in_threadpool(get_voice_manager)
@@ -647,6 +747,52 @@ async def tts_post(payload: TTSRequest):
         return {"status": "ok", "audio_url": audio_url}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Lỗi tổng hợp giọng nói: {exc}")
+
+
+@app.post("/api/tts/stream", summary="Phát luồng giọng đọc trực tiếp không chờ lưu đĩa")
+async def tts_stream(payload: TTSRequest):
+    vm = await run_in_threadpool(get_voice_manager)
+    cleaned = clean_text_for_tts(payload.text)
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="Văn bản rỗng.")
+    voice = payload.voice or DEFAULT_VOICE
+    rate = payload.rate or DEFAULT_RATE
+    stream = vm.stream_synthesize(cleaned, voice=voice, rate=rate)
+    try:
+        first_chunk = await anext(stream)
+    except StopAsyncIteration:
+        raise HTTPException(status_code=500, detail="Không tạo được dữ liệu âm thanh.")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Lỗi tổng hợp giọng nói: {exc}")
+
+    async def body():
+        yield first_chunk
+        async for chunk in stream:
+            yield chunk
+
+    return StreamingResponse(
+        body(),
+        media_type="audio/mpeg",
+        headers={"Content-Disposition": "inline; filename=speech.mp3", "Cache-Control": "no-store"},
+    )
+
+
+@app.post("/api/stt", summary="Nhận dạng giọng nói dự phòng phía máy chủ (khi trình duyệt không hỗ trợ)")
+async def stt_transcribe(file: UploadFile = File(...)):
+    stt = CloudSTT(config)
+    if not stt.available:
+        raise HTTPException(
+            status_code=503,
+            detail="Dịch vụ nhận dạng giọng nói dự phòng chưa được cấu hình trên máy chủ.",
+        )
+    content = await file.read(MAX_AUDIO_BYTES + 1)
+    if len(content) > MAX_AUDIO_BYTES:
+        raise HTTPException(status_code=400, detail="Đoạn ghi âm vượt quá giới hạn 2 MB.")
+    try:
+        text = await run_in_threadpool(stt.transcribe, content, file.content_type or "")
+    except STTError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"status": "ok", "text": text, "provider": stt.provider}
 
 
 @app.get("/api/audio/{filename}", summary="Phát file âm thanh đã lưu")

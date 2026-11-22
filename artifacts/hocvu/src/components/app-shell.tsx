@@ -7,9 +7,8 @@ import { useHealth } from '@/hooks/use-public';
 import { cn } from '@/lib/utils';
 
 const NAV = [
-  { href: '/', label: 'Hỏi đáp', hint: 'Tra cứu có căn cứ', icon: MessagesSquare, match: (p: string) => p === '/' },
-  { href: '/library', label: 'Thư viện', hint: 'Danh mục văn bản', icon: BookOpenText, match: (p: string) => p.startsWith('/library') },
-  { href: '/documents', label: 'Quản trị', hint: 'Tài liệu được bảo vệ', icon: FolderLock, match: (p: string) => p.startsWith('/documents') },
+  { href: '/', label: 'Hỏi đáp', hint: 'Tra cứu & hội thoại giọng nói', icon: MessagesSquare, match: (p: string) => p === '/' },
+  { href: '/library', label: 'Thư viện', hint: 'Đọc quy chế công khai', icon: BookOpenText, match: (p: string) => p.startsWith('/library') },
   { href: '/settings', label: 'Cài đặt', hint: 'Giao diện, giọng đọc', icon: Settings2, match: (p: string) => p.startsWith('/settings') },
 ];
 
@@ -63,6 +62,8 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
+  const [location] = useLocation();
+  const adminActive = location === '/documents' || location === '/documents.html';
   return (
     <div className="flex h-full flex-col gap-8 p-5 text-sidebar-foreground">
       <Link href="/" onClick={onNavigate} className="rounded-md" data-testid="link-brand"><Wordmark invert /></Link>
@@ -71,7 +72,22 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
         <p className="text-[.72rem] leading-relaxed text-sidebar-foreground/55">
           Mỗi câu trả lời phải dẫn về điều, khoản cụ thể. Khi nguồn chưa đủ, HocVu từ chối thay vì đoán.
         </p>
-        <div className="border-t border-sidebar-border pt-4"><HealthBadge /></div>
+        <div className="border-t border-sidebar-border pt-3 space-y-3">
+          <Link
+            href="/documents"
+            onClick={onNavigate}
+            aria-current={adminActive ? 'page' : undefined}
+            data-testid="link-nav-documents"
+            className={cn(
+              'flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs transition-colors',
+              adminActive ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'text-sidebar-foreground/60 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/40',
+            )}
+          >
+            <FolderLock className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+            <span>Quản trị tài liệu (Cán bộ)</span>
+          </Link>
+          <HealthBadge />
+        </div>
       </div>
     </div>
   );
